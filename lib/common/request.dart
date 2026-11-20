@@ -89,6 +89,9 @@ class Request {
     }
     final target = downloadTarget(url);
     final cancelToken = CancelToken();
+    StreamSubscription<Uint8List>? subscription;
+    Completer<void>? bodyDone;
+
     Future<Response<Uint8List>> receive() async {
       try {
         final response = await _clashDio.getUri<ResponseBody>(
@@ -108,14 +111,34 @@ class Request {
           throw const FileSystemException('Download exceeds the size limit');
         }
         if (body != null) {
-          await for (final chunk in body.stream) {
-            if (chunk.length > maxBytes - bytes.length) {
-              throw const FileSystemException(
-                'Download exceeds the size limit',
-              );
-            }
-            bytes.add(chunk);
-          }
+          final finished = Completer<void>();
+          bodyDone = finished;
+          subscription = body.stream.listen(
+            (chunk) {
+              if (finished.isCompleted) {
+                return;
+              }
+              if (chunk.length > maxBytes - bytes.length) {
+                finished.completeError(
+                  const FileSystemException('Download exceeds the size limit'),
+                );
+                return;
+              }
+              bytes.add(chunk);
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!finished.isCompleted) {
+                finished.completeError(error, stack);
+              }
+            },
+            onDone: () {
+              if (!finished.isCompleted) {
+                finished.complete();
+              }
+            },
+            cancelOnError: true,
+          );
+          await finished.future;
         }
         return Response<Uint8List>(
           data: body == null ? null : bytes.takeBytes(),
@@ -129,6 +152,7 @@ class Request {
         );
       } catch (_) {
         cancelToken.cancel();
+        await subscription?.cancel();
         rethrow;
       }
     }
@@ -136,11 +160,23 @@ class Request {
     return receive().timeout(
       downloadTimeoutDuration,
       onTimeout: () {
-        cancelToken.cancel();
-        throw DioException.receiveTimeout(
+        final error = DioException.receiveTimeout(
           timeout: downloadTimeoutDuration,
           requestOptions: RequestOptions(path: url),
         );
+        cancelToken.cancel();
+        // Cancel the active response stream as well as Dio's request. Some
+        // adapters leave an already-delivered stream open after cancellation.
+        // Unblock receive() so it cannot retain an abandoned stream forever.
+        final pending = bodyDone;
+        if (pending != null && !pending.isCompleted) {
+          pending.completeError(error);
+        }
+        final active = subscription;
+        if (active != null) {
+          unawaited(active.cancel());
+        }
+        throw error;
       },
     );
   }
