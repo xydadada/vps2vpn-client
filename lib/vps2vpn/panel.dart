@@ -751,6 +751,7 @@ final vpsPanelPinsProvider = FutureProvider.autoDispose<Set<String>>((
 
 final _releaseFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
 const _maxReleaseBytes = 512 * 1024 * 1024;
+final _activeReleaseDownloads = <String>{};
 
 /// Downloads a client release from the panel into [dir], always direct and
 /// over HTTPS. A self-signed panel is trusted only through [pinnedSha256],
@@ -767,9 +768,17 @@ Future<File> vpsDownloadRelease(
   if (!_releaseFileName.hasMatch(name)) {
     throw const HttpException('Unexpected release file name');
   }
-  final client = _client(base: url, pinnedSha256: pinnedSha256);
-  final part = File('${dir.path}${Platform.pathSeparator}$name.part');
+  final out = File('${dir.path}${Platform.pathSeparator}$name');
+  final targetPath = out.absolute.path;
+  if (!_activeReleaseDownloads.add(targetPath)) {
+    throw const HttpException('Release download already in progress');
+  }
+  HttpClient? client;
+  Directory? staging;
   try {
+    client = _client(base: url, pinnedSha256: pinnedSha256);
+    staging = await dir.createTemp('.vps2vpn-release-');
+    final part = File('${staging.path}${Platform.pathSeparator}$name.part');
     final req = await client.getUrl(url);
     req.followRedirects = false;
     final res = await req.close().timeout(const Duration(seconds: 15));
@@ -790,13 +799,13 @@ Future<File> vpsDownloadRelease(
     } finally {
       await sink.close();
     }
-    final out = File('${dir.path}${Platform.pathSeparator}$name');
-    if (await out.exists()) await out.delete();
     return await part.rename(out.path);
-  } catch (_) {
-    if (await part.exists()) await part.delete();
-    rethrow;
   } finally {
-    client.close(force: true);
+    client?.close(force: true);
+    try {
+      if (staging != null) await staging.delete(recursive: true);
+    } finally {
+      _activeReleaseDownloads.remove(targetPath);
+    }
   }
 }
