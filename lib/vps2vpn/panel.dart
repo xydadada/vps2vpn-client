@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -30,9 +31,9 @@ Uri? vpsApiBase(String subUrl) {
     return null;
   }
   return Uri(
-    scheme: uri.scheme,
+    scheme: 'https',
     host: uri.host,
-    port: uri.hasPort ? uri.port : null,
+    port: uri.port,
     pathSegments: ['s', segs[1], 'api', ''],
   );
 }
@@ -199,8 +200,21 @@ class VpsMemberResult {
   final bool linkChanged;
 }
 
-HttpClient _client({int? proxyPort, String? proxyCredentials}) {
-  final c = HttpClient()
+HttpClient _client(
+  Uri url, {
+  int? proxyPort,
+  String? proxyCredentials,
+  Set<String> certificatePins = const {},
+}) {
+  final c = HttpClient(
+    context: certificatePins.isEmpty
+        ? null
+        : SecurityContext(withTrustedRoots: false),
+  )
+    ..badCertificateCallback = (certificate, host, port) =>
+        host.toLowerCase() == url.host.toLowerCase() &&
+        port == url.port &&
+        certificatePins.contains(sha256.convert(certificate.der).toString())
     ..connectionTimeout = const Duration(seconds: 6)
     ..idleTimeout = const Duration(seconds: 2);
   c.findProxy = (_) =>
@@ -252,10 +266,13 @@ Future<(int, String)> _send(
   Map<String, Object?>? body,
   int? proxyPort,
   String? proxyCredentials,
+  Set<String> certificatePins = const {},
 }) async {
   final client = _client(
+    url,
     proxyPort: proxyPort,
     proxyCredentials: proxyCredentials,
+    certificatePins: certificatePins,
   );
   try {
     final req = body == null
@@ -263,7 +280,7 @@ Future<(int, String)> _send(
         : await client.postUrl(url);
     req.followRedirects = false;
     if (body != null) {
-      // A fixed length, not chunked: the panel's server cannot read chunks.
+      // Keep the small JSON request bounded by an explicit body length.
       final bytes = utf8.encode(jsonEncode(body));
       req.headers
         ..set('X-V2V', '1')
@@ -287,6 +304,7 @@ Future<VpsMemberResult?> fetchMember(
   Uri base, {
   int? proxyPort,
   String? proxyCredentials,
+  Set<String> certificatePins = const {},
 }) async {
   for (final port in [null, ?proxyPort]) {
     try {
@@ -294,6 +312,7 @@ Future<VpsMemberResult?> fetchMember(
         base.resolve('me'),
         proxyPort: port,
         proxyCredentials: proxyCredentials,
+        certificatePins: certificatePins,
       );
       if (code == HttpStatus.notFound) {
         return const VpsMemberResult(linkChanged: true);
@@ -313,11 +332,13 @@ Future<bool> reportLine(
   required String line,
   required bool ok,
   required String host,
+  Set<String> certificatePins = const {},
 }) async {
   try {
     final (code, _) = await _send(
       base.resolve('report'),
       body: {'line': line, 'ok': ok, 'host': host},
+      certificatePins: certificatePins,
     );
     return code == HttpStatus.ok;
   } catch (_) {
@@ -365,13 +386,42 @@ class VpsLineHealth {
   }
 }
 
+/// Only pins already stored for this exact subscription host may authenticate
+/// its self-signed panel. A node on another server grants no trust here.
+Set<String> vpsCertificatePins(Uri base, Map<String, dynamic> outbounds) {
+  final hosts = outbounds['tls-fingerprints'];
+  if (hosts is! Map) return const {};
+  final pins = hosts[base.host.toLowerCase()];
+  if (pins is! List) return const {};
+  return {
+    for (final pin in pins)
+      if (pin is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(pin)) pin,
+  };
+}
+
+Future<Set<String>> _profileCertificatePins(
+  Ref ref,
+  int profileId,
+  Uri base,
+) async {
+  try {
+    final outbounds = await ref
+        .read(coreHandlerProvider)
+        .getProfileOutbounds(profileId);
+    return vpsCertificatePins(base, outbounds);
+  } catch (_) {
+    // A missing pin never disables the normal PKI check.
+    return const {};
+  }
+}
+
 /// The signed-in member for the current subscription, or null when it is
 /// not a vps2vpn link (or the panel did not answer).
 final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
   ref,
 ) async {
-  final url = ref.watch(currentProfileProvider.select((p) => p?.url ?? ''));
-  final base = vpsApiBase(url);
+  final profile = ref.watch(currentProfileProvider);
+  final base = vpsApiBase(profile?.url ?? '');
   if (base == null) return null;
   final on = ref.watch(isStartProvider);
   final port = on ? ref.read(patchClashConfigProvider).mixedPort : null;
@@ -385,15 +435,17 @@ final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
     ref.invalidateSelf();
   });
   ref.onDispose(timer.cancel);
+  final pins = await _profileCertificatePins(ref, profile!.id, base);
+  if (!ref.mounted) return null;
   return fetchMember(
     base,
     proxyPort: port,
     proxyCredentials: credentials.firstOrNull,
+    certificatePins: pins,
   );
 });
 
 Timer? _watch;
-final _health = VpsLineHealth();
 
 /// While connected, quietly tests each line of the smart group and tells the
 /// panel when one keeps failing (and when it is back), so the owner can move
@@ -406,6 +458,8 @@ void vpsStartLineWatch(Ref ref) {
     return;
   }
   var busy = false;
+  Uri? subscription;
+  var health = VpsLineHealth();
   _watch = Timer.periodic(const Duration(minutes: 4), (timer) async {
     if (!ref.mounted ||
         ref.read(safeModeProvider) ||
@@ -415,10 +469,14 @@ void vpsStartLineWatch(Ref ref) {
     }
     if (busy) return;
     final base = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
+    if (base != subscription) {
+      subscription = base;
+      health = VpsLineHealth();
+    }
     if (base == null) return;
     busy = true;
     try {
-      await _checkLines(ref, base, timer);
+      await _checkLines(ref, base, timer, health);
     } finally {
       busy = false;
     }
@@ -426,7 +484,12 @@ void vpsStartLineWatch(Ref ref) {
   ref.onDispose(_watch!.cancel);
 }
 
-Future<void> _checkLines(Ref ref, Uri base, Timer timer) async {
+Future<void> _checkLines(
+  Ref ref,
+  Uri base,
+  Timer timer,
+  VpsLineHealth health,
+) async {
   bool current() =>
       timer.isActive &&
       ref.mounted &&
@@ -438,6 +501,10 @@ Future<void> _checkLines(Ref ref, Uri base, Timer timer) async {
   final groups = ref.read(groupsProvider);
   final smart = groups.where((g) => g.name == vpsSmartGroupName).firstOrNull;
   if (smart == null) return;
+  final profileId = ref.read(currentProfileProvider)?.id;
+  if (profileId == null) return;
+  final pins = await _profileCertificatePins(ref, profileId, base);
+  if (!current()) return;
   for (final proxy in smart.all) {
     if (!current()) return;
     try {
@@ -456,11 +523,17 @@ Future<void> _checkLines(Ref ref, Uri base, Timer timer) async {
       );
       if (!current()) return;
       final ok = (delay.value ?? -1) > 0;
-      final key = '$base|$kind@$host';
-      final change = _health.record(key, ok);
+      final key = '$kind@$host';
+      final change = health.record(key, ok);
       if (change != null &&
-          await reportLine(base, line: kind, ok: change, host: host)) {
-        _health.acknowledge(key, change);
+          await reportLine(
+            base,
+            line: kind,
+            ok: change,
+            host: host,
+            certificatePins: pins,
+          )) {
+        health.acknowledge(key, change);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('vps2vpn line watch: $e');

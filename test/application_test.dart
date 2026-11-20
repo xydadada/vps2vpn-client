@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_clash/application.dart';
 import 'package:fl_clash/manager/hotkey_manager.dart';
 import 'package:fl_clash/manager/manager.dart';
@@ -55,6 +57,81 @@ Widget _stack({required bool isDesktop}) {
 }
 
 void main() {
+  test('automatic updates do not start after their owner is disposed', () async {
+    var calls = 0;
+    await runApplicationAutoUpdates(
+      isActive: () => false,
+      tasks: [
+        () async {
+          calls++;
+        },
+      ],
+      onError: (error) => fail('unexpected update error: $error'),
+    );
+    expect(calls, 0);
+  });
+
+  test('disposing during an update prevents the next provider read', () async {
+    var active = true;
+    final pending = Completer<void>();
+    var nextCalls = 0;
+    final update = runApplicationAutoUpdates(
+      isActive: () => active,
+      tasks: [
+        () => pending.future,
+        () async {
+          nextCalls++;
+        },
+      ],
+      onError: (error) => fail('unexpected update error: $error'),
+    );
+    active = false;
+    pending.complete();
+    await update;
+    expect(nextCalls, 0);
+  });
+
+  test('one failed update does not stop the remaining updates', () async {
+    final failure = StateError('offline');
+    final errors = <Object>[];
+    var nextCalls = 0;
+    await runApplicationAutoUpdates(
+      isActive: () => true,
+      tasks: [
+        () => Future<void>.error(failure),
+        () async {
+          nextCalls++;
+        },
+      ],
+      onError: errors.add,
+    );
+    expect(errors, [same(failure)]);
+    expect(nextCalls, 1);
+  });
+
+  test('automatic updates wait for each task before starting another', () async {
+    final pending = Completer<void>();
+    final order = <int>[];
+    final update = runApplicationAutoUpdates(
+      isActive: () => true,
+      tasks: [
+        () async {
+          order.add(1);
+          await pending.future;
+          order.add(2);
+        },
+        () async {
+          order.add(3);
+        },
+      ],
+      onError: (error) => fail('unexpected update error: $error'),
+    );
+    expect(order, [1]);
+    pending.complete();
+    await update;
+    expect(order, [1, 2, 3]);
+  });
+
   test('the desktop manager stack nests in ownership order', () {
     expect(_chainFrom(_stack(isDesktop: true)), [
       AppEnvManager,

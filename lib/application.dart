@@ -20,6 +20,23 @@ import 'package:rust_api/rust_api.dart' show NetworkState;
 
 import 'pages/pages.dart';
 
+Future<void> runApplicationAutoUpdates({
+  required bool Function() isActive,
+  required Iterable<Future<void> Function()> tasks,
+  required void Function(Object error) onError,
+}) async {
+  for (final task in tasks) {
+    if (!isActive()) {
+      return;
+    }
+    try {
+      await task();
+    } catch (error) {
+      onError(error);
+    }
+  }
+}
+
 Widget buildManagerStack({
   required bool isDesktop,
   required Future<void> Function(NetworkState state) onConnectivityChanged,
@@ -70,10 +87,16 @@ class ApplicationState extends ConsumerState<Application> {
     super.initState();
     SystemNavigator.setFrameworkHandlesBack(true);
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      if (!mounted) {
+        return;
+      }
       if (globalState.navigatorKey.currentContext != null) {
         await bootstrap.attach();
       } else {
         exit(0);
+      }
+      if (!mounted || !ref.read(initProvider)) {
+        return;
       }
       _autoUpdateProfilesTask();
       _initLink();
@@ -85,6 +108,9 @@ class ApplicationState extends ConsumerState<Application> {
 
   void _initLink() {
     linkManager.initAppLinksListen((url) async {
+      if (!mounted) {
+        return;
+      }
       unawaited(window?.show());
       final message = currentAppLocalizations.createProfileFromUrlTip(url);
       final parts = message.split(url);
@@ -105,7 +131,7 @@ class ApplicationState extends ConsumerState<Application> {
           ],
         ),
       );
-      if (res != true) return;
+      if (!mounted || res != true) return;
       unawaited(
         ref.read(profilesActionProvider.notifier).addProfileFromLink(url),
       );
@@ -113,18 +139,31 @@ class ApplicationState extends ConsumerState<Application> {
   }
 
   void _autoUpdateProfilesTask() {
+    if (!mounted) {
+      return;
+    }
+    _autoUpdateProfilesTaskTimer?.cancel();
     _autoUpdateProfilesTaskTimer = Timer(const Duration(minutes: 20), () async {
-      await ref.read(profilesActionProvider.notifier).autoUpdateProfiles();
-      await ref.read(resourcesActionProvider.notifier).autoUpdate();
-      await ref.read(mitmModulesActionProvider.notifier).autoUpdate();
-      if (!mounted) {
-        return;
-      }
+      await runApplicationAutoUpdates(
+        isActive: () => mounted,
+        tasks: [
+          () => ref.read(profilesActionProvider.notifier).autoUpdateProfiles(),
+          () => ref.read(resourcesActionProvider.notifier).autoUpdate(),
+          () => ref.read(mitmModulesActionProvider.notifier).autoUpdate(),
+        ],
+        onError: (error) => commonPrint.log(
+          'Automatic update failed: ${compactError(error)}',
+          logLevel: LogLevel.warning,
+        ),
+      );
       _autoUpdateProfilesTask();
     });
   }
 
   Future<void> _handleConnectivityChanged(NetworkState state) async {
+    if (!mounted) {
+      return;
+    }
     commonPrint.log(
       'connectivityChanged wifi: ${state.wifi} vpn: ${state.vpn}',
     );

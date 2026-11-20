@@ -15,8 +15,17 @@ void main() {
       );
       expect(
         vpsApiBase('http://1.2.3.4:43470/s/$_tok').toString(),
-        'http://1.2.3.4:43470/s/$_tok/api/',
+        'https://1.2.3.4:43470/s/$_tok/api/',
       );
+    });
+
+    test('keeps the panel port when upgrading default HTTP ports', () {
+      for (final host in ['panel.example', 'panel.example:80']) {
+        expect(
+          vpsApiBase('http://$host/s/$_tok').toString(),
+          'https://panel.example:80/s/$_tok/api/',
+        );
+      }
     });
 
     test('ignores links that are not vps2vpn subscriptions', () {
@@ -27,6 +36,29 @@ void main() {
       expect(vpsApiBase('https://example.com/s/$_tok/extra'), isNull);
       expect(vpsApiBase('clash://install-config?url=x'), isNull);
     });
+  });
+
+  test('accepts certificate pins only for the exact panel host', () {
+    final pin = 'ab' * 32;
+    final base = vpsApiBase('http://panel.example:43470/s/$_tok')!;
+    expect(
+      vpsCertificatePins(base, {
+        'tls-fingerprints': {
+          'other.example': [pin],
+          'panel.example': [pin, 'invalid', 123],
+        },
+      }),
+      {pin},
+    );
+    expect(
+      vpsCertificatePins(base, {
+        'tls-fingerprints': {
+          'other.example': [pin],
+        },
+      }),
+      isEmpty,
+    );
+    expect(vpsCertificatePins(base, {}), isEmpty);
   });
 
   test('reads the member fields the panel sends', () {
@@ -188,7 +220,8 @@ void main() {
 
     tearDown(() => server.close(force: true));
 
-    Uri base() => vpsApiBase('http://127.0.0.1:${server.port}/s/$_tok')!;
+    // Exercise HTTP framing here; panel_tls_test covers the production TLS path.
+    Uri base() => Uri.parse('http://127.0.0.1:${server.port}/s/$_tok/api/');
 
     test('fetches the member', () async {
       final r = await fetchMember(base());

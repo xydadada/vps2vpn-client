@@ -199,7 +199,29 @@ mod tests {
 
     #[test]
     fn a_peer_that_does_not_read_cannot_retain_a_worker_past_the_deadline() {
-        let (mut server, _client) = connection();
+        let (mut server, client) = connection();
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawSocket;
+            use windows_sys::Win32::Networking::WinSock::{
+                setsockopt, SOL_SOCKET, SO_RCVBUF, SO_SNDBUF,
+            };
+
+            let size: i32 = 4096;
+            for (socket, option) in [(&server, SO_SNDBUF), (&client, SO_RCVBUF)] {
+                let result = unsafe {
+                    setsockopt(
+                        socket.as_raw_socket() as usize,
+                        SOL_SOCKET,
+                        option,
+                        (&size as *const i32).cast(),
+                        std::mem::size_of_val(&size) as i32,
+                    )
+                };
+                assert_eq!(result, 0);
+            }
+        }
+        let _client = client;
         let payload = vec![b'x'; 16 * 1024 * 1024];
         let started = Instant::now();
         assert!(write_before_deadline(

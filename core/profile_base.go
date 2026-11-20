@@ -59,7 +59,45 @@ func handleGetProfileOutbounds(params PathParams) (*ProfileOutbounds, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ProfileOutbounds{Proxies: outboundsOf(raw.Proxy), ProxyGroups: outboundsOf(raw.ProxyGroup)}, nil
+	return &ProfileOutbounds{
+		Proxies:         outboundsOf(raw.Proxy),
+		ProxyGroups:     outboundsOf(raw.ProxyGroup),
+		TLSFingerprints: tlsFingerprintsOf(raw.Proxy),
+	}, nil
+}
+
+// The panel and HY2/TUIC use the same certificate on a vps2vpn server.
+// Return only explicit certificate pins, grouped by their configured host.
+func tlsFingerprintsOf(proxies []map[string]any) map[string][]string {
+	var pins map[string][]string
+	for _, proxy := range proxies {
+		kind, _ := proxy["type"].(string)
+		if kind != "hysteria2" && kind != "tuic" {
+			continue
+		}
+		host, _ := proxy["server"].(string)
+		fingerprint, _ := proxy["fingerprint"].(string)
+		fingerprint = strings.ToLower(strings.ReplaceAll(fingerprint, ":", ""))
+		decoded, err := hex.DecodeString(fingerprint)
+		if host == "" || err != nil || len(decoded) != sha256.Size {
+			continue
+		}
+		if pins == nil {
+			pins = make(map[string][]string)
+		}
+		host = strings.ToLower(strings.Trim(host, "[]"))
+		duplicate := false
+		for _, pin := range pins[host] {
+			if pin == fingerprint {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			pins[host] = append(pins[host], fingerprint)
+		}
+	}
+	return pins
 }
 
 func outboundsOf(mappings []map[string]any) []ProfileOutbound {
@@ -175,6 +213,8 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 
 func validateAliasGraph(root *yaml.Node) error {
 	states := make(map[*yaml.Node]uint8)
+	var originalWeight uint64
+	hasAlias := false
 	var visit func(*yaml.Node) error
 	visit = func(node *yaml.Node) error {
 		if node == nil {
@@ -187,6 +227,8 @@ func validateAliasGraph(root *yaml.Node) error {
 			return nil
 		}
 		states[node] = 1
+		originalWeight += uint64(32 + len(node.Value))
+		hasAlias = hasAlias || node.Alias != nil
 		if err := visit(node.Alias); err != nil {
 			return err
 		}
@@ -198,7 +240,43 @@ func validateAliasGraph(root *yaml.Node) error {
 		states[node] = 2
 		return nil
 	}
-	return visit(root)
+	if err := visit(root); err != nil || !hasAlias {
+		return err
+	}
+	// Node decoding skips yaml's alias-ratio guard. Our encoder expands
+	// anchors, so budget the expanded graph before either walking or writing
+	// it. Ordinary large profiles remain allowed; the 16 MiB floor keeps
+	// normal shared settings useful in small profiles.
+	limit := max(uint64(16<<20), originalWeight*16)
+	weights := make(map[*yaml.Node]uint64)
+	var expanded func(*yaml.Node) uint64
+	expanded = func(node *yaml.Node) uint64 {
+		if node == nil {
+			return 0
+		}
+		if weight, exists := weights[node]; exists {
+			return weight
+		}
+		weight := uint64(32 + len(node.Value))
+		if node.Alias != nil {
+			weight = expanded(node.Alias)
+		} else {
+			for _, child := range node.Content {
+				next := expanded(child)
+				if next > limit-weight {
+					weight = limit + 1
+					break
+				}
+				weight += next
+			}
+		}
+		weights[node] = weight
+		return weight
+	}
+	if expanded(root) > limit {
+		return fmt.Errorf("document contains excessive YAML alias expansion")
+	}
+	return nil
 }
 
 func documentMapping(document *yaml.Node) (*yaml.Node, error) {

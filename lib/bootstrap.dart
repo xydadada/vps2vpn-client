@@ -167,7 +167,9 @@ class Bootstrap {
     } else {
       unawaited(window?.hide());
     }
-    await _handleFailedPreference();
+    if (!await _handleFailedPreference()) {
+      return;
+    }
     if (!await _handlerDisclaimer()) {
       return;
     }
@@ -219,8 +221,8 @@ class Bootstrap {
     return profile?.label.takeFirstValid(['$profileId']) ?? '$profileId';
   }
 
-  Future<void> _handleFailedPreference() async {
-    if (await preferences.isInit) return;
+  Future<bool> _handleFailedPreference() async {
+    if (await preferences.isInit) return true;
     final res = await dialogs.showMessage(
       title: currentAppLocalizations.tip,
       message: TextSpan(text: currentAppLocalizations.cacheCorrupt),
@@ -231,6 +233,7 @@ class Bootstrap {
     }
     // Saving here would rewrite the preferences file the user just chose to delete.
     await _container.read(systemActionProvider.notifier).handleExit(false);
+    return false;
   }
 
   /// Unattended desktop installs, such as a container nobody watches, accept

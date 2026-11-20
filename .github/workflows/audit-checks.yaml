@@ -134,25 +134,32 @@ jobs:
           bash tool/hooks/test.sh
           node --test .github/scripts/*.test.js
       - name: Flutter dependencies
+        id: flutter_dependencies
         run: flutter pub get
-      - name: Check generated Dart sources
-        run: |
-          dart run build_runner build --delete-conflicting-outputs
-          git diff --exit-code -- lib/models/generated lib/providers/generated lib/database/generated
       - name: Changed Dart formatting
+        if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
         run: |
           mapfile -d '' -t files < <(git diff --name-only --diff-filter=ACM -z "$BASE_REF" -- '*.dart')
           if ((${#files[@]})); then
             dart format "${files[@]}"
             git diff --exit-code -- "${files[@]}"
           fi
+      - name: Check generated Dart sources
+        if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code -- lib/models/generated lib/providers/generated lib/database/generated
       - name: Flutter analysis
+        if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
         run: flutter analyze --no-fatal-infos
       - name: Flutter tests
+        if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
         run: flutter test --concurrency=4 --reporter expanded
       - name: Plugin checks
+        if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
         run: bash tool/check_plugins.sh
       - name: Setup hook tests
+        if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
         working-directory: plugins/setup/setup_hooks
         run: |
           dart pub get

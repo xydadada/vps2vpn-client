@@ -506,3 +506,40 @@ func TestLoadConfigWithBasePersistsSmartLinesForIndependentReload(t *testing.T) 
 		t.Fatal("disabled smart lines remained in the persisted config")
 	}
 }
+
+func TestMergeProfileBaseRejectsExcessiveAliasExpansion(t *testing.T) {
+	var profile strings.Builder
+	profile.WriteString("x0: &v0 [value]\n")
+	for i := 1; i <= 24; i++ {
+		fmt.Fprintf(&profile, "x%d: &v%d [*v%d, *v%d]\n", i, i, i-1, i-1)
+	}
+	profile.WriteString("proxies: *v24\n")
+	_, err := mergeProfileBase(&SetupBase{Path: writeBaseProfile(t, profile.String()), Overlay: "{}"})
+	if err == nil || !strings.Contains(err.Error(), "excessive YAML alias expansion") {
+		t.Fatalf("merge error = %v, want bounded alias expansion", err)
+	}
+}
+
+func TestHandleGetProfileOutboundsReturnsOnlyExplicitCertificatePins(t *testing.T) {
+	pin := strings.Repeat("ab", sha256.Size)
+	colonPin := strings.TrimSuffix(strings.Repeat("AB:", sha256.Size), ":")
+	content := fmt.Sprintf(`proxies:
+  - {name: a, type: hysteria2, server: PANEL.EXAMPLE, port: 443, fingerprint: "%s"}
+  - {name: b, type: tuic, server: panel.example, port: 444, fingerprint: "%s"}
+  - {name: c, type: hysteria2, server: other.example, port: 443, fingerprint: "%s"}
+  - {name: d, type: hysteria2, server: panel.example, port: 443, fingerprint: invalid}
+  - {name: e, type: vless, server: panel.example, port: 443, fingerprint: "%s"}
+  - {name: f, type: tuic, server: panel.example, port: 443, skip-cert-verify: true}
+`, pin, colonPin, strings.Repeat("cd", sha256.Size), strings.Repeat("ef", sha256.Size))
+	outbounds, err := handleGetProfileOutbounds(PathParams{Path: writeBaseProfile(t, content)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"panel.example": {pin},
+		"other.example": {strings.Repeat("cd", sha256.Size)},
+	}
+	if !reflect.DeepEqual(outbounds.TLSFingerprints, want) {
+		t.Fatalf("pins = %v, want %v", outbounds.TLSFingerprints, want)
+	}
+}
