@@ -7,6 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _token = 'AbCdEf0123456789xyzQ';
 
+Future<T> _localSocket<T>(Future<T> Function() call) =>
+    HttpOverrides.runWithHttpOverrides(call, HttpOverrides());
+
 class _TrustEverything extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
@@ -72,15 +75,19 @@ void main() {
     () async {
       expect(base().scheme, 'https');
       expect(base().port, server.port);
-      final member = await fetchMember(base(), certificatePins: {fingerprint});
+      final member = await _localSocket(
+        () => fetchMember(base(), certificatePins: {fingerprint}),
+      );
       expect(member?.member?.name, 'Pinned member');
       expect(
-        await reportLine(
-          base(),
-          line: 'hy2',
-          ok: false,
-          host: '127.0.0.1',
-          certificatePins: {fingerprint},
+        await _localSocket(
+          () => reportLine(
+            base(),
+            line: 'hy2',
+            ok: false,
+            host: '127.0.0.1',
+            certificatePins: {fingerprint},
+          ),
         ),
         isTrue,
       );
@@ -93,7 +100,7 @@ void main() {
 
   test('a wrong pin never sends the bearer token request', () async {
     expect(
-      (await fetchMember(base(), certificatePins: {'00' * 32}))?.problem,
+      (await _localSocket(() => fetchMember(base(), certificatePins: {'00' * 32})))?.problem,
       VpsPanelProblem.unreachable,
     );
     expect(requests, isEmpty);
