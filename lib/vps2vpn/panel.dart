@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/datetime.dart';
 import 'package:fl_clash/common/path.dart';
 import 'package:fl_clash/common/yaml.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -179,14 +180,27 @@ class VpsMember {
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
-  int get used => usedUp + usedDown;
+  /// Convert to double before summing, to avoid overflowing signed 64-bit counters.
+  double get used => math.max(0, usedUp).toDouble() + math.max(0, usedDown).toDouble();
 
-  static int _int(Object? v) => v is num ? v.toInt() : 0;
+  /// A zero effective quota may still indicate an exhausted finite plan.
+  bool get isLimited => !unlimited;
+
+  double get quotaBytes {
+    final bytes = quotaGb * (1024 * 1024 * 1024);
+    return bytes.isFinite && bytes > 0 ? bytes : 0;
+  }
+
+  static int _int(Object? v) {
+    if (v is! num || !v.isFinite || v <= 0) return 0;
+    const maxCount = 0x7fffffffffffffff;
+    return v >= maxCount ? maxCount : v.toInt();
+  }
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
     final expire = _int(json['expire_at']);
     final rawQuotaGb = json['quota_gb'];
-    final unlimited = rawQuotaGb is! num || rawQuotaGb <= 0;
+    final unlimited = rawQuotaGb is! num || !rawQuotaGb.isFinite || rawQuotaGb <= 0;
     final quota = json['quota_eff'] ?? rawQuotaGb;
     return VpsMember(
       name: '${json['name'] ?? ''}',
@@ -197,11 +211,9 @@ class VpsMember {
       },
       usedUp: _int(json['used_up']),
       usedDown: _int(json['used_down']),
-      quotaGb: quota is num ? quota.toDouble() : 0,
+      quotaGb: quota is num && quota.isFinite && quota > 0 ? quota.toDouble() : 0,
       unlimited: unlimited,
-      expireAt: expire > 0
-          ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
-          : null,
+      expireAt: dateTimeFromUnixSeconds(json['expire_at']),
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
     );
