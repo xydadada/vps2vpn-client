@@ -765,7 +765,11 @@ Future<File> vpsDownloadRelease(
   Duration transferTimeout = _releaseTransferTimeout,
 }) async {
   if (transferTimeout <= Duration.zero) {
-    throw ArgumentError.value(transferTimeout, 'transferTimeout', 'must be positive');
+    throw ArgumentError.value(
+      transferTimeout,
+      'transferTimeout',
+      'must be positive',
+    );
   }
   if (!url.isScheme('https')) {
     throw const HttpException('Release link is not HTTPS');
@@ -811,7 +815,10 @@ Future<File> vpsDownloadRelease(
         // one absolute, monotonic deadline across the entire response body.
         final remaining = transferTimeout - elapsed.elapsed;
         if (remaining <= Duration.zero) {
-          throw TimeoutException('Release transfer exceeded its deadline', transferTimeout);
+          throw TimeoutException(
+            'Release transfer exceeded its deadline',
+            transferTimeout,
+          );
         }
         final wait = remaining < _releaseIdleTimeout
             ? remaining
