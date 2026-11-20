@@ -137,7 +137,12 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.listen(vpsMemberProvider, (_, _) {});
+    container.read(appVisibleProvider.notifier).value = true;
+    HttpOverrides.runWithHttpOverrides(
+      () => container.listen(vpsMemberProvider, (_, _) {}),
+      transport,
+    );
+    await tester.pump();
     await tester.pump();
     expect(container.read(vpsMemberProvider).value?.member?.name, 'Before');
     transport.body = '{"name":"After","enabled":false}';
@@ -160,7 +165,12 @@ void main() {
           isStartProvider.overrideWithValue(false),
         ],
       );
-      final subscription = container.listen(vpsMemberProvider, (_, _) {});
+      container.read(appVisibleProvider.notifier).value = true;
+      final subscription = HttpOverrides.runWithHttpOverrides(
+        () => container.listen(vpsMemberProvider, (_, _) {}),
+        transport,
+      );
+      await tester.pump();
       await tester.pump();
       expect(
         container.read(vpsMemberProvider).value?.problem,
