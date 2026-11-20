@@ -750,8 +750,12 @@ final vpsPanelPinsProvider = FutureProvider.autoDispose<Set<String>>((
 });
 
 final _releaseFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
+final _reservedReleaseName = RegExp(
+  r'^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)',
+  caseSensitive: false,
+);
 const _maxReleaseBytes = 512 * 1024 * 1024;
-var _downloadSeq = 0;
+final _activeReleaseDownloads = <String>{};
 
 /// Downloads a client release from the panel into [dir], always direct and
 /// over HTTPS. A self-signed panel is trusted only through [pinnedSha256],
@@ -765,23 +769,36 @@ Future<File> vpsDownloadRelease(
     throw const HttpException('Release link is not HTTPS');
   }
   final name = url.pathSegments.isEmpty ? '' : url.pathSegments.last;
-  if (!_releaseFileName.hasMatch(name)) {
+  // Windows trims trailing dots and resolves device names specially.
+  if (!_releaseFileName.hasMatch(name) ||
+      name.endsWith('.') ||
+      _reservedReleaseName.hasMatch(name)) {
     throw const HttpException('Unexpected release file name');
   }
-  final client = _client(base: url, pinnedSha256: pinnedSha256);
-  // Each download writes its own partial file: two taps on the same release
-  // must not write into, or delete, each other's file.
-  final part = File(
-    '${dir.path}${Platform.pathSeparator}.$name.'
-    '${DateTime.now().microsecondsSinceEpoch}-${_downloadSeq++}.part',
-  );
+  final out = File('${dir.path}${Platform.pathSeparator}$name');
+  // An absolute string alone does not identify a filesystem destination:
+  // parent symlinks and case-insensitive Windows/macOS paths may alias it.
+  final canonicalDirectory = await dir.resolveSymbolicLinks();
+  final targetPath = File(
+    '$canonicalDirectory${Platform.pathSeparator}$name',
+  ).absolute.path;
+  final targetKey = (Platform.isWindows || Platform.isMacOS)
+      ? targetPath.toLowerCase()
+      : targetPath;
+  if (!_activeReleaseDownloads.add(targetKey)) {
+    throw const HttpException('Release download already in progress');
+  }
+  HttpClient? client;
+  Directory? staging;
   try {
+    client = _client(base: url, pinnedSha256: pinnedSha256);
+    staging = await dir.createTemp('.vps2vpn-release-');
+    final part = File('${staging.path}${Platform.pathSeparator}$name.part');
     final req = await client.getUrl(url);
     req.followRedirects = false;
     final res = await req.close().timeout(const Duration(seconds: 15));
     if (res.statusCode != HttpStatus.ok) {
-      // No drain: an error body that never ends would hold this forever.
-      // Closing the client below drops the connection instead.
+      await res.drain<void>();
       throw HttpException('Download failed (HTTP ${res.statusCode})');
     }
     final sink = part.openWrite();
@@ -797,13 +814,13 @@ Future<File> vpsDownloadRelease(
     } finally {
       await sink.close();
     }
-    // rename replaces an existing file in one step; deleting it first would
-    // lose the old copy whenever the rename then fails.
-    return await part.rename('${dir.path}${Platform.pathSeparator}$name');
-  } catch (_) {
-    if (await part.exists()) await part.delete();
-    rethrow;
+    return await part.rename(out.path);
   } finally {
-    client.close(force: true);
+    client?.close(force: true);
+    try {
+      if (staging != null) await staging.delete(recursive: true);
+    } finally {
+      _activeReleaseDownloads.remove(targetKey);
+    }
   }
 }
