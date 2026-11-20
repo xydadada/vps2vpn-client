@@ -143,6 +143,24 @@ void main() {
         'release payload');
   });
 
+  test('verified download replaces an existing complete installer', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release-replace-');
+    addTearDown(() => dir.delete(recursive: true));
+    final out = File('${dir.path}${Platform.pathSeparator}client.exe');
+    await out.writeAsString('previous release');
+
+    final saved = await _localSocket(
+      () => vpsDownloadRelease(
+        Uri.parse('https://127.0.0.1:${server.port}/client.exe'),
+        dir,
+        pinnedSha256: {fingerprint},
+      ),
+    );
+    expect(saved.path, out.path);
+    expect(await out.readAsString(), 'release payload');
+    expect(dir.listSync().whereType<Directory>(), isEmpty);
+  });
+
   test('failed TLS validation preserves an existing installer and cleans staging', () async {
     final dir = await Directory.systemTemp.createTemp('v2v-release-fail-');
     addTearDown(() => dir.delete(recursive: true));
