@@ -71,6 +71,9 @@ void main() {
       ],
     );
     container.listen(currentProfileIdProvider, (_, _) {});
+    // Model the page's subscription; ephemeral reads schedule disposal timers
+    // inside Flutter fake-async and do not represent a mounted UI owner.
+    container.listen(currentProfileProvider, (_, _) {});
     action = container.read(proxiesActionProvider.notifier);
   });
 
