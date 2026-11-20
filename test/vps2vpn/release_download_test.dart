@@ -38,6 +38,26 @@ void main() {
     );
     server.listen(
       (request) async {
+        if (request.uri.path == '/empty.exe') {
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/drip.exe') {
+          try {
+            // Never idle for long, but deliberately exceed the overall limit.
+            for (var i = 0; i < 20; i++) {
+              request.response.add([0x41]);
+              await request.response.flush();
+              await Future<void>.delayed(const Duration(milliseconds: 25));
+            }
+          } catch (_) {
+            // The downloader is expected to cancel its HTTP subscription.
+          }
+          try {
+            await request.response.close();
+          } catch (_) {}
+          return;
+        }
         request.response.write('release payload');
         await request.response.close();
       },
@@ -158,6 +178,52 @@ void main() {
     );
     expect(saved.path, out.path);
     expect(await out.readAsString(), 'release payload');
+    expect(dir.listSync().whereType<Directory>(), isEmpty);
+  });
+
+  test('drip-fed responses cannot evade the absolute transfer deadline', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release-drip-');
+    addTearDown(() => dir.delete(recursive: true));
+    final previous = File('${dir.path}${Platform.pathSeparator}drip.exe');
+    await previous.writeAsString('previous working version');
+    final url = Uri.parse('https://127.0.0.1:${server.port}/drip.exe');
+
+    await expectLater(
+      _localSocket(
+        () => vpsDownloadRelease(
+          url,
+          dir,
+          pinnedSha256: {fingerprint},
+          transferTimeout: const Duration(milliseconds: 110),
+        ),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+
+    expect(await previous.readAsString(), 'previous working version');
+    expect(dir.listSync().whereType<Directory>(), isEmpty);
+  });
+
+  test('an empty 200 response must not replace the existing installer', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release-empty-');
+    addTearDown(() => dir.delete(recursive: true));
+    final previous = File('${dir.path}${Platform.pathSeparator}empty.exe');
+    await previous.writeAsString('previous working version');
+    final url = Uri.parse('https://127.0.0.1:${server.port}/empty.exe');
+
+    await expectLater(
+      _localSocket(
+        () => vpsDownloadRelease(
+          url,
+          dir,
+          pinnedSha256: {fingerprint},
+          transferTimeout: const Duration(seconds: 1),
+        ),
+      ),
+      throwsA(isA<HttpException>()),
+    );
+
+    expect(await previous.readAsString(), 'previous working version');
     expect(dir.listSync().whereType<Directory>(), isEmpty);
   });
 
