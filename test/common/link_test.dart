@@ -66,7 +66,7 @@ void main() {
       ).toString(),
     );
     expect(received, [url]);
-    expect(messages.join(), contains('onAppLink: vps2vpn'));
+    expect(messages.join(), contains('onAppLink: install-config'));
     for (final secret in [
       'private-user',
       'private-pass',
