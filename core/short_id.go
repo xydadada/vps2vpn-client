@@ -23,7 +23,7 @@ func unmarshalRawConfig(buf []byte) (*config.RawConfig, error) {
 	if yaml.Unmarshal(buf, &document) != nil {
 		return config.UnmarshalRawConfig(buf)
 	}
-	if err := validateAliasGraph(&document); err != nil {
+	if err := validateYamlAliases(&document); err != nil {
 		return nil, err
 	}
 	if !retagShortIDs(&document) {
