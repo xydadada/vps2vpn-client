@@ -10,19 +10,21 @@ import 'clash_config.dart';
 part 'generated/profile.freezed.dart';
 part 'generated/profile.g.dart';
 
+final _profileWriteIntents = <int, Object>{};
+
+void cancelProfileWrite(int id) => _profileWriteIntents.remove(id);
+
 /// Why the config at the path cannot be used, or null.
-typedef ValidateConfig = Future<String?> Function(
-  String path,
-  String ageSecretKey,
-);
+typedef ValidateConfig =
+    Future<String?> Function(String path, String ageSecretKey);
 
 @freezed
 abstract class SubscriptionInfo with _$SubscriptionInfo {
   const factory SubscriptionInfo({
-    @Default(0) int upload,
-    @Default(0) int download,
-    @Default(0) int total,
-    @Default(0) int expire,
+    @Default(0) @JsonKey(fromJson: trafficCounterOrZero) int upload,
+    @Default(0) @JsonKey(fromJson: trafficCounterOrZero) int download,
+    @Default(0) @JsonKey(fromJson: trafficCounterOrZero) int total,
+    @Default(0) @JsonKey(fromJson: subscriptionExpiryOrUnknown) int expire,
   }) = _SubscriptionInfo;
 
   factory SubscriptionInfo.fromJson(Map<String, Object?> json) =>
@@ -34,10 +36,11 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
     for (final field in info.split(';')) {
       final separator = field.indexOf('=');
       if (separator == -1) continue;
-      final value = _parseCount(field.substring(separator + 1).trim());
-      if (value != null) {
-        map[field.substring(0, separator).trim().toLowerCase()] = value;
-      }
+      final key = field.substring(0, separator).trim().toLowerCase();
+      final raw = field.substring(separator + 1).trim();
+      map[key] = key == 'expire'
+          ? subscriptionExpiryOrUnknown(raw)
+          : trafficCounterOrZero(num.tryParse(raw));
     }
     return SubscriptionInfo(
       upload: map['upload'] ?? 0,
@@ -46,21 +49,27 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
       expire: map['expire'] ?? 0,
     );
   }
+}
 
-  static int? _parseCount(String value) {
-    final count = int.tryParse(value);
-    if (count != null) return count;
-    final decimal = double.tryParse(value);
-    return decimal != null && decimal.isFinite ? decimal.truncate() : null;
-  }
+int trafficCounterOrZero(Object? value) => nonNegativeInt(value) ?? 0;
+
+int subscriptionExpiryOrUnknown(Object? value) {
+  if (value == null || value == 0 || value == '0') return 0;
+  final seconds = unixSecondsOrZero(value);
+  return seconds;
 }
 
 extension SubscriptionInfoExt on SubscriptionInfo {
-  double? get usage =>
-      total > 0 ? ((upload + download) / total).clamp(0.0, 1.0) : null;
+  int get used => addTrafficBytes(upload, download);
 
-  DateTime? get expireDate =>
-      expire > 0 ? DateTime.fromMillisecondsSinceEpoch(expire * 1000) : null;
+  /// Keep display precision without overflowing the bounded integer total.
+  double get usedForDisplay => upload.toDouble() + download.toDouble();
+
+  int get remaining => total > used ? total - used : 0;
+
+  double? get usage => total > 0 ? (used / total).clamp(0.0, 1.0) : null;
+
+  DateTime? get expireDate => dateTimeFromUnixSeconds(expire);
 }
 
 @freezed
@@ -184,41 +193,89 @@ extension ProfileExtension on Profile {
     return _getFile();
   }
 
-  Future<Profile> update({required ValidateConfig validate}) async {
-    final response = await request.getFileResponseForUrl(url);
-    final disposition = response.headers.value('content-disposition');
-    final userinfo = response.headers.value('subscription-userinfo');
-    final updateInterval = int.tryParse(
-      response.headers.value('profile-update-interval')?.trim() ?? '',
-    );
-    return copyWith(
-      label: label.takeFirstValid([
-        getFileNameForDisposition(disposition),
-        defaultLabel,
-      ]),
-      subscriptionInfo: SubscriptionInfo.formHString(userinfo),
-      autoUpdateDuration: updateInterval != null
-          ? Duration(hours: updateInterval.clamp(1, 168))
-          : autoUpdateDuration,
-    ).saveFile(
-      decompressUnlabeled(response.data ?? Uint8List(0)),
-      validate: validate,
-    );
+  Future<Profile> update({
+    required ValidateConfig validate,
+    bool Function()? shouldCommit,
+  }) async {
+    final intent = Object();
+    _profileWriteIntents[id] = intent;
+    bool current() =>
+        identical(_profileWriteIntents[id], intent) &&
+        shouldCommit?.call() != false;
+    try {
+      final response = await request.getFileResponseForUrl(url);
+      if (!current()) return this;
+      final disposition = response.headers.value('content-disposition');
+      final userinfo = response.headers.value('subscription-userinfo');
+      final updateInterval = int.tryParse(
+        response.headers.value('profile-update-interval')?.trim() ?? '',
+      );
+      return await copyWith(
+        label: label.takeFirstValid([
+          getFileNameForDisposition(disposition),
+          defaultLabel,
+        ]),
+        subscriptionInfo: SubscriptionInfo.formHString(userinfo),
+        autoUpdateDuration: updateInterval != null
+            ? Duration(hours: updateInterval.clamp(1, 168))
+            : autoUpdateDuration,
+      )._saveFile(
+        decompressUnlabeled(response.data ?? Uint8List(0)),
+        validate: validate,
+        shouldCommit: current,
+      );
+    } finally {
+      if (identical(_profileWriteIntents[id], intent)) {
+        _profileWriteIntents.remove(id);
+      }
+    }
   }
 
   Future<Profile> saveFile(
     Uint8List bytes, {
     required ValidateConfig validate,
+    bool Function()? shouldCommit,
   }) async {
+    final intent = Object();
+    _profileWriteIntents[id] = intent;
+    try {
+      return await _saveFile(
+        bytes,
+        validate: validate,
+        shouldCommit: () =>
+            identical(_profileWriteIntents[id], intent) &&
+            shouldCommit?.call() != false,
+      );
+    } finally {
+      if (identical(_profileWriteIntents[id], intent)) {
+        _profileWriteIntents.remove(id);
+      }
+    }
+  }
+
+  Future<Profile> _saveFile(
+    Uint8List bytes, {
+    required ValidateConfig validate,
+    required bool Function() shouldCommit,
+  }) async {
+    if (!shouldCommit()) return this;
     final mFile = await _getFile(false);
+    if (!shouldCommit()) return this;
     final tempFile = File('${mFile.path}.$pid.$uniqueId.tmp');
     try {
       await tempFile.parent.create(recursive: true);
       await tempFile.writeAsBytes(bytes, flush: true);
-      if (await validate(tempFile.path, ageSecretKey) case final issue?) {
-        throw MessageException(issue);
+      if (!shouldCommit()) return this;
+      final issue = await validate(tempFile.path, ageSecretKey);
+      if (!shouldCommit()) return this;
+      if (issue != null) throw MessageException(issue);
+      if (!await _renameProfileFileRetrying(
+        tempFile,
+        mFile.path,
+        shouldCommit: shouldCommit,
+      )) {
+        return this;
       }
-      await _renameProfileFileRetrying(tempFile, mFile.path);
       return copyWith(lastUpdateDate: DateTime.now());
     } finally {
       await tempFile.safeDelete().then((_) {}, onError: (Object _) {});
@@ -229,11 +286,12 @@ extension ProfileExtension on Profile {
 const _profileReplaceAttempts = 10;
 const _profileReplaceRetryDelay = Duration(milliseconds: 50);
 
-Future<void> _renameProfileFileRetrying(File source, String target) async {
+Future<bool> _renameProfileFileRetrying(\n  File source,\n  String target, {\n  required bool Function() shouldCommit,\n}) async {
   for (var attempt = 1; ; attempt++) {
+    if (!shouldCommit()) return false;
     try {
-      await source.rename(target);
-      return;
+      source.renameSync(target);
+      return true;
     } on FileSystemException {
       if (attempt == _profileReplaceAttempts) rethrow;
       await Future<void>.delayed(_profileReplaceRetryDelay);
