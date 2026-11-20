@@ -70,9 +70,9 @@ func TestSourceAnswerMustDeclareTheIPAndNotContainAnError(t *testing.T) {
 		{`{"ip":true,"debug":"8.8.8.8"}`, false},
 		{`{"ip":"8.8.8.8"} not valid json`, false},
 		{`{"ip":"8.8.8.8","city":"Chicago"}`, true},
-		{"fl=29f\\nip=8.8.8.8\\nloc=US\\n", true},
+		{"fl=29f\nip=8.8.8.8\nloc=US\n", true},
 		{"ip=8.8.8.8 additional text", false},
-		{"ip=8.8.8.8\\nloc=US", true},
+		{"ip=8.8.8.8\nloc=US", true},
 	}
 	for _, tc := range cases {
 		if got := sourceAnswerHasIP(tc.body); got != tc.want {
