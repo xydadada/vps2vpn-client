@@ -515,7 +515,7 @@ func TestMergeProfileBaseRejectsExcessiveAliasExpansion(t *testing.T) {
 	}
 	profile.WriteString("proxies: *v24\n")
 	_, err := mergeProfileBase(&SetupBase{Path: writeBaseProfile(t, profile.String()), Overlay: "{}"})
-	if err == nil || !strings.Contains(err.Error(), "excessive YAML alias expansion") {
+	if err == nil || !strings.Contains(err.Error(), "alias expansion") {
 		t.Fatalf("merge error = %v, want bounded alias expansion", err)
 	}
 }

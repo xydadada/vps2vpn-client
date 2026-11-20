@@ -59,9 +59,40 @@ func handleGetProfileOutbounds(params PathParams) (*ProfileOutbounds, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ProfileOutbounds{Proxies: outboundsOf(raw.Proxy), ProxyGroups: outboundsOf(raw.ProxyGroup)}, nil
+	return &ProfileOutbounds{Proxies: outboundsOf(raw.Proxy), ProxyGroups: outboundsOf(raw.ProxyGroup), TLSFingerprints: tlsFingerprintsOf(raw.Proxy)}, nil
 }
 
+func tlsFingerprintsOf(proxies []map[string]any) map[string][]string {
+	var pins map[string][]string
+	for _, proxy := range proxies {
+		kind, _ := proxy["type"].(string)
+		if kind != "hysteria2" && kind != "tuic" {
+			continue
+		}
+		host, _ := proxy["server"].(string)
+		fingerprint, _ := proxy["fingerprint"].(string)
+		fingerprint = strings.ToLower(strings.ReplaceAll(fingerprint, ":", ""))
+		decoded, err := hex.DecodeString(fingerprint)
+		if host == "" || err != nil || len(decoded) != sha256.Size {
+			continue
+		}
+		if pins == nil {
+			pins = make(map[string][]string)
+		}
+		host = strings.ToLower(strings.Trim(host, "[]"))
+		duplicate := false
+		for _, pin := range pins[host] {
+			if pin == fingerprint {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			pins[host] = append(pins[host], fingerprint)
+		}
+	}
+	return pins
+}
 func outboundsOf(mappings []map[string]any) []ProfileOutbound {
 	outbounds := make([]ProfileOutbound, 0, len(mappings))
 	for _, mapping := range mappings {
@@ -432,11 +463,15 @@ func writeDocumentFile(dir, pattern string, document *yaml.Node) (string, error)
 	if err != nil {
 		return "", err
 	}
+	if err := preparePrivateFile(file); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return "", err
+	}
 	writer := bufio.NewWriterSize(file, 1<<20)
 	err = errors.Join(
 		encodeConfigMapping(writer, document.Content[0]),
 		writer.Flush(),
-		file.Chmod(0o644),
 		file.Close(),
 	)
 	if err != nil {
@@ -475,7 +510,6 @@ func encodeConfigMapping(w io.Writer, mapping *yaml.Node) error {
 			if err := encodeYamlPiece(w, slice, nil); err != nil {
 				return err
 			}
-			clear(items)
 		}
 	}
 	return nil

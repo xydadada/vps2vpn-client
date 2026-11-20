@@ -147,11 +147,13 @@ func handleValidateConfig(params PathParams) *string {
 }
 
 func handleDecryptConfig(params DecryptConfigParams) (string, error) {
-	buf, err := os.ReadFile(params.Path)
-	if err != nil {
-		return "", err
+	if params.Path != "" || params.Data == nil {
+		return "", &MethodError{
+			Code: "invalid_arguments",
+			Message: "config.decrypt requires data; paths are not supported",
+		}
 	}
-	buf, err = age.DecryptBytes(buf, params.AgeSecretKey)
+	buf, err := age.DecryptBytes(params.Data, params.AgeSecretKey)
 	if err != nil {
 		return "", err
 	}
@@ -215,18 +217,18 @@ func applyConfig(params *SetupParams) error {
 	configMu.Lock()
 	defer configMu.Unlock()
 
-	applyOptions(params.Options)
+	// SmartLines must be present while building the graph, but other mutable
+	// options must not be committed until the new configuration is valid.
+	previousSmart := vpsSmartEnabled.Load()
+	vpsSmartEnabled.Store(params.Options.SmartLines)
 	cfg, raw, err := loadSetupConfigWithRaw(params)
 	if err != nil {
-		// The fallback is what keeps the listeners serving while the host
-		// reports the error, but it applies a config with no proxies in it.
-		// From the UI that is indistinguishable from a subscription that went
-		// dead: the profile still lists every node, every delay test answers
-		// Timeout, and nothing routes. Name the real cause in the log.
-		logError(
-			"config apply failed, falling back to the built-in default - no proxies will be available: %v",
-			err,
-		)
+		vpsSmartEnabled.Store(previousSmart)
+		if currentConfig != nil {
+			logError("config apply rejected; keeping the last working config: %v", err)
+			return &MethodError{Code: "config_rejected", Message: err.Error()}
+		}
+		logError("first config apply rejected; using the built-in default: %v", err)
 		defaultRaw := config.DefaultRawConfig()
 		fallback, fallbackErr := config.ParseRawConfig(defaultRaw)
 		if fallbackErr != nil {
@@ -235,6 +237,7 @@ func applyConfig(params *SetupParams) error {
 		cfg = fallback
 		raw = defaultRaw
 	}
+	applyOptions(params.Options)
 
 	currentConfig = cfg
 	setProxyDefinitionCache(runningConfigPath(), raw)
