@@ -107,10 +107,12 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libsecret-1-dev
       - name: Install pinned Rust
         run: rustup toolchain install 1.99.0 --profile minimal
-      - name: Resolve audited Rust dependency versions
+      - name: Verify committed audited Rust lockfiles
         id: rust_dependencies
         shell: bash
-        run: bash tool/resolve_audit_rust_locks.sh
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 --manifest-path services/helper/Cargo.toml > /dev/null
+          cargo metadata --locked --no-deps --format-version 1 --manifest-path plugins/rust_api/rust/Cargo.toml > /dev/null
       - name: Check Rust dependency lockfiles
         if: ${{ !cancelled() && steps.rust_dependencies.outcome == 'success' }}
         shell: bash
@@ -264,10 +266,12 @@ jobs:
           cache-dependency-path: core/go.sum
       - name: Install pinned Rust
         run: rustup toolchain install 1.99.0 --profile minimal
-      - name: Resolve audited Rust dependency versions
+      - name: Verify committed audited Rust lockfiles
         id: rust_dependencies
         shell: bash
-        run: bash tool/resolve_audit_rust_locks.sh
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 --manifest-path services/helper/Cargo.toml > /dev/null
+          cargo metadata --locked --no-deps --format-version 1 --manifest-path plugins/rust_api/rust/Cargo.toml > /dev/null
       - name: Check Rust dependency lockfiles
         if: ${{ !cancelled() && steps.rust_dependencies.outcome == 'success' }}
         shell: bash
