@@ -3,6 +3,7 @@ part of '../action.dart';
 @Riverpod(keepAlive: true)
 class ProfilesAction extends _$ProfilesAction {
   final Map<int, Future<void>> _profileUpdates = {};
+  final _updates = <int, Object>{};
 
   CoreController get _core => ref.read(coreHandlerProvider);
 
@@ -40,6 +41,8 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   Future<void> deleteProfile(int id) async {
+    _updates.remove(id);
+    cancelProfileWrite(id);
     final currentProfileId = ref.read(currentProfileIdProvider);
     if (currentProfileId == id) {
       final remaining = [
@@ -89,6 +92,8 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   void putProfile(Profile profile, {bool select = false}) {
+    _updates.remove(profile.id);
+    cancelProfileWrite(profile.id);
     ref.read(profilesProvider.notifier).put(profile);
     if (!select && ref.read(currentProfileIdProvider) != null) return;
     ref.read(currentProfileIdProvider.notifier).value = profile.id;
@@ -164,9 +169,149 @@ class ProfilesAction extends _$ProfilesAction {
     }
   }
 
+  ({bool Function() isCurrent, VoidCallback release}) _claimProfileWrite(
+    Profile source,
+  ) {
+    final token = Object();
+    _updates[source.id] = token;
+    return (
+      isCurrent: () {
+        if (!ref.mounted || !identical(_updates[source.id], token))
+          return false;
+        final latest = ref.read(profilesProvider).getProfile(source.id);
+        return latest != null &&
+            latest.type == source.type &&
+            latest.url == source.url &&
+            latest.ageSecretKey == source.ageSecretKey;
+      },
+      release: () {
+        if (identical(_updates[source.id], token)) _updates.remove(source.id);
+      },
+    );
+  }
+
+  /// The editor and remote refreshes share ownership of the saved bytes.
+  Future<bool> saveProfileFile(Profile profile, Uint8List bytes) async {
+    final current = ref.read(profilesProvider).getProfile(profile.id);
+    if (current == null) return false;
+    final claim = _claimProfileWrite(current);
+    try {
+      final saved = await profile.saveFile(
+        bytes,
+        validate: (path, key) => _core.validateProfile(path, key),
+        shouldCommit: claim.isCurrent,
+      );
+      if (!claim.isCurrent()) return false;
+      final latest = ref.read(profilesProvider).getProfile(profile.id)!;
+      ref
+          .read(profilesProvider.notifier)
+          .put(
+            latest.copyWith(
+              label: profile.label,
+              url: profile.url,
+              ageSecretKey: profile.ageSecretKey,
+              autoUpdate: profile.autoUpdate,
+              autoUpdateDuration: profile.autoUpdateDuration,
+              lastUpdateDate: saved.lastUpdateDate,
+            ),
+          );
+      return true;
+    } catch (_) {
+      if (claim.isCurrent()) rethrow;
+      return false;
+    } finally {
+      claim.release();
+    }
+  }
+
+  void renameProfile(int id, String label) {
+    if (!ref.mounted) return;
+    final latest = ref.read(profilesProvider).getProfile(id);
+    if (latest != null) putProfile(latest.copyWith(label: label));
+  }
+
+  Future<bool> saveProfileEdit(
+    Profile original,
+    Profile edited, {
+    Uint8List? bytes,
+    Future<void> Function()? beforeRefresh,
+    bool Function()? canCommit,
+  }) async {
+    if (original.id != edited.id || original.type != edited.type) return false;
+    final claim = _claimProfileWrite(original);
+    bool current() => claim.isCurrent() && canCommit?.call() != false;
+    Profile merge(Profile latest) => latest.copyWith(
+      label: latest.label == original.label ? edited.label : latest.label,
+      url: edited.url,
+      ageSecretKey: edited.ageSecretKey,
+      autoUpdate: latest.autoUpdate == original.autoUpdate
+          ? edited.autoUpdate
+          : latest.autoUpdate,
+      autoUpdateDuration:
+          latest.autoUpdateDuration == original.autoUpdateDuration
+          ? edited.autoUpdateDuration
+          : latest.autoUpdateDuration,
+    );
+
+    try {
+      if (!current()) return false;
+      final needsRefresh =
+          edited.type == ProfileType.url &&
+          (edited.url != original.url ||
+              edited.ageSecretKey != original.ageSecretKey);
+      Profile? saved;
+      if (bytes != null) {
+        saved = await edited.saveFile(
+          bytes,
+          validate: (path, key) => _core.validateProfile(path, key),
+          shouldCommit: current,
+        );
+      } else if (needsRefresh) {
+        await beforeRefresh?.call();
+        if (!current()) return false;
+        saved = await edited.update(
+          validate: (path, key) => _core.validateProfile(path, key),
+          shouldCommit: current,
+        );
+      }
+      if (!current()) return false;
+      final latest = ref.read(profilesProvider).getProfile(original.id)!;
+      var result = merge(latest);
+      if (saved != null) {
+        result = result.copyWith(
+          lastUpdateDate: saved.lastUpdateDate,
+          subscriptionInfo: needsRefresh
+              ? saved.subscriptionInfo
+              : latest.subscriptionInfo,
+        );
+      }
+      ref.read(profilesProvider.notifier).put(result);
+      if (saved != null && ref.read(currentProfileIdProvider) == original.id) {
+        ref
+            .read(setupActionProvider.notifier)
+            .applyProfileDebounce(silence: true);
+      }
+      return true;
+    } catch (_) {
+      if (current()) rethrow;
+      return false;
+    } finally {
+      claim.release();
+    }
+  }
+
+  /// Setup repairs a missing subscription without scheduling another setup.
+  Future<void> updateMissingProfile(Profile profile) async {
+    if (profile.type != ProfileType.url) return;
+    final path = await appPath.getProfilePath(profile.id.toString());
+    if (await File(path).exists() || !ref.mounted) return;
+    await updateProfile(profile, reapply: false);
+  }
+
   Future<void> updateProfile(
     Profile profile, {
     bool showLoading = false,
+    bool reapply = true,
   }) {
     final previous = _profileUpdates[profile.id];
     final completer = Completer<void>();
@@ -175,12 +320,13 @@ class ProfilesAction extends _$ProfilesAction {
         ? ref.read(updatingKeysProvider.notifier).start(profile.updatingKey)
         : null;
     return () async {
+      void Function() releaseClaim = () {};
       try {
         if (previous != null) {
           await previous.catchError((Object _) {});
         }
         final existing = ref.read(profilesProvider).getProfile(profile.id);
-        if (existing == null) {
+        if (existing == null || existing.type != ProfileType.url || !ref.mounted) {
           return;
         }
         final sourceChanged =
@@ -190,9 +336,13 @@ class ProfilesAction extends _$ProfilesAction {
         if (sourceChanged) {
           ref.read(profilesProvider.notifier).put(profile);
         }
+        final claim = _claimProfileWrite(target);
+        releaseClaim = claim.release;
         final updated = await target.update(
           validate: (path, key) => _core.validateProfile(path, key),
+          shouldCommit: claim.isCurrent,
         );
+        if (!claim.isCurrent()) return;
         // The download can take minutes; edits and deletes made meanwhile win.
         final latest = ref.read(profilesProvider).getProfile(target.id);
         if (latest == null) {
@@ -213,6 +363,7 @@ class ProfilesAction extends _$ProfilesAction {
               : updated.autoUpdateDuration,
         );
         ref.read(profilesProvider.notifier).put(newProfile);
+        if (!reapply) return;
         if (target.id == ref.read(currentProfileIdProvider)) {
           ref
               .read(setupActionProvider.notifier)
@@ -231,13 +382,14 @@ class ProfilesAction extends _$ProfilesAction {
           );
         }
       } finally {
+        releaseClaim();
         if (identical(_profileUpdates[profile.id], completer.future)) {
           _profileUpdates.remove(profile.id);
         }
         if (!completer.isCompleted) {
           completer.complete();
         }
-        if (operation != null) {
+        if (operation != null && ref.mounted) {
           ref
               .read(updatingKeysProvider.notifier)
               .stop(profile.updatingKey, operation);
@@ -520,6 +672,7 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   Future<void> clearEffect(int profileId) async {
+    cancelProfileWrite(profileId);
     final profilePath = await appPath.getProfilePath(profileId.toString());
     final profileFile = File(profilePath);
     final isExists = await profileFile.exists();
