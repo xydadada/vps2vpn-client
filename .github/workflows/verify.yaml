@@ -2,7 +2,7 @@ name: Source verification
 
 on:
   push:
-    branches: [vps2vpn]
+    branches: [vps2vpn, audit/2026-11-reliability-security]
   pull_request:
   workflow_dispatch:
 

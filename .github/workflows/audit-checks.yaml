@@ -1,6 +1,8 @@
 name: vps2vpn audit checks
 
 on:
+  push:
+    branches: [audit/2026-11-reliability-security]
   pull_request:
   workflow_dispatch:
 
