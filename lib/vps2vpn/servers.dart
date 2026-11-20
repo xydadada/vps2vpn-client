@@ -53,13 +53,17 @@ void _syncAutoTestProfile(WidgetRef ref) {
 void vpsAutoTestOnce(WidgetRef ref, Group group) {
   if (group.name.isEmpty || group.all.isEmpty) return;
   _syncAutoTestProfile(ref);
-  if (!_autoTested.add(group.name)) return;
+  if (_autoTested.contains(group.name)) return;
   final context = ref.context;
+  final profileId = ref.read(currentProfileProvider)?.id;
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!context.mounted) {
-      _autoTested.remove(group.name);
+    // An abandoned frame must not reserve or release another owner's slot.
+    if (!context.mounted ||
+        ref.read(currentProfileProvider)?.id != profileId) {
       return;
     }
+    _syncAutoTestProfile(ref);
+    if (!_autoTested.add(group.name)) return;
     ref
         .read(proxiesActionProvider.notifier)
         .delayTest(group.all, group.testUrl);
@@ -86,13 +90,16 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   void _autoTest(Group group) {
     if (group.name.isEmpty || group.all.isEmpty) return;
     _syncAutoTestProfile(ref);
-    if (!_autoTested.add(group.name)) return;
+    if (_autoTested.contains(group.name)) return;
+    final profileId = ref.read(currentProfileProvider)?.id;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        _autoTested.remove(group.name);
+      if (!mounted || ref.read(currentProfileProvider)?.id != profileId) {
         return;
       }
-      _test(group);
+      _syncAutoTestProfile(ref);
+      if (_autoTested.add(group.name)) {
+        _test(group);
+      }
     });
   }
 
