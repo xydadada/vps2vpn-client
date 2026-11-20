@@ -90,6 +90,59 @@ void main() {
     expect(dir.listSync().whereType<Directory>(), isEmpty);
   });
 
+  test('path aliases of a symlinked download directory share one lock', () async {
+    if (Platform.isWindows) return;
+    final root = await Directory.systemTemp.createTemp('v2v-release-alias-');
+    addTearDown(() => root.delete(recursive: true));
+    final real = Directory('${root.path}${Platform.pathSeparator}real');
+    await real.create();
+    final alias = Link('${root.path}${Platform.pathSeparator}alias');
+    await alias.create(real.path);
+    final url = Uri.parse('https://127.0.0.1:${server.port}/client.exe');
+
+    Future<Object> download(Directory dir) async {
+      try {
+        return await _localSocket(
+          () => vpsDownloadRelease(url, dir, pinnedSha256: {fingerprint}),
+        );
+      } catch (e) {
+        return e;
+      }
+    }
+
+    final results = await Future.wait([download(real), download(Directory(alias.path))]);
+    expect(results.whereType<File>().length, 1);
+    expect(results.whereType<HttpException>().length, 1);
+    expect(await File('${real.path}${Platform.pathSeparator}client.exe').readAsString(),
+        'release payload');
+  });
+
+  test('Windows case-folded filenames cannot bypass the active download lock', () async {
+    if (!Platform.isWindows) return;
+    final dir = await Directory.systemTemp.createTemp('v2v-release-case-');
+    addTearDown(() => dir.delete(recursive: true));
+
+    Future<Object> download(String name) async {
+      try {
+        return await _localSocket(
+          () => vpsDownloadRelease(
+            Uri.parse('https://127.0.0.1:${server.port}/$name'),
+            dir,
+            pinnedSha256: {fingerprint},
+          ),
+        );
+      } catch (e) {
+        return e;
+      }
+    }
+
+    final results = await Future.wait([download('client.exe'), download('CLIENT.EXE')]);
+    expect(results.whereType<File>().length, 1);
+    expect(results.whereType<HttpException>().length, 1);
+    expect(await File('${dir.path}${Platform.pathSeparator}client.exe').readAsString(),
+        'release payload');
+  });
+
   test('failed TLS validation preserves an existing installer and cleans staging', () async {
     final dir = await Directory.systemTemp.createTemp('v2v-release-fail-');
     addTearDown(() => dir.delete(recursive: true));

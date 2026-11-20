@@ -769,8 +769,16 @@ Future<File> vpsDownloadRelease(
     throw const HttpException('Unexpected release file name');
   }
   final out = File('${dir.path}${Platform.pathSeparator}$name');
-  final targetPath = out.absolute.path;
-  if (!_activeReleaseDownloads.add(targetPath)) {
+  // An absolute string alone does not identify a filesystem destination:
+  // parent symlinks and case-insensitive Windows/macOS paths may alias it.
+  final canonicalDirectory = await dir.resolveSymbolicLinks();
+  final targetPath = File(
+    '$canonicalDirectory${Platform.pathSeparator}$name',
+  ).absolute.path;
+  final targetKey = (Platform.isWindows || Platform.isMacOS)
+      ? targetPath.toLowerCase()
+      : targetPath;
+  if (!_activeReleaseDownloads.add(targetKey)) {
     throw const HttpException('Release download already in progress');
   }
   HttpClient? client;
@@ -805,7 +813,7 @@ Future<File> vpsDownloadRelease(
     try {
       if (staging != null) await staging.delete(recursive: true);
     } finally {
-      _activeReleaseDownloads.remove(targetPath);
+      _activeReleaseDownloads.remove(targetKey);
     }
   }
 }
