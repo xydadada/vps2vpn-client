@@ -17,7 +17,7 @@ func TestHandleOutboundIpTakesTheFirstUsableAnswer(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	quick := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.7"))
+		_, _ = w.Write([]byte(`{"ip":"8.8.4.4"}`))
 	})
 
 	result := handleOutboundIp(&OutboundIpParams{
@@ -29,7 +29,7 @@ func TestHandleOutboundIpTakesTheFirstUsableAnswer(t *testing.T) {
 	if result.Error != "" {
 		t.Fatalf("error = %q, want none", result.Error)
 	}
-	if result.Body != "ip=203.0.113.7" {
+	if result.Body != `{"ip":"8.8.4.4"}` {
 		t.Errorf("body = %q, want the quick source's", result.Body)
 	}
 	if result.Url != quick.URL {
@@ -70,15 +70,28 @@ func TestSourceAnswerMustDeclareTheIPAndNotContainAnError(t *testing.T) {
 		{`{"ip":true,"debug":"8.8.8.8"}`, false},
 		{`{"ip":"8.8.8.8"} not valid json`, false},
 		{`{"ip":"8.8.8.8","city":"Chicago"}`, true},
-		{"fl=29f\nip=8.8.8.8\nloc=US\n", true},
+		{"fl=29f\nip=8.8.8.8\nloc=US\n", false},
 		{"ip=8.8.8.8 additional text", false},
-		{"ip=8.8.8.8\nloc=US", true},
+		{"ip=8.8.8.8\nloc=US", false},
 	}
 	for _, tc := range cases {
-		if got := sourceAnswerHasIP(tc.body); got != tc.want {
+		if got := sourceAnswerHasIP("https://api.ip.sb/geoip", tc.body); got != tc.want {
 			t.Errorf("sourceAnswerHasIP(%q) = %t; want %t", tc.body, got, tc.want)
 		}
 	}
+}
+
+func TestSourceAnswerAcceptsTraceTextOnlyFromCloudflare(t *testing.T) {
+    trace := "fl=1\nip=8.8.8.8\nloc=US\n"
+    if !sourceAnswerHasIP(outboundTraceURL, trace) {
+        t.Fatal("valid Cloudflare trace was rejected")
+    }
+    if sourceAnswerHasIP("https://api.ip.sb/geoip", trace) {
+        t.Fatal("non-Cloudflare text falsely satisfied the JSON source")
+    }
+    if sourceAnswerHasIP(outboundTraceURL, `{"ip":"8.8.8.8"}`) {
+        t.Fatal("unexpected JSON must not satisfy the Cloudflare trace format")
+    }
 }
 
 func TestHandleOutboundIpSkipsAnErrorPageWithIncidentalPublicIp(t *testing.T) {
@@ -140,7 +153,7 @@ func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 		}
 	})
 	winning := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.9"))
+		_, _ = w.Write([]byte(`{"ip":"9.9.9.9"}`))
 	})
 
 	result := handleOutboundIp(&OutboundIpParams{
@@ -149,7 +162,7 @@ func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 		Timeout:   5000,
 	})
 
-	if result.Body != "ip=203.0.113.9" {
+	if result.Body != `{"ip":"9.9.9.9"}` {
 		t.Fatalf("body = %q, want the winning source's", result.Body)
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -173,7 +186,7 @@ func TestHandleOutboundIpCancelsALookupFromAnOlderEpoch(t *testing.T) {
 		}
 	})
 	winning := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.9"))
+		_, _ = w.Write([]byte(`{"ip":"9.9.9.9"}`))
 	})
 
 	stampRoute(1, 0)
@@ -202,10 +215,10 @@ func TestHandleOutboundIpLeavesALookupFromTheSameEpoch(t *testing.T) {
 	slow := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		reached <- struct{}{}
 		time.Sleep(300 * time.Millisecond)
-		_, _ = w.Write([]byte("ip=203.0.113.7"))
+		_, _ = w.Write([]byte(`{"ip":"8.8.4.4"}`))
 	})
 	fast := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.9"))
+		_, _ = w.Write([]byte(`{"ip":"9.9.9.9"}`))
 	})
 
 	stampRoute(1, 0)
@@ -216,7 +229,7 @@ func TestHandleOutboundIpLeavesALookupFromTheSameEpoch(t *testing.T) {
 	<-reached
 	handleOutboundIp(&OutboundIpParams{ProxyName: "node-a", Urls: []string{fast.URL}, Timeout: 5000})
 
-	if answer := <-first; answer.Body != "ip=203.0.113.7" {
+	if answer := <-first; answer.Body != `{"ip":"8.8.4.4"}` {
 		t.Errorf("first lookup = %+v, want it to finish beside the second", answer)
 	}
 }
