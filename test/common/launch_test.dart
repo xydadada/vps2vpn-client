@@ -3,6 +3,7 @@
 // mock into editor tests, whose RopeBridge.create then returns null.
 @TestOn('vm')
 library;
+
 import 'dart:io';
 
 import 'package:fl_clash/common/constant.dart';
