@@ -161,11 +161,14 @@ Future<List<String>> quitRivals(
 }) async {
   if (rivals.isEmpty) return const [];
   if (_underTest && identical(run, _run)) return rivalNames(rivals);
-  for (final image in {for (final r in rivals) r.image}) {
+  for (final pid in {for (final rival in rivals) rival.pid}) {
     try {
-      // /T takes the app's own core with it; /F because tray apps ignore a
-      // polite close (they hide to the tray instead).
-      await run('taskkill', ['/F', '/T', '/IM', image]);
+      // Terminate only the PID observed during this scan, not every process
+      // whose image name happens to match, including newly launched ones.
+      // /T includes children; /F is required for tray applications.
+      if (pid > 0) {
+        await run('taskkill', ['/F', '/T', '/PID', '$pid']);
+      }
     } catch (_) {}
   }
   // Give Windows a moment to release their ports and TUN adapters.
