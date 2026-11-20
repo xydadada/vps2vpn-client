@@ -1,7 +1,8 @@
-@TestOn('vm')
 // RustLib.initMock replaces a process-wide singleton. Run this test file in
 // its own isolate: shared bundles otherwise leak an incomplete RustLibApi
 // mock into editor tests, whose RopeBridge.create then returns null.
+@TestOn('vm')
+library;
 import 'dart:io';
 
 import 'package:fl_clash/common/constant.dart';
