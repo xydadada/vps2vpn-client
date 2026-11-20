@@ -42,10 +42,12 @@ void main() {
         original,
       );
 
-      await expectLater(
-        container.read(profilesActionProvider.notifier).updateProfile(edited),
-        throwsA(anything),
-      );
+      // Edits are committed explicitly before starting their refresh, as the
+      // editor does. A refresh reads the latest row and cannot publish a
+      // caller's obsolete snapshot over a concurrent edit.
+      final action = container.read(profilesActionProvider.notifier);
+      action.putProfile(edited);
+      await expectLater(action.updateProfile(edited), throwsA(anything));
 
       final profile = container.read(profilesProvider).getProfile(original.id);
       expect(profile?.label, edited.label);
@@ -196,6 +198,8 @@ void main() {
         final setupAction = _ApplyRecordingSetupAction();
         final container = scriptsContainer(profile, setupAction);
         final remote = script(1, url: 'bad-url');
+        await container.read(scriptsProvider.future);
+        container.read(scriptsProvider.notifier).put(remote);
 
         await expectLater(
           container.read(scriptsActionProvider.notifier).updateScript(remote),
@@ -203,7 +207,7 @@ void main() {
         );
 
         expect(container.read(isUpdatingProvider(remote.updatingKey)), isFalse);
-        expect(container.read(scriptsProvider).value, isEmpty);
+        expect(container.read(scriptsProvider).value, [remote]);
         expect(setupAction.applyCount, 0);
       },
     );
