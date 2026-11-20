@@ -58,6 +58,45 @@ func TestHandleOutboundIpSkipsAnAnswerWithoutAnAddress(t *testing.T) {
 	}
 }
 
+func TestSourceAnswerMustDeclareTheIPAndNotContainAnError(t *testing.T) {
+	cases := []struct {
+		body string
+		want bool
+	}{
+		{`<html><body>quota exceeded; diagnostic address 8.8.8.8</body></html>`, false},
+		{`{"error":"rate limited","upstream":"8.8.8.8"}`, false},
+		{`{"ip":"8.8.8.8","error":"quota exceeded"}`, false},
+		{`{"ip":"8.8.8.8","success":false}`, false},
+		{`{"ip":true,"debug":"8.8.8.8"}`, false},
+		{`{"ip":"8.8.8.8"} not valid json`, false},
+		{`{"ip":"8.8.8.8","city":"Chicago"}`, true},
+		{"fl=29f\\nip=8.8.8.8\\nloc=US\\n", true},
+		{"ip=8.8.8.8 additional text", false},
+		{"ip=8.8.8.8\\nloc=US", true},
+	}
+	for _, tc := range cases {
+		if got := sourceAnswerHasIP(tc.body); got != tc.want {
+			t.Errorf("sourceAnswerHasIP(%q) = %t; want %t", tc.body, got, tc.want)
+		}
+	}
+}
+
+func TestHandleOutboundIpSkipsAnErrorPageWithIncidentalPublicIp(t *testing.T) {
+	withProbeProxies(t, "node-a")
+	broken := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html>upstream 8.8.8.8 is overloaded</html>`))
+	})
+	working := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"ip":"1.1.1.1","country":"US"}`))
+	})
+	answer := handleOutboundIp(&OutboundIpParams{
+		ProxyName: "node-a", Urls: []string{broken.URL, working.URL}, Timeout: 4000,
+	})
+	if answer.Error != "" || answer.Url != working.URL || answer.Body != `{"ip":"1.1.1.1","country":"US"}` {
+		t.Fatalf("diagnostic IP won the race rather than actual result: %+v", answer)
+	}
+}
+
 func TestMentionsIpNeedsAWholeAddress(t *testing.T) {
 	cases := map[string]bool{
 		"fl=12f\nip=203.0.113.7\nts=1700000000.1": true,
