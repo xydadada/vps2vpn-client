@@ -750,6 +750,10 @@ final vpsPanelPinsProvider = FutureProvider.autoDispose<Set<String>>((
 });
 
 final _releaseFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
+final _reservedReleaseName = RegExp(
+  r'^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)',
+  caseSensitive: false,
+);
 const _maxReleaseBytes = 512 * 1024 * 1024;
 final _activeReleaseDownloads = <String>{};
 
@@ -765,7 +769,10 @@ Future<File> vpsDownloadRelease(
     throw const HttpException('Release link is not HTTPS');
   }
   final name = url.pathSegments.isEmpty ? '' : url.pathSegments.last;
-  if (!_releaseFileName.hasMatch(name)) {
+  // Windows trims trailing dots and resolves device names specially.
+  if (!_releaseFileName.hasMatch(name) ||
+      name.endsWith('.') ||
+      _reservedReleaseName.hasMatch(name)) {
     throw const HttpException('Unexpected release file name');
   }
   final out = File('${dir.path}${Platform.pathSeparator}$name');

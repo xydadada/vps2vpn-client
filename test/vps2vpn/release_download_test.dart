@@ -143,6 +143,27 @@ void main() {
         'release payload');
   });
 
+  test('rejects DOS device names and trailing-dot file aliases', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release-names-');
+    addTearDown(() => dir.delete(recursive: true));
+    for (final name in [
+      'CON',
+      'NUL.txt',
+      'LPT1.exe',
+      'COM9',
+      'client.',
+      'client..',
+    ]) {
+      final url = Uri.parse('https://127.0.0.1:${server.port}/$name');
+      await expectLater(
+        vpsDownloadRelease(url, dir),
+        throwsA(isA<HttpException>()),
+        reason: name,
+      );
+    }
+    expect(dir.listSync(), isEmpty);
+  });
+
   test('verified download replaces an existing complete installer', () async {
     final dir = await Directory.systemTemp.createTemp('v2v-release-replace-');
     addTearDown(() => dir.delete(recursive: true));
