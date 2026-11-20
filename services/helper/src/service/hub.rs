@@ -852,6 +852,55 @@ pub(super) fn ensure_core_sha256_configured() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Serve only pre-authorized local sockets. Warp 0.4 no longer accepts custom
+/// incoming streams, so adapt each already-verified socket to Hyper 1 here.
+/// Never pass the underlying unfiltered listener to warp::serve().
+#[cfg(any(target_os = "linux", all(feature = "windows-service", target_os = "windows")))]
+pub(super) async fn serve_incoming_until<I, S, F>(mut incoming: I, shutdown: F)
+where
+    I: tokio_stream::Stream<Item = io::Result<S>> + Unpin,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    F: std::future::Future<Output = ()>,
+{
+    use tokio_stream::StreamExt;
+    let mut connections = tokio::task::JoinSet::new();
+    tokio::pin!(shutdown);
+    loop {
+        tokio::select! {
+            biased;
+            _ = &mut shutdown => break,
+            next = incoming.next() => match next {
+                Some(Ok(stream)) => {
+                    connections.spawn(async move {
+                        let service = hyper_util::service::TowerToHyperService::new(
+                            warp::service(routes()),
+                        );
+                        if let Err(error) = hyper::server::conn::http1::Builder::new()
+                            .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
+                            .await
+                        {
+                            log_message(format!("Helper connection ended: {error}"));
+                        }
+                    });
+                }
+                Some(Err(error)) => {
+                    log_message(format!("Helper rejected incoming socket: {error}"));
+                }
+                None => break,
+            },
+        }
+    }
+    // Close the listener before draining. A keep-alive client must not block
+    // helper shutdown indefinitely, especially during uninstall/upgrade.
+    drop(incoming);
+    if tokio::time::timeout(Duration::from_secs(3), async {
+        while connections.join_next().await.is_some() {}
+    }).await.is_err() {
+        connections.abort_all();
+        while connections.join_next().await.is_some() {}
+    }
+}
+
 pub(super) fn release_managed_core_on_shutdown() {
     let mut managed = lock_surviving_poison(&MANAGED_CORE);
     if let Err(error) = release_managed_core(&mut managed) {
@@ -894,6 +943,7 @@ where
 mod tests {
     use super::*;
     use std::io::Write;
+    use http_body_util::BodyExt;
 
     static PROCESS_STATE: Mutex<()> = Mutex::new(());
 
@@ -983,9 +1033,7 @@ mod tests {
             PROTOCOL_VERSION
         );
         assert_eq!(
-            warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            response.into_body().collect().await.unwrap().to_bytes(),
             "vps2vpnHelperService.exe"
         );
     }
@@ -1000,9 +1048,7 @@ mod tests {
             PROTOCOL_VERSION
         );
         assert_eq!(
-            warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            response.into_body().collect().await.unwrap().to_bytes(),
             "Core executable SHA256 mismatch"
         );
     }
@@ -1105,9 +1151,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let body: serde_json::Value = serde_json::from_slice(
-            &warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            &response.into_body().collect().await.unwrap().to_bytes(),
         )
         .unwrap();
         assert_eq!(body["code"], "processLaunchFailed");
@@ -1119,9 +1163,7 @@ mod tests {
         let response = launch_failure_response(&Error::other("spawn refused"));
 
         let body: serde_json::Value = serde_json::from_slice(
-            &warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            &response.into_body().collect().await.unwrap().to_bytes(),
         )
         .unwrap();
         assert_eq!(body["message"], "spawn refused");
@@ -1166,9 +1208,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
         assert!(lock_surviving_poison(&MANAGED_CORE).is_none());
         let body: serde_json::Value = serde_json::from_slice(
-            &warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            &response.into_body().collect().await.unwrap().to_bytes(),
         )
         .unwrap();
         assert_eq!(body["code"], "coreVerificationFailed");
