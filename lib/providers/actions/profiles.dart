@@ -225,6 +225,88 @@ class ProfilesAction extends _$ProfilesAction {
     }
   }
 
+  void renameProfile(int id, String label) {
+    if (!ref.mounted) return;
+    final latest = ref.read(profilesProvider).getProfile(id);
+    if (latest != null) putProfile(latest.copyWith(label: label));
+  }
+
+  Future<bool> saveProfileEdit(
+    Profile original,
+    Profile edited, {
+    Uint8List? bytes,
+    Future<void> Function()? beforeRefresh,
+    bool Function()? canCommit,
+  }) async {
+    if (original.id != edited.id || original.type != edited.type) return false;
+    bool sourceIsCurrent() {
+      if (!ref.mounted || canCommit?.call() == false) return false;
+      final latest = ref.read(profilesProvider).getProfile(original.id);
+      return latest != null &&
+          latest.type == original.type &&
+          latest.url == original.url &&
+          latest.ageSecretKey == original.ageSecretKey;
+    }
+
+    Profile merge(Profile latest) => latest.copyWith(
+      label: latest.label == original.label ? edited.label : latest.label,
+      url: edited.url,
+      ageSecretKey: edited.ageSecretKey,
+      autoUpdate: latest.autoUpdate == original.autoUpdate
+          ? edited.autoUpdate
+          : latest.autoUpdate,
+      autoUpdateDuration:
+          latest.autoUpdateDuration == original.autoUpdateDuration
+          ? edited.autoUpdateDuration
+          : latest.autoUpdateDuration,
+    );
+
+    if (!sourceIsCurrent()) return false;
+    final needsRefresh =
+        edited.type == ProfileType.url &&
+        (edited.url != original.url ||
+            edited.ageSecretKey != original.ageSecretKey);
+    if (bytes == null && !needsRefresh) {
+      putProfile(merge(ref.read(profilesProvider).getProfile(original.id)!));
+      return true;
+    }
+    final request = Object();
+    _updateRequests[original.id] = request;
+    cancelProfileWrite(original.id);
+    bool current() =>
+        sourceIsCurrent() &&
+        identical(_updateRequests[original.id], request);
+    Profile? refresh;
+    try {
+      if (bytes == null) {
+        await beforeRefresh?.call();
+        if (!current()) return false;
+        refresh = merge(ref.read(profilesProvider).getProfile(original.id)!);
+      } else {
+        final saved = await edited.saveFile(
+          bytes,
+          validate: (path, key) => _core.validateProfile(path, key),
+          canCommit: current,
+        );
+        if (!current()) return false;
+        final latest = ref.read(profilesProvider).getProfile(original.id)!;
+        putProfile(merge(latest).copyWith(lastUpdateDate: saved.lastUpdateDate));
+        return true;
+      }
+    } on ProfileUpdateSuperseded {
+      return false;
+    } catch (_) {
+      if (!current()) return false;
+      rethrow;
+    } finally {
+      if (identical(_updateRequests[original.id], request)) {
+        _updateRequests.remove(original.id);
+      }
+    }
+    await updateProfile(refresh!);
+    return true;
+  }
+
   Future<void> addProfileFormFile() async {
     final platformFile = await globalState.safeRun(picker.pickerFile);
     if (platformFile == null) return;

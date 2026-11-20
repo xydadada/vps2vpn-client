@@ -38,6 +38,25 @@ void main() {
       expect(Directory(path).existsSync(), isFalse);
     });
 
+    test('removes links without following their targets', () async {
+      final target = Directory(join(root.path, 'target'))..createSync();
+      final marker = File(join(target.path, 'keep'))..writeAsStringSync('keep');
+      final link = Link(join(root.path, 'link'));
+      await link.create(target.path);
+      await safeDeletePath(link.path);
+      expect(marker.readAsStringSync(), 'keep');
+      expect(
+        await FileSystemEntity.type(link.path, followLinks: false),
+        FileSystemEntityType.notFound,
+      );
+      await link.create(join(root.path, 'missing'));
+      await safeDeletePath(link.path);
+      expect(
+        await FileSystemEntity.type(link.path, followLinks: false),
+        FileSystemEntityType.notFound,
+      );
+    }, testOn: 'linux || mac-os');
+
     test('accepts a path that is already gone', () async {
       await expectLater(safeDeletePath(join(root.path, 'missing')), completes);
     });

@@ -62,7 +62,7 @@ Future<T> _withProfileFile<T>(
 Future<void> deleteProfileFile(int id) async {
   cancelProfileWrite(id);
   final path = await appPath.getProfilePath(id.toString());
-  await _withProfileFile(path, (file) => file.safeDelete(recursive: true));
+  await _withProfileFile(path, (file) => safeDeletePath(file.path));
 }
 
 /// Why the config at the path cannot be used, or null.

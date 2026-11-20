@@ -81,8 +81,9 @@ extension FileSystemEntityExt on FileSystemEntity {
 }
 
 Future<void> safeDeletePath(String path) async {
-  final entity = switch (FileSystemEntity.typeSync(path)) {
+  final entity = switch (FileSystemEntity.typeSync(path, followLinks: false)) {
     FileSystemEntityType.directory => Directory(path),
+    FileSystemEntityType.link => Link(path),
     _ => File(path),
   };
   await entity.safeDelete(recursive: true);

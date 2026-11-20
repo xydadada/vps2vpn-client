@@ -281,6 +281,161 @@ void main() {
     });
   }
 
+  for (final change in ['delete', 'source']) {
+    test('a delayed source edit stops after a $change change', () async {
+      final profile = await seed();
+      final action = container.read(profilesActionProvider.notifier);
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      final pending = action.saveProfileEdit(
+        profile,
+        profile.copyWith(url: url('/new')),
+        beforeRefresh: () => gate.future,
+      );
+      if (change == 'delete') {
+        await action.deleteProfile(profile.id);
+      } else {
+        container
+            .read(profilesProvider.notifier)
+            .put(profile.copyWith(url: url('/latest')));
+      }
+      gate.complete();
+
+      expect(await pending, isFalse);
+      if (change == 'delete') {
+        expect(container.read(profilesProvider), isEmpty);
+        expect(
+          await File(await appPath.getProfilePath(profile.id.toString()))
+              .exists(),
+          isFalse,
+        );
+      } else {
+        expect(container.read(profilesProvider).single.url, url('/latest'));
+        expect(await content(profile), 'original');
+      }
+      verifyNever(() => core.validateConfig(any()));
+    });
+  }
+
+  test('the current source edit refreshes and preserves later metadata', () async {
+    final profile = await seed();
+    final action = container.read(profilesActionProvider.notifier);
+    final gate = Completer<void>();
+    final pending = action.saveProfileEdit(
+      profile,
+      profile.copyWith(url: url('/new')),
+      beforeRefresh: () => gate.future,
+    );
+    container
+        .read(profilesProvider.notifier)
+        .put(profile.copyWith(label: 'renamed while closing'));
+    gate.complete();
+    expect(await pending, isTrue);
+    final latest = container.read(profilesProvider).single;
+    expect(latest.label, 'renamed while closing');
+    expect(latest.url, url('/new'));
+    expect(await content(latest), contains('# /new'));
+  });
+
+  for (final change in ['delete', 'source', 'owner']) {
+    test('a pending file edit stops after a $change change', () async {
+      final profile = await seed();
+      final validation = holdOldValidation();
+      final action = container.read(profilesActionProvider.notifier);
+      var ownerAlive = true;
+      final pending = action.saveProfileEdit(
+        profile,
+        profile.copyWith(label: 'edited'),
+        bytes: Uint8List.fromList('edited\n# /old\n'.codeUnits),
+        canCommit: () => ownerAlive,
+      );
+      await validation.entered;
+      switch (change) {
+        case 'delete':
+          await action.deleteProfile(profile.id);
+        case 'source':
+          container
+              .read(profilesProvider.notifier)
+              .put(profile.copyWith(url: url('/new')));
+        case 'owner':
+          ownerAlive = false;
+      }
+      validation.result.complete(null);
+
+      expect(await pending, isFalse);
+      if (change == 'delete') {
+        expect(container.read(profilesProvider), isEmpty);
+        expect(
+          await File(await appPath.getProfilePath(profile.id.toString()))
+              .exists(),
+          isFalse,
+        );
+      } else {
+        expect(await content(profile), 'original');
+        expect(container.read(profilesProvider).single.label, profile.label);
+      }
+    });
+  }
+
+  test('a file edit preserves concurrent metadata changes', () async {
+    final profile = await seed();
+    final validation = holdOldValidation();
+    final pending = container
+        .read(profilesActionProvider.notifier)
+        .saveProfileEdit(
+          profile,
+          profile.copyWith(label: 'edited'),
+          bytes: Uint8List.fromList('edited\n# /old\n'.codeUnits),
+        );
+    await validation.entered;
+    container.read(profilesProvider.notifier).put(
+      profile.copyWith(label: 'later rename', selectedMap: {'group': 'node'}),
+    );
+    validation.result.complete(null);
+
+    expect(await pending, isTrue);
+    final saved = container.read(profilesProvider).single;
+    expect(saved.label, 'later rename');
+    expect(saved.selectedMap, {'group': 'node'});
+    expect(saved.lastUpdateDate, isNotNull);
+    expect(await content(profile), 'edited\n# /old\n');
+  });
+
+  test('editing a local key never downloads an empty source URL', () async {
+    final profile = Profile.normal(label: 'local');
+    container.read(profilesProvider.notifier).put(profile);
+    final saved = await container
+        .read(profilesActionProvider.notifier)
+        .saveProfileEdit(
+          profile,
+          profile.copyWith(ageSecretKey: 'AGE-SECRET-KEY-1LOCAL'),
+        );
+    expect(saved, isTrue);
+    expect(
+      container.read(profilesProvider).single.ageSecretKey,
+      'AGE-SECRET-KEY-1LOCAL',
+    );
+    verifyNever(() => core.validateConfig(any()));
+  });
+
+  test('rename uses current metadata and cannot recreate a deleted profile', () async {
+    final profile = await seed();
+    final action = container.read(profilesActionProvider.notifier);
+    container
+        .read(profilesProvider.notifier)
+        .put(profile.copyWith(url: url('/new')));
+    action.renameProfile(profile.id, 'new label');
+    final latest = container.read(profilesProvider).single;
+    expect(latest.url, url('/new'));
+    expect(latest.label, 'new label');
+
+    await action.deleteProfile(profile.id);
+    action.renameProfile(profile.id, 'late rename');
+    expect(container.read(profilesProvider), isEmpty);
+  });
+
   test('the first update can create a new profile', () async {
     final profile = Profile.normal(label: 'new', url: url('/new'));
     await container

@@ -145,7 +145,9 @@ void main() {
   testWidgets(
     'the profile file row shows its size and update time without chips',
     (tester) async {
-      await pumpEditProfile(tester);
+      final profile = _urlProfile();
+      await tester.runAsync(() => profile.file);
+      await pumpEditProfile(tester, profile: profile);
       final row = find.widgetWithText(
         DecorationListItem,
         currentAppLocalizations.profile,
@@ -168,6 +170,29 @@ void main() {
       expect(find.byType(MetaChip), findsNothing);
     },
   );
+
+  testWidgets('opening a missing profile does not create an empty file', (
+    tester,
+  ) async {
+    final profile = _urlProfile();
+    await pumpEditProfile(tester, profile: profile);
+    final row = find.widgetWithText(
+      DecorationListItem,
+      currentAppLocalizations.profile,
+    );
+    for (var i = 0; i < 20 && row.evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    expect(row, findsOneWidget);
+    final exists = await tester.runAsync(() async {
+      return File(await appPath.getProfilePath(profile.id.toString())).exists();
+    });
+    expect(exists, isFalse);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('saving with auto update off ignores an emptied interval', (
     tester,
