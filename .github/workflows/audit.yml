@@ -46,6 +46,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
       - name: Native dependencies
         run: |
           sudo apt-get update
@@ -69,7 +70,25 @@ jobs:
           path.write_text(text.replace(before, '    setup:\n      build_assets: false'))
           PY
           flutter pub get
+      - name: Dart formatting of audit changes
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          base = '5860a5ba2ab6001869586561fccb56309db6c3e1'
+          files = subprocess.check_output(
+              ['git', 'diff', '--name-only', '--diff-filter=ACMR', base, 'HEAD', '--', '*.dart'],
+              text=True).splitlines()
+          if files:
+              subprocess.run(['dart', 'format', *files], check=True)
+              subprocess.run(['git', 'diff', '--exit-code', '--', *files], check=True)
+          PY
+      - name: Generated code consistency
+        if: always() && !cancelled()
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code -- lib/models/generated lib/providers/generated lib/database/generated
       - name: Analyze
+        if: always() && !cancelled()
         run: flutter analyze --no-fatal-infos
       - name: Flutter tests
         if: always() && !cancelled()
@@ -79,6 +98,36 @@ jobs:
         run: |
           node --test .github/scripts/issue-gate.test.js
           bash tool/hooks/test.sh
+
+  linux-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: core/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            services/helper
+            plugins/rust_api/rust
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev
+      - name: Flutter SDK
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Linux debug build
+        run: |
+          flutter pub get
+          flutter build linux --debug --dart-define=SAFE_MODE=true
 
   helper:
     strategy:
