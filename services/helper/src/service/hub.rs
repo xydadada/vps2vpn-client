@@ -230,6 +230,8 @@ struct VerifiedCore {
     path: PathBuf,
     directory: PathBuf,
     _handle: File,
+    #[cfg(any(target_os = "linux", windows))]
+    _verified_path: Vec<File>,
 }
 
 impl VerifiedCore {
@@ -239,11 +241,15 @@ impl VerifiedCore {
             .parent()
             .ok_or_else(|| Error::other("Core executable has no parent directory"))?
             .to_path_buf();
+        #[cfg(any(target_os = "linux", windows))]
+        let verified_path = super::install_path::verify(&path).map_err(Error::other)?;
         let handle = open_verified_core(&path, EXPECTED_CORE_SHA256)?;
         Ok(Self {
             path,
             directory,
             _handle: handle,
+            #[cfg(any(target_os = "linux", windows))]
+            _verified_path: verified_path,
         })
     }
 

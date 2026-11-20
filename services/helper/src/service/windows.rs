@@ -147,6 +147,8 @@ fn run_windows_service() -> Result<()> {
 fn install_service(owner_pid: u32) -> Result<()> {
     let owner_sid = process_sid(owner_pid)
         .with_context(|| format!("read the account of process {owner_pid}"))?;
+    let executable_path = std::env::current_exe().context("resolve helper executable path")?;
+    let _verified_path = super::install_path::verify(&executable_path)?;
     let manager = ServiceManager::local_computer(
         None::<&str>,
         ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
@@ -154,7 +156,6 @@ fn install_service(owner_pid: u32) -> Result<()> {
     .context("open Windows service manager")?;
     remove_existing_service(&manager)?;
 
-    let executable_path = std::env::current_exe().context("resolve helper executable path")?;
     let service_info = ServiceInfo {
         name: OsString::from(SERVICE_NAME),
         display_name: OsString::from(SERVICE_NAME),

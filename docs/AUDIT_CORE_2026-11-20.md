@@ -68,7 +68,7 @@ YAML 增强采用变化记录更新原有节点，保留订阅中的未知字段
 
 规则集 claim 复用既有生命周期所有者，没有引入另一套长期状态表。对同一名称的并发请求返回明确错误，避免下载结果、分类结果及缓存文件静默交叉；不同名称仍可并行。
 
-Windows Helper 只改变失败路径上的所有权，保留现有 session 校验、固定 Core 路径、SHA256 检查、Windows 账户认证、消息限长以及 stop 重试流程。Rust 标准库明确说明 [Child 不会在 Drop 时杀死子进程](https://doc.rust-lang.org/std/process/struct.Child.html)，这是 CC-09 的根本原因。没有替换上游 IPC 库或放宽访问控制。
+CC-09 的 Windows Helper 修改只改变失败路径上的所有权，保留现有 session 校验、固定 Core 路径、SHA256 检查、Windows 账户认证、消息限长以及 stop 重试流程。Rust 标准库明确说明 [Child 不会在 Drop 时杀死子进程](https://doc.rust-lang.org/std/process/struct.Child.html)，这是 CC-09 的根本原因。没有替换上游 IPC 库或放宽访问控制。
 
 CI 使用与项目一致的 Go 1.27.1 / Flutter 3.50.0。当前环境中官方 Flutter archive 路径返回 404，而 3.50.0 tag 源码 bootstrap 可用，所以工作流通过该 tag 克隆。CI 设置 CI=true 与 analytics suppression 环境变量；只在临时检出中关闭 setup 的 Go 构建 hook，Go 由独立 job 完整验证，Rust native hook 保留。没有改动已锁定依赖或任何子模块 pin，也没有加入会因继承代码原有样式问题必然失败的全仓 Rust 格式门禁。
 
@@ -137,7 +137,7 @@ CI 使用与项目一致的 Go 1.27.1 / Flutter 3.50.0。当前环境中官方 F
 - 回归相关：`vps2vpn_smart_test.go`、`profile_base_test.go`、`rule_set_test.go`、`test/core/desktop/launcher_test.dart`；transport 测试按相关路径审查。
 - 构建及说明：两份原工作流、pubspec.yaml、Cargo.toml、Go module 定义、Makefile 的相关目标；AGENTS、项目/命令/规则说明与 core-platform、pre-commit-quality-review 技能；architecture 文档的生命周期、IPC、构建、Helper 部分。
 
-未完成完整阅读的范围包括部分 lib/core facade/model、Rust native 其余模块、原生 Android/iOS/macOS/Linux/Windows 全部平台代码、其余本地插件与大量继承 UI/工具代码。新增 CI 的构建测试并不扩展人工逐行审查的范围。
+未完成完整阅读的范围包括 Rust native 其余模块、原生 Android/iOS/macOS/Linux/Windows 全部平台代码、其余本地插件与大量继承 UI/工具代码。新增 CI 的构建测试并不扩展人工逐行审查的范围。
 
 ## 尚未验证或后续工作
 
@@ -147,3 +147,33 @@ CI 使用与项目一致的 Go 1.27.1 / Flutter 3.50.0。当前环境中官方 F
 4. 继续审查未覆盖的平台/插件代码，尤其系统代理恢复、自动启动、特权 Helper 安装目录权限和升级时的可执行文件替换窗口。此处是待查范围，不把尚无充分证据的怀疑列作已确认漏洞。
 5. 评估配置拒绝后的运行默认配置策略及产品提示。当前语义由原实现与 Dart 状态契约共同定义，需跨层修改和真实连接验证。
 6. 无环但高度共享的 YAML alias 图、跨进程缓存写入、真实移动网络与 DNS/路由故障恢复，均不应因本次修复而被视为已经全面证明安全或可靠。
+
+## 后续服务安装路径审计与修复
+
+### CC-12：Linux 只检查直接父目录，未建立完整可信路径（高）
+
+基线 services/helper/src/service/linux.rs:180-195 的 ensure_root_owned 只检查 Helper 文件及直接父目录。若 root 拥有的安装目录放在普通用户可写的更高层目录下，普通用户可在同一父目录中重命名该安装目录，再创建同名替代目录。检查叶文件的 owner/mode 不能阻止这种替换；systemd 下次按 ExecStart 路径启动时将运行替代内容。此处依赖的目录重命名权限见 [Linux rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html)。没有在用户宿主上执行提权复现或安装服务。
+
+新增 install_path_linux.rs，从根目录开始按组件使用 openat(O_PATH | O_NOFOLLOW | O_CLOEXEC)，在打开下一级前检查当前实际 inode。所有祖先都必须为 root 拥有且不可由组或其他用户写入；中间节点必须是目录，最终节点必须是普通文件，链接及父目录穿越被拒绝。安装过程中保留句柄；同时在 VerifiedCore::open 使用相同检查，补上 Linux hash 检查后按路径 spawn 之间原有的可写 Core 文件替换风险。
+
+未来 systemd 启动仍按路径执行，安全保证依赖于所有已检查祖先和叶文件均不可被非特权账户修改；不声称能防御已具有 root 权限的修改者。O_PATH 也避免把 FIFO 等非普通叶节点当作可读文件打开而阻塞。Linux 回归使用隔离临时目录和真实 openat/fstat，测试只读完整链、上层可写目录、可写叶文件、不同 owner、文件/目录符号链接及路径穿越；没有启动系统服务。
+
+### CC-13：Windows 可把用户可写位置的 Helper 注册为 LocalSystem 服务（高）
+
+基线 services/helper/src/service/windows.rs:147-168 直接取 current_exe 并注册为 AutoStart，account_name 为 None；该值对应 LocalSystem（[CreateServiceW 官方定义](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-createservicew)）。Dart 的 lib/common/system.dart:333-335 可以从应用随附的 helperPath 发起安装；只有 Inno Setup 默认管理员安装的文件布局受安装器保护，Helper 自注册入口本身没有检查当前目录和文件的权限。若从用户可写的解压目录批准注册，之后该用户可替换服务文件，取得下一次服务启动的权限。Core 的 SHA256 不能保护 Helper 本身。
+
+新增 install_path_windows.rs 读取每层现存路径的实际句柄 owner 和 DACL（[GetSecurityInfo](https://learn.microsoft.com/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo)），拒绝链接/reparse point 和远程/遍历路径。owner 仅接受 SYSTEM、Administrators、TrustedInstaller；对可修改现存路径的普通 SID ACE 失败关闭，并展开 generic rights。检查覆盖叶文件写内容、所有层的属性写入/删除/改 owner/DACL，以及目录的删除子对象权限；属性写入可能授权设置 reparse point（[MS-FSA 定义](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fsa/4aeefef8-92c3-4abc-af7a-a610caf8a165)），不能仅检查文件内容写入。直接安装目录还禁止普通用户新建文件/目录，避免在二进制旁植入加载内容。
+
+较高祖先中的 FILE_ADD_SUBDIRECTORY 单独不视为替换现有路径的权限，因此默认 C:\ 根目录允许普通用户创建自己的子目录不会被误报。继承专用 ACE 不适用于当前对象；未知 ACE 类型不猜测为安全。此策略保守拒绝无法证明安全的自定义 ACL，错误提示要求使用 Windows 安装器安装到受保护目录；并在删除现有服务之前完成校验。VerifiedCore::open 同样校验 Core 文件及祖先；现有 SHA256 校验和打开句柄期间的 Windows 写入/删除共享限制仍保留。
+
+Windows 回归用系统 API 从 SDDL 构造真实安全描述符，覆盖受保护安装布局、普通用户 owner、空/缺失 DACL、generic/具体写权限、删除子项、继承专用 ACE、未知 allow ACE，以及“祖先只准创建子目录”与“叶文件可写”的区别。另只读校验 runner 的 System32\svchost.exe，以检查默认系统目录布局；不执行该文件、不修改 ACL、不注册服务。上述新增测试必须以包含本补丁的 CI 结果为准，尚无本地执行记录。
+
+### 后续验证与补充覆盖
+
+[运行 44717191763 的 Core job](https://github.com/xydadada/vps2vpn-client/actions/runs/44717191763/job/136223613324) 对 head 1fcf0397345324d34f2a8162c59ab6b14dbba3eb 已完成：make core-check 成功；普通全包测试输出 “ok core 5.419s”；race 唯一失败仍为 CC-11 的 TestUpdateConfigServesTheControllerBehindTheSecretItWasGiven，输出 “FAIL core 5.784s”。这证明此前持久化测试断言与 gofmt 修正已通过；并不消除上游 race，也不等于后续服务路径补丁已被验证。
+
+补充完整阅读了 lib/core 全部自有生产文件，lib/common/{launch,system,function,future,constant,print}.dart，Rust launch 下 mod/entries/linux/macos/windows 及 api/launch.rs，Windows Inno 安装脚本；再次沿原生 IPC access/frame/server/outbox 到 Dart transport/lifecycle 及 Go server/dial 追踪权限、帧界限和关闭路径。上述范围以外仍遵循前述未覆盖清单。
+
+曾怀疑 interface.dart RPC 参数日志泄漏；完整追到 handleWatch 后确认该路径同时受 kDebugMode 与 const watchExecution=false 限制，当前代码不可达，因此撤回该候选，没有把它列为已修漏洞，也没有添加无法触发的虚假回归。
+
+原生 IPC 复核没有新增已证实缺陷：Unix 连接同时限制 socket mode 与 peer UID，帧在分配前校验 64 MiB 上限，outbox 对待发送字节实施预算并在断开清空，关闭由 select 取消 receive/transmit。Windows 跨账户 named pipe 的实际访问和设备电源暂停仍需要平台专项测试，不能以源代码检查断言所有故障情形均已验证。
