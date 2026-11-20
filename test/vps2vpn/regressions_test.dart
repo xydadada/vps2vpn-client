@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../helpers/test_app.dart';
 import '../helpers/test_profiles.dart';
@@ -122,6 +123,15 @@ class FailingFirstProfileAction extends ProfilesAction {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() {
+    globalState.appEnv = 'test';
+    globalState.packageInfo = PackageInfo(
+      appName: 'vps2vpn',
+      packageName: 'com.example.vps2vpn',
+      version: '1.0.1',
+      buildNumber: '1',
+    );
+  });
 
   testWidgets('an active member listener refreshes after five minutes', (
     tester,
@@ -271,7 +281,6 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     await tester.pumpWidget(
       TestApp(
         includeNavigatorKey: false,
@@ -286,5 +295,6 @@ void main() {
     expect(node.label, contains('Take over'));
     expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
     expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
+    semantics.dispose();
   });
 }
