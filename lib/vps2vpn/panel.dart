@@ -368,9 +368,11 @@ Future<(int, String)> _send(
   );
   try {
     scope?.attach(client);
+    // The socket timeout alone need not bound DNS resolution or opening an
+    // HTTP request. The whole connection-establishment step has a deadline.
     final req = body == null
-        ? await client.getUrl(url)
-        : await client.postUrl(url);
+        ? await client.getUrl(url).timeout(const Duration(seconds: 10))
+        : await client.postUrl(url).timeout(const Duration(seconds: 10));
     req.followRedirects = false;
     if (body != null) {
       // A fixed length also supports panels predating chunked request handling.
@@ -412,7 +414,11 @@ Future<VpsMemberResult?> fetchMember(
       );
       if (scope?.closed == true) return null;
       result = VpsMemberResult.fromResponse(base, code, text);
-      if (result.member != null || result.linkChanged) return result;
+      if (result.member != null ||
+          result.linkChanged ||
+          result.problem == VpsPanelProblem.httpsRequired) {
+        return result;
+      }
     } catch (_) {}
   }
   return scope?.closed == true ? null : result;
