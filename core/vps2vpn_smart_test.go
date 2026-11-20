@@ -119,6 +119,22 @@ func TestVps2vpnEnhanceKeepsUserRulesFirst(t *testing.T) {
 	}
 }
 
+// User-authored routing rules already take precedence over generated AI
+// rules. They must not suppress the generated AI group for subscription rules.
+func TestVps2vpnEnhanceKeepsUserRuleSetWithoutDisablingAI(t *testing.T) {
+	vpsOn(t)
+	raw := vpsTestRaw("RULE-SET,local-destinations,DIRECT", "MATCH,Proxy")
+	vps2vpnEnhance(raw, 1)
+	if vpsGroup(raw, vpsAIGroup) == nil {
+		t.Fatal("an unrelated user rule set disabled the subscription AI group")
+	}
+	if raw.Rule[0] != "RULE-SET,local-destinations,DIRECT" ||
+		raw.Rule[1] != "DOMAIN-SUFFIX,anthropic.com,"+vpsAIGroup ||
+		raw.Rule[len(raw.Rule)-1] != "MATCH,Proxy" {
+		t.Fatalf("user rule priority changed: %v", raw.Rule)
+	}
+}
+
 func TestVps2vpnEnhanceOffByDefault(t *testing.T) {
 	raw := vpsTestRaw("MATCH,Proxy")
 	vps2vpnEnhance(raw, 0)

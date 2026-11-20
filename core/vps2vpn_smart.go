@@ -217,7 +217,7 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) vpsEnhancement {
 		break
 	}
 
-	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsNameTaken(raw, vpsAIGroup) {
+	if userRules < 0 || vpsRoutesAI(raw.Rule[min(userRules, len(raw.Rule)):]) || vpsNameTaken(raw, vpsAIGroup) {
 		return change
 	}
 	aiNames := append([]string(nil), smart...)
