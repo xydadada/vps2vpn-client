@@ -10,6 +10,61 @@ import 'clash_config.dart';
 part 'generated/profile.freezed.dart';
 part 'generated/profile.g.dart';
 
+final class ProfileUpdateSuperseded implements Exception {
+  const ProfileUpdateSuperseded();
+}
+
+final _profileWriteIntents = <int, Object>{};
+final _profileFileQueues = <String, Future<void>>{};
+
+class _ProfileWriteIntent {
+  _ProfileWriteIntent(this.id, this.canCommit) {
+    _profileWriteIntents[id] = this;
+  }
+
+  final int id;
+  final bool Function()? canCommit;
+
+  void check() {
+    if (!identical(_profileWriteIntents[id], this) ||
+        canCommit?.call() == false) {
+      throw const ProfileUpdateSuperseded();
+    }
+  }
+
+  void release() {
+    if (identical(_profileWriteIntents[id], this)) {
+      _profileWriteIntents.remove(id);
+    }
+  }
+}
+
+void cancelProfileWrite(int id) {
+  _profileWriteIntents.remove(id);
+}
+
+Future<T> _withProfileFile<T>(
+  String path,
+  Future<T> Function(File file) action,
+) {
+  final previous = _profileFileQueues[path] ?? Future<void>.value();
+  final result = previous.then((_) => action(File(path)));
+  late final Future<void> settled;
+  settled = result.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+    if (identical(_profileFileQueues[path], settled)) {
+      _profileFileQueues.remove(path);
+    }
+  });
+  _profileFileQueues[path] = settled;
+  return result;
+}
+
+Future<void> deleteProfileFile(int id) async {
+  cancelProfileWrite(id);
+  final path = await appPath.getProfilePath(id.toString());
+  await _withProfileFile(path, (file) => file.safeDelete(recursive: true));
+}
+
 /// Why the config at the path cannot be used, or null.
 typedef ValidateConfig =
     Future<String?> Function(String path, String ageSecretKey);
@@ -182,37 +237,68 @@ extension ProfileExtension on Profile {
     return _getFile();
   }
 
-  Future<Profile> update({required ValidateConfig validate}) async {
-    final response = await request.getFileResponseForUrl(url);
-    final disposition = response.headers.value('content-disposition');
-    final userinfo = response.headers.value('subscription-userinfo');
-    return copyWith(
-      label: label.takeFirstValid([
-        getFileNameForDisposition(disposition),
-        defaultLabel,
-      ]),
-      subscriptionInfo: SubscriptionInfo.formHString(userinfo),
-    ).saveFile(
-      decompressUnlabeled(response.data ?? Uint8List(0)),
-      validate: validate,
-    );
+  Future<Profile> update({
+    required ValidateConfig validate,
+    bool Function()? canCommit,
+  }) async {
+    final intent = _ProfileWriteIntent(id, canCommit);
+    try {
+      final response = await request.getFileResponseForUrl(url);
+      intent.check();
+      final disposition = response.headers.value('content-disposition');
+      final userinfo = response.headers.value('subscription-userinfo');
+      return await copyWith(
+        label: label.takeFirstValid([
+          getFileNameForDisposition(disposition),
+          defaultLabel,
+        ]),
+        subscriptionInfo: SubscriptionInfo.formHString(userinfo),
+      )._saveFile(
+        decompressUnlabeled(response.data ?? Uint8List(0)),
+        validate: validate,
+        intent: intent,
+      );
+    } finally {
+      intent.release();
+    }
   }
 
   Future<Profile> saveFile(
     Uint8List bytes, {
     required ValidateConfig validate,
+    bool Function()? canCommit,
   }) async {
-    final directory = Directory(await appPath.profilesPath);
+    final intent = _ProfileWriteIntent(id, canCommit);
+    try {
+      return await _saveFile(bytes, validate: validate, intent: intent);
+    } finally {
+      intent.release();
+    }
+  }
+
+  Future<Profile> _saveFile(
+    Uint8List bytes, {
+    required ValidateConfig validate,
+    required _ProfileWriteIntent intent,
+  }) async {
+    final path = await appPath.getProfilePath(id.toString());
+    final directory = File(path).parent;
     await directory.create(recursive: true);
     final staging = await directory.createTemp('.import-');
     try {
+      intent.check();
       final tempFile = File('${staging.path}/profile.yaml');
       await tempFile.writeAsBytes(bytes, flush: true);
       if (await validate(tempFile.path, ageSecretKey) case final issue?) {
         throw MessageException(issue);
       }
-      final target = await _getFile(false);
-      await tempFile.renameReplacing(target.path);
+      await _withProfileFile(
+        path,
+        (target) => tempFile.renameReplacing(
+          target.path,
+          beforeAttempt: intent.check,
+        ),
+      );
       return copyWith(lastUpdateDate: DateTime.now());
     } finally {
       await staging.safeDelete(recursive: true);

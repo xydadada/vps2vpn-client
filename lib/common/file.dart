@@ -54,8 +54,12 @@ extension FileExt on File {
     }
   }
 
-  Future<void> renameReplacing(String target) async {
+  Future<void> renameReplacing(
+    String target, {
+    void Function()? beforeAttempt,
+  }) async {
     for (var attempt = 1; ; attempt++) {
+      beforeAttempt?.call();
       try {
         await rename(target);
         return;

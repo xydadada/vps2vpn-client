@@ -112,6 +112,7 @@ class GlobalState {
       onStart?.call();
       return await futureFunction();
     } catch (e, s) {
+      if (e is ProfileUpdateSuperseded) return null;
       commonPrint.log(
         title == null
             ? '${compactError(e)}, $s'

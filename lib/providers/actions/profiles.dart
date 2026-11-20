@@ -4,6 +4,8 @@ part of '../action.dart';
 class ProfilesAction extends _$ProfilesAction {
   CoreController get _core => ref.read(coreHandlerProvider);
 
+  final _updateRequests = <int, Object>{};
+
   @override
   void build() {}
 
@@ -38,6 +40,8 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   Future<void> deleteProfile(int id) async {
+    _updateRequests.remove(id);
+    cancelProfileWrite(id);
     await ref.read(profilesProvider.notifier).del(id);
     await clearEffect(id);
     final currentProfileId = ref.read(currentProfileIdProvider);
@@ -157,20 +161,30 @@ class ProfilesAction extends _$ProfilesAction {
     Profile profile, {
     bool showLoading = false,
   }) async {
+    final request = Object();
+    _updateRequests[profile.id] = request;
     final operation = showLoading
         ? ref.read(updatingKeysProvider.notifier).start(profile.updatingKey)
         : null;
+    bool current() {
+      if (!ref.mounted || !identical(_updateRequests[profile.id], request)) {
+        return false;
+      }
+      final latest = ref.read(profilesProvider).getProfile(profile.id);
+      return latest != null &&
+          latest.type == profile.type &&
+          latest.url == profile.url &&
+          latest.ageSecretKey == profile.ageSecretKey;
+    }
+
     try {
       ref.read(profilesProvider.notifier).put(profile);
       final updated = await profile.update(
         validate: (path, key) => _core.validateProfile(path, key),
+        canCommit: current,
       );
-      // The download can take minutes; edits and deletes made meanwhile win.
-      final latest = ref.read(profilesProvider).getProfile(profile.id);
-      if (latest == null) {
-        await clearEffect(profile.id);
-        return;
-      }
+      if (!current()) return;
+      final latest = ref.read(profilesProvider).getProfile(profile.id)!;
       final newProfile = latest.copyWith(
         label: latest.label.takeFirstValid([updated.label]),
         subscriptionInfo: updated.subscriptionInfo,
@@ -194,8 +208,16 @@ class ProfilesAction extends _$ProfilesAction {
           ),
         );
       }
+    } on ProfileUpdateSuperseded {
+      return;
+    } catch (_) {
+      if (!current()) return;
+      rethrow;
     } finally {
-      if (operation != null) {
+      if (identical(_updateRequests[profile.id], request)) {
+        _updateRequests.remove(profile.id);
+      }
+      if (ref.mounted && operation != null) {
         ref
             .read(updatingKeysProvider.notifier)
             .stop(profile.updatingKey, operation);
@@ -477,12 +499,7 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   Future<void> clearEffect(int profileId) async {
-    final profilePath = await appPath.getProfilePath(profileId.toString());
-    final profileFile = File(profilePath);
-    final isExists = await profileFile.exists();
-    if (isExists) {
-      await profileFile.safeDelete(recursive: true);
-    }
+    await deleteProfileFile(profileId);
     try {
       await _core.clearEffect(profileId);
     } catch (error) {

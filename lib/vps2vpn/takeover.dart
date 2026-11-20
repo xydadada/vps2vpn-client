@@ -302,6 +302,7 @@ Future<void> vpsBeforeConnect(Ref ref, {bool Function()? isCurrent}) async {
       if (!current()) return;
       if (proxy != null && proxy.active) {
         cleared = await rust_api.stopSystemProxy();
+        if (!current()) return;
       }
     }
   }
