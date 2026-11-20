@@ -17,7 +17,17 @@ use super::entries::{
 pub fn autostart_enabled(id: &str, executable: &str) -> bool {
     let registered = Key::open(HKEY_CURRENT_USER, RUN_KEY)
         .and_then(|key| key.string(id))
-        .is_some_and(|value| run_value_matches(&value, executable));
+        .is_some_and(|value| {
+            if !run_value_matches(&value, executable) {
+                return false;
+            }
+            if value == executable {
+                let _ = Key::open_writable(HKEY_CURRENT_USER, RUN_KEY)
+                    .filter(|key| key.string(id).as_deref() == Some(executable))
+                    .map(|key| key.set_string(id, &run_value(executable)));
+            }
+            true
+        });
     registered
         && startup_approved(
             Key::open(HKEY_CURRENT_USER, STARTUP_APPROVED_KEY)

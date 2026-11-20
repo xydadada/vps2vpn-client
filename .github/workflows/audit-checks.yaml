@@ -15,6 +15,7 @@ env:
   FLUTTER_VERSION: '3.50.0'
   GO_VERSION: '1.27.4'
   RUSTUP_TOOLCHAIN: '1.99.0'
+  BASE_REF: ${{ github.event.pull_request.base.sha || format('origin/{0}', github.event.repository.default_branch) }}
   CA_BUNDLE: cacert-2026-09-25.pem
   CA_BUNDLE_SHA256: a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505
 
@@ -28,6 +29,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           submodules: recursive
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
@@ -39,6 +41,14 @@ jobs:
           bundle=core/Clash.Meta/component/ca/ca-certificates.crt
           curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
           echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+      - name: Changed Go formatting
+        shell: bash
+        run: |
+          mapfile -d '' -t files < <(git diff --name-only --diff-filter=ACM -z "$BASE_REF" -- '*.go')
+          if ((${#files[@]})); then
+            gofmt -d "${files[@]}"
+            test -z "$(gofmt -l "${files[@]}")"
+          fi
       - name: Core tests
         working-directory: core
         run: go test ./...
@@ -90,6 +100,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           submodules: recursive
+          fetch-depth: 0
           persist-credentials: false
       - name: Install Linux native dependencies
         run: |
@@ -121,9 +132,20 @@ jobs:
       - name: Tooling tests
         run: |
           bash tool/hooks/test.sh
-          node --test .github/scripts/
+          node --test .github/scripts/*.test.js
       - name: Flutter dependencies
         run: flutter pub get
+      - name: Check generated Dart sources
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code -- lib/models/generated lib/providers/generated lib/database/generated
+      - name: Changed Dart formatting
+        run: |
+          mapfile -d '' -t files < <(git diff --name-only --diff-filter=ACM -z "$BASE_REF" -- '*.dart')
+          if ((${#files[@]})); then
+            dart format "${files[@]}"
+            git diff --exit-code -- "${files[@]}"
+          fi
       - name: Flutter analysis
         run: flutter analyze --no-fatal-infos
       - name: Flutter tests

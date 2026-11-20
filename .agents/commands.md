@@ -201,7 +201,7 @@ its own, lets that run decide, and names the files that only failed together. Se
 also what CI runs; `tool/check_plugins.sh` does not descend into it. It must stay out of `flutter test`, because a test
 run of `plugins/setup` would execute the build hook itself.
 
-`.github/scripts/issue-gate.js` is tested with `node --test .github/scripts/`, against the forms in
+`.github/scripts/issue-gate.js` is tested with `node --test .github/scripts/*.test.js`, against the forms in
 `.github/ISSUE_TEMPLATE/`; no workflow runs it, so run it after changing the script or a form.
 
 Native plugin code under `plugins/*/{linux,macos,windows}` is compiled by the CI `desktop` job, which runs
@@ -389,6 +389,13 @@ site, in the public repository only; its Pages source has to be set to GitHub Ac
 release matrix in `build.yaml`, so a renamed artifact needs the same change in `buildsFor` in `site/assets/app.js`.
 
 ## Verify
+
+This vps2vpn fork now runs `.github/workflows/audit-checks.yaml` on pull requests and manual dispatch.
+It checks the Go wrapper, Linux/Windows Rust crates, Flutter/plugin/setup-hook tests, and changed Dart/Go
+formatting; build-runner output must agree with the committed generated sources. Only the setup hook is
+disabled in the disposable Flutter test checkout; rust_api stays enabled. The Windows installer and
+takeover workflows remain manual. The upstream pipeline descriptions below are historical command
+recipes; the removed upstream release/desktop/publishing workflows are not active in this fork.
 
 In the public repository every branch push runs the `dart` job; in the private
 `origin` every check job runs only when started by hand (`workflow_dispatch`).

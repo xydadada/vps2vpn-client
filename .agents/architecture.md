@@ -2069,7 +2069,8 @@ UTF-8 bytes rather than a `String` so that decoding them stays off the UI isolat
   `StartupApproved\Run` flag on Windows, `SMAppService.mainApp` on macOS 13 and later (nothing on macOS 12), and
   `$HOME/.config/autostart/FlClash.desktop` on Linux: the entries the `launch_at_startup` fork wrote, in its value
   format. New Windows Run values quote the executable path; older bare entries still read as enabled and are
-  removed on disable. Linux desktop entries quote and escape the executable as one Exec argument. `SMAppService` is not tied to a thread, so these are plain worker-pool calls. It also
+  removed on disable. A legacy Run value is normalized on inspection when writable, without changing its
+  StartupApproved state. Linux desktop entries quote and escape the executable as one Exec argument. `SMAppService` is not tied to a thread, so these are plain worker-pool calls. It also
   registers the `clash` URL schemes under `HKCU\Software\Classes` on Windows, and `readLocalMachineDword` is the
   synchronous HKLM read behind the Helper port and the Smart App Control state. The Linux scheme handler stays in
   `lib/common/protocol.dart`: it is a desktop file and an `xdg-mime` call, with nothing native to replace.
@@ -2108,8 +2109,8 @@ UTF-8 bytes rather than a `String` so that decoding them stays off the UI isolat
   `NetworkProps.pacMode` on it points the system at a PAC URL instead: `pac` serves `NetworkProps.pacScript`, with
   `%mixed-port%` replaced, from a loopback listener on an ephemeral port that lives as long as the app process, and
   each start adds a new `?v=` query so a system that caches PAC files by URL fetches the edited script. The listener
-  admits at most 32 concurrent requests, caps request headers at 16 KiB, and requires a complete header within five
-  seconds of accepting a request. On
+  admits at most 32 concurrent requests, caps request headers at 16 KiB, and shares one five-second deadline across
+  header reads and response writes. On
   Windows a hidden top-level window on its own thread turns a proxy this run set back off at `WM_ENDSESSION`, since
   shutdown kills the process before the Dart exit path runs. The package installer and uninstaller kill the app and
   then run `FlClash.exe --clear-stale-proxy`, the installer once the new files are in place; the runner loads

@@ -78,7 +78,6 @@ impl Drop for RequestSlot {
 }
 
 fn respond(mut stream: TcpStream, deadline: Instant) {
-    let _ = stream.set_write_timeout(Some(REQUEST_TIMEOUT));
     let Some(head) = read_head(&mut stream, deadline) else {
         return;
     };
@@ -86,7 +85,7 @@ fn respond(mut stream: TcpStream, deadline: Instant) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone();
-    let _ = stream.write_all(&response(&head, &script));
+    let _ = write_before_deadline(&mut stream, &response(&head, &script), deadline);
 }
 
 fn read_head(stream: &mut TcpStream, deadline: Instant) -> Option<String> {
@@ -102,6 +101,23 @@ fn read_head(stream: &mut TcpStream, deadline: Instant) -> Option<String> {
         head.extend_from_slice(&buffer[..read]);
     }
     Some(String::from_utf8_lossy(&head).into_owned())
+}
+
+fn write_before_deadline(
+    stream: &mut TcpStream,
+    mut bytes: &[u8],
+    deadline: Instant,
+) -> Option<()> {
+    while !bytes.is_empty() {
+        let remaining = deadline.checked_duration_since(Instant::now())?;
+        stream.set_write_timeout(Some(remaining)).ok()?;
+        let written = stream.write(bytes).ok()?;
+        if written == 0 {
+            return None;
+        }
+        bytes = &bytes[written..];
+    }
+    Some(())
 }
 
 fn response(head: &str, script: &str) -> Vec<u8> {
@@ -179,6 +195,20 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
         drop(server);
         writer.join().unwrap();
+    }
+
+    #[test]
+    fn a_peer_that_does_not_read_cannot_retain_a_worker_past_the_deadline() {
+        let (mut server, _client) = connection();
+        let payload = vec![b'x'; 16 * 1024 * 1024];
+        let started = Instant::now();
+        assert!(write_before_deadline(
+            &mut server,
+            &payload,
+            started + Duration::from_millis(100),
+        )
+        .is_none());
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     #[test]

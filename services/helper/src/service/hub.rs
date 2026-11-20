@@ -487,28 +487,35 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
     };
 
     match core.spawn(&start_params.address) {
-        Ok(mut child) => {
+        Ok(child) => {
             let process_id = child.id();
-            if let Some(stderr) = child.stderr.take() {
-                let reader = io::BufReader::new(stderr);
-                let session_id = start_params.session_id.clone();
-                thread::spawn(move || {
-                    for line in reader.lines() {
-                        match line {
-                            Ok(output) => {
-                                log_message(output);
-                            }
-                            Err(_) => {
-                                break;
-                            }
-                        }
-                    }
-                    reap_exited_core(&session_id);
-                });
-            }
             *managed = Some(ManagedCore::adopt(start_params.session_id.clone(), child));
             if let Err(error) = managed.as_mut().expect("just adopted Core").confine() {
-                return confinement_failure(&mut managed, error);
+                return startup_failure(&mut managed, "confinement", error);
+            }
+            if let Some(stderr) = managed
+                .as_mut()
+                .expect("just adopted Core")
+                .child
+                .stderr
+                .take()
+            {
+                let reader = io::BufReader::new(stderr);
+                let session_id = start_params.session_id.clone();
+                if let Err(error) = thread::Builder::new()
+                    .name("core-stderr".into())
+                    .spawn(move || {
+                        for line in reader.lines() {
+                            match line {
+                                Ok(output) => log_message(output),
+                                Err(_) => break,
+                            }
+                        }
+                        reap_exited_core(&session_id);
+                    })
+                {
+                    return startup_failure(&mut managed, "stderr reader startup", error);
+                }
             }
             json_response(
                 &StartResponse {
@@ -525,21 +532,22 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
     }
 }
 
-fn confinement_failure(
+fn startup_failure(
     managed: &mut Option<ManagedCore>,
+    phase: &str,
     error: Error,
 ) -> warp::reply::Response {
-    log_message(format!("Helper could not confine the Core: {error}"));
+    log_message(format!("Helper Core {phase} failed: {error}"));
     if let Err(stop_error) = release_managed_core(managed) {
         return error_response(
             "coreStopFailed",
-            format!("Core confinement failed: {error}; cleanup failed: {stop_error}"),
+            format!("Core {phase} failed: {error}; cleanup failed: {stop_error}"),
             StatusCode::INTERNAL_SERVER_ERROR,
         );
     }
     error_response(
         "internalError",
-        format!("Core confinement failed: {error}"),
+        format!("Core {phase} failed: {error}"),
         StatusCode::INTERNAL_SERVER_ERROR,
     )
 }
@@ -1319,21 +1327,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn confinement_failure_terminates_and_reaps_the_owned_core() {
-        let mut managed = Some(ManagedCore::adopt(
-            "0123456789abcdef0123456789abcdef".to_string(),
-            spawn_running_core(),
-        ));
+    async fn startup_failure_terminates_and_reaps_the_owned_core() {
+        for phase in ["confinement", "stderr reader startup"] {
+            let mut managed = Some(ManagedCore::adopt(
+                "0123456789abcdef0123456789abcdef".to_string(),
+                spawn_running_core(),
+            ));
 
-        let response = confinement_failure(&mut managed, Error::other("job assignment refused"));
+            let response = startup_failure(&mut managed, phase, Error::other("resource refused"));
 
-        assert!(managed.is_none());
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        let body: serde_json::Value = serde_json::from_slice(
-            &warp::hyper::body::to_bytes(response.into_body()).await.unwrap(),
-        )
-        .unwrap();
-        assert_eq!(body["code"], "internalError");
+            assert!(managed.is_none());
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            let body: serde_json::Value = serde_json::from_slice(
+                &warp::hyper::body::to_bytes(response.into_body()).await.unwrap(),
+            )
+            .unwrap();
+            assert_eq!(body["code"], "internalError");
+        }
     }
 
     #[test]
