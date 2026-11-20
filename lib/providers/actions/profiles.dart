@@ -326,7 +326,9 @@ class ProfilesAction extends _$ProfilesAction {
           await previous.catchError((Object _) {});
         }
         final existing = ref.read(profilesProvider).getProfile(profile.id);
-        if (existing == null || existing.type != ProfileType.url || !ref.mounted) {
+        if (existing == null ||
+            existing.type != ProfileType.url ||
+            !ref.mounted) {
           return;
         }
         final sourceChanged =

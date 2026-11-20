@@ -181,7 +181,8 @@ class VpsMember {
   final VpsClientRelease? client;
 
   /// Convert to double before summing, to avoid overflowing signed 64-bit counters.
-  double get used => math.max(0, usedUp).toDouble() + math.max(0, usedDown).toDouble();
+  double get used =>
+      math.max(0, usedUp).toDouble() + math.max(0, usedDown).toDouble();
 
   /// A zero effective quota may still indicate an exhausted finite plan.
   bool get isLimited => !unlimited;
@@ -198,9 +199,9 @@ class VpsMember {
   }
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
-    final expire = _int(json['expire_at']);
     final rawQuotaGb = json['quota_gb'];
-    final unlimited = rawQuotaGb is! num || !rawQuotaGb.isFinite || rawQuotaGb <= 0;
+    final unlimited =
+        rawQuotaGb is! num || !rawQuotaGb.isFinite || rawQuotaGb <= 0;
     final quota = json['quota_eff'] ?? rawQuotaGb;
     return VpsMember(
       name: '${json['name'] ?? ''}',
@@ -211,7 +212,9 @@ class VpsMember {
       },
       usedUp: _int(json['used_up']),
       usedDown: _int(json['used_down']),
-      quotaGb: quota is num && quota.isFinite && quota > 0 ? quota.toDouble() : 0,
+      quotaGb: quota is num && quota.isFinite && quota > 0
+          ? quota.toDouble()
+          : 0,
       unlimited: unlimited,
       expireAt: dateTimeFromUnixSeconds(json['expire_at']),
       ai: VpsAiStatus.fromJson(json['ai']),

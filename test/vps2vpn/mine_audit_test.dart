@@ -41,6 +41,7 @@ class _Actions extends ProfilesAction {
   Future<void> updateProfile(
     Profile profile, {
     bool showLoading = false,
+    bool reapply = true,
   }) async {
     refreshes++;
     throw StateError('refresh failed');

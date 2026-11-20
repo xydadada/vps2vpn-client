@@ -494,7 +494,11 @@ class VpsPage extends StatelessWidget {
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(
                                   subtitle!,
-                                  style: vpsText(context, size: 14, color: p.soft),
+                                  style: vpsText(
+                                    context,
+                                    size: 14,
+                                    color: p.soft,
+                                  ),
                                 ),
                               ),
                           ],

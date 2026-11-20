@@ -114,6 +114,7 @@ class FailingFirstProfileAction extends ProfilesAction {
   Future<void> updateProfile(
     Profile profile, {
     bool showLoading = false,
+    bool reapply = true,
   }) async {
     calls.add(profile.id);
     if (profile.id == 1) throw const SocketException('offline fixture');

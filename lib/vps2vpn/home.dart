@@ -112,7 +112,11 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '代理模式', 'Proxy mode'),
-                        style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(
+                          context,
+                          size: 14.5,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -149,7 +153,11 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '接管方式', 'Takeover'),
-                        style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(
+                          context,
+                          size: 14.5,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -1106,7 +1114,11 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                   children: [
                     Text(
                       tr(context, 'AI 服务可用性', 'AI availability'),
-                      style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(
+                        context,
+                        size: 14.5,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     Text(
                       ref.watch(isStartProvider)

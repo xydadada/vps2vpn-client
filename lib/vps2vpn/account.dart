@@ -62,7 +62,11 @@ class VpsServerAiCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     tr(context, '服务器视角', 'Seen from your server'),
-                    style: vpsText(context, size: 13.5, weight: FontWeight.w600),
+                    style: vpsText(
+                      context,
+                      size: 13.5,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (meta.isNotEmpty)
@@ -133,7 +137,7 @@ class VpsAccountCard extends ConsumerWidget {
     );
     if (result.problem case final problem?) {
       return _frame(
-        p,
+        context,p,
         color: p.warn,
         title: l10n.account,
         status: l10n.serviceUnavailable,
@@ -147,7 +151,7 @@ class VpsAccountCard extends ConsumerWidget {
     }
     if (result.linkChanged) {
       return _frame(
-        p,
+        context,p,
         color: p.warn,
         title: tr(context, '订阅链接已更换', 'Your link was replaced'),
         lines: [
@@ -162,7 +166,7 @@ class VpsAccountCard extends ConsumerWidget {
     }
     final m = result.member;
     if (m == null) return const SizedBox.shrink();
-    final quota = m.quotaGb > 0 ? (m.quotaGb * 1024 * 1024 * 1024).round() : 0;
+    final quota = m.quotaBytes;
     final usage = m.unlimited
         ? tr(
             context,
@@ -199,7 +203,7 @@ class VpsAccountCard extends ConsumerWidget {
       _ => tr(context, '已被管理员停用', 'Turned off by the owner'),
     };
     return _frame(
-      p,
+      context,p,
       color: off ? p.bad : p.good,
       title: m.name.isEmpty ? tr(context, '我的账户', 'My account') : m.name,
       status: off ? reason : tr(context, '正常', 'Active'),
@@ -216,6 +220,7 @@ class VpsAccountCard extends ConsumerWidget {
   }
 
   Widget _frame(
+    BuildContext context,
     VpsPalette p, {
     required Color color,
     required String title,
@@ -246,7 +251,11 @@ class VpsAccountCard extends ConsumerWidget {
                   child: Text(
                     title,
                     overflow: TextOverflow.ellipsis,
-                    style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                    style: vpsText(
+                      context,
+                      size: 14.5,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (status != null) VpsChip(label: status, color: color),
@@ -327,7 +336,11 @@ class VpsUpdateCard extends ConsumerWidget {
                       '有新版本 ${release.version}',
                       'Version ${release.version} is available',
                     ),
-                    style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                    style: vpsText(
+                      context,
+                      size: 14.5,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -337,7 +350,12 @@ class VpsUpdateCard extends ConsumerWidget {
                           '当前 $current，下载后运行安装包即可升级',
                           'You have $current; run the downloaded installer',
                         ),
-                    style: vpsText(context, size: 13, color: p.soft, height: 1.45),
+                    style: vpsText(
+                      context,
+                      size: 13,
+                      color: p.soft,
+                      height: 1.45,
+                    ),
                   ),
                 ],
               ),

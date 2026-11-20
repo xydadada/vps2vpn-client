@@ -381,7 +381,11 @@ class _ProxyCard extends ConsumerWidget {
                         friendlyLineName(context, proxy.name),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: vpsText(context, size: 14, weight: FontWeight.w600),
+                        style: vpsText(
+                          context,
+                          size: 14,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     if (fastest) ...[

@@ -294,18 +294,14 @@ class _VpsPressableState extends State<VpsPressable> {
         onShowFocusHighlight: (value) => setState(() => _showFocus = value),
         onShowHoverHighlight: (value) => setState(() => _hover = value),
         shortcuts: const {
-          SingleActivator(
-            LogicalKeyboardKey.enter,
-            includeRepeats: false,
-          ): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false):
+              ActivateIntent(),
           SingleActivator(
             LogicalKeyboardKey.numpadEnter,
             includeRepeats: false,
           ): ActivateIntent(),
-          SingleActivator(
-            LogicalKeyboardKey.space,
-            includeRepeats: false,
-          ): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space, includeRepeats: false):
+              ActivateIntent(),
         },
         actions: {
           ActivateIntent: CallbackAction<ActivateIntent>(

@@ -201,7 +201,10 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               ),
               if (_note != null) ...[
                 const SizedBox(height: 10),
-                Text(_note!, style: vpsText(context, size: 12.5, color: p.warn)),
+                Text(
+                  _note!,
+                  style: vpsText(context, size: 12.5, color: p.warn),
+                ),
               ],
             ],
           ),
@@ -355,7 +358,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                           return 'vps2vpn';
                         }
                       }(),
-                      style: vpsText(context, size: 15, weight: FontWeight.w700),
+                      style: vpsText(
+                        context,
+                        size: 15,
+                        weight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -682,7 +689,11 @@ class _ProfileCard extends ConsumerWidget {
                       profile.realLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(
+                        context,
+                        size: 14.5,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     Text(
                       [
@@ -750,7 +761,10 @@ class _ProfileCard extends ConsumerWidget {
                   ),
                 const Spacer(),
                 if (expire != null)
-                  Text(expire, style: vpsText(context, size: 12.5, color: p.soft)),
+                  Text(
+                    expire,
+                    style: vpsText(context, size: 12.5, color: p.soft),
+                  ),
               ],
             ),
           ],
