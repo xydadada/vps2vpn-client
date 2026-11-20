@@ -6,6 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _tok = 'AbCdEf0123456789xyzQ';
 
+// Flutter's test binding installs an HTTP 400 interceptor. Local socket tests
+// must explicitly use the real dart:io client without changing production TLS.
+Future<T> _localSocket<T>(Future<T> Function() call) =>
+    HttpOverrides.runWithHttpOverrides(call, HttpOverrides());
+
 void main() {
   group('api base', () {
     test('drops the query and adds /api/', () {
@@ -258,7 +263,7 @@ void main() {
     Uri base() => Uri.parse('http://127.0.0.1:${server.port}/s/$_tok/api/');
 
     test('fetches the member', () async {
-      final r = await fetchMember(base());
+      final r = await _localSocket(() => fetchMember(base()));
       expect(r!.member!.name, 'Ann');
       expect(r.linkChanged, isFalse);
     });
@@ -266,12 +271,12 @@ void main() {
     test('does not follow a redirect into an unrelated 404', () async {
       meStatus = HttpStatus.found;
       redirect = '/login';
-      expect((await fetchMember(base()))?.problem, VpsPanelProblem.unreachable);
+      expect((await _localSocket(() => fetchMember(base())))?.problem, VpsPanelProblem.unreachable);
     });
 
     test('rejects an oversized panel body', () async {
       meBody = jsonEncode({'name': 'a' * (1024 * 1024)});
-      expect((await fetchMember(base()))?.problem, VpsPanelProblem.unreachable);
+      expect((await _localSocket(() => fetchMember(base())))?.problem, VpsPanelProblem.unreachable);
     });
 
     test('authenticates only to the configured fallback proxy', () async {
@@ -297,10 +302,12 @@ void main() {
         }
         await request.response.close();
       });
-      final result = await fetchMember(
-        base(),
-        proxyPort: proxy.port,
-        proxyCredentials: 'user:p:a@ss',
+      final result = await _localSocket(
+        () => fetchMember(
+          base(),
+          proxyPort: proxy.port,
+          proxyCredentials: 'user:p:a@ss',
+        ),
       );
       expect(result?.member?.name, 'Via proxy');
       expect(accepted, 1);
@@ -308,14 +315,16 @@ void main() {
 
     test('a plain HTTP 404 is not trusted as a rotated link', () async {
       meStatus = HttpStatus.notFound;
-      final r = await fetchMember(base());
+      final r = await _localSocket(() => fetchMember(base()));
       expect(r!.linkChanged, isFalse);
       expect(r.problem, VpsPanelProblem.unavailable);
     });
 
     test('a report carries the header and the line', () async {
       expect(
-        await reportLine(base(), line: 'hy2', ok: false, host: '1.2.3.4'),
+        await _localSocket(
+          () => reportLine(base(), line: 'hy2', ok: false, host: '1.2.3.4'),
+        ),
         isTrue,
       );
       expect(posts.single.$1, '1');
