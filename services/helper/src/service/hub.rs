@@ -929,7 +929,8 @@ where
 {
     ensure_core_sha256_configured()?;
 
-    let listener = tokio::net::TcpListener::bind(std::net::SocketAddr::from(([127, 0, 0, 1], LISTEN_PORT)))
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], LISTEN_PORT));
+    let listener = tokio::net::TcpListener::bind(address)
         .await
         .map_err(|error| anyhow::anyhow!("bind helper server: {error}"))?;
     on_started()?;

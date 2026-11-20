@@ -137,7 +137,8 @@ class VpsAccountCard extends ConsumerWidget {
     );
     if (result.problem case final problem?) {
       return _frame(
-        context,p,
+        context,
+        p,
         color: p.warn,
         title: l10n.account,
         status: l10n.serviceUnavailable,
@@ -151,7 +152,8 @@ class VpsAccountCard extends ConsumerWidget {
     }
     if (result.linkChanged) {
       return _frame(
-        context,p,
+        context,
+        p,
         color: p.warn,
         title: tr(context, '订阅链接已更换', 'Your link was replaced'),
         lines: [
@@ -203,7 +205,8 @@ class VpsAccountCard extends ConsumerWidget {
       _ => tr(context, '已被管理员停用', 'Turned off by the owner'),
     };
     return _frame(
-      context,p,
+      context,
+      p,
       color: off ? p.bad : p.good,
       title: m.name.isEmpty ? tr(context, '我的账户', 'My account') : m.name,
       status: off ? reason : tr(context, '正常', 'Active'),
