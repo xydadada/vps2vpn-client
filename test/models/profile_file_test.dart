@@ -21,25 +21,28 @@ void main() {
 
   tearDown(() => root.delete(recursive: true));
 
-  test('rejected validation removes staging and keeps the old profile', () async {
-    final original = await profile.file;
-    await original.writeAsString('old profile');
-    String? staged;
-    await expectLater(
-      profile.saveFile(
-        utf8.encode('new credentials'),
-        validate: (path, _) async {
-          staged = path;
-          expect(await File(path).readAsString(), 'new credentials');
-          return 'invalid profile';
-        },
-      ),
-      throwsA(isA<MessageException>()),
-    );
-    expect(staged, isNotNull);
-    expect(await File(staged!).exists(), isFalse);
-    expect(await original.readAsString(), 'old profile');
-  });
+  test(
+    'rejected validation removes staging and keeps the old profile',
+    () async {
+      final original = await profile.file;
+      await original.writeAsString('old profile');
+      String? staged;
+      await expectLater(
+        profile.saveFile(
+          utf8.encode('new credentials'),
+          validate: (path, _) async {
+            staged = path;
+            expect(await File(path).readAsString(), 'new credentials');
+            return 'invalid profile';
+          },
+        ),
+        throwsA(isA<MessageException>()),
+      );
+      expect(staged, isNotNull);
+      expect(await File(staged!).exists(), isFalse);
+      expect(await original.readAsString(), 'old profile');
+    },
+  );
 
   test('a validator exception also removes staging', () async {
     String? staged;
@@ -57,19 +60,22 @@ void main() {
     expect(await File(staged!).exists(), isFalse);
   });
 
-  test('successful validation publishes the profile and removes staging', () async {
-    String? staged;
-    final saved = await profile.saveFile(
-      utf8.encode('new profile'),
-      validate: (path, _) async {
-        staged = path;
-        return null;
-      },
-    );
-    expect(saved.lastUpdateDate, isNotNull);
-    expect(await (await saved.file).readAsString(), 'new profile');
-    expect(await File(staged!).exists(), isFalse);
-  });
+  test(
+    'successful validation publishes the profile and removes staging',
+    () async {
+      String? staged;
+      final saved = await profile.saveFile(
+        utf8.encode('new profile'),
+        validate: (path, _) async {
+          staged = path;
+          return null;
+        },
+      );
+      expect(saved.lastUpdateDate, isNotNull);
+      expect(await (await saved.file).readAsString(), 'new profile');
+      expect(await File(staged!).exists(), isFalse);
+    },
+  );
 
   test('an obsolete validation cannot publish its bytes', () async {
     final original = await profile.file;
@@ -133,28 +139,31 @@ void main() {
     );
   });
 
-  test('a failed publication keeps the destination and removes staging', () async {
-    final path = await appPath.getProfilePath(profile.id.toString());
-    final destination = await Directory(path).create(recursive: true);
-    final sentinel = File('${destination.path}/existing');
-    await sentinel.writeAsString('keep');
-    String? staged;
+  test(
+    'a failed publication keeps the destination and removes staging',
+    () async {
+      final path = await appPath.getProfilePath(profile.id.toString());
+      final destination = await Directory(path).create(recursive: true);
+      final sentinel = File('${destination.path}/existing');
+      await sentinel.writeAsString('keep');
+      String? staged;
 
-    await expectLater(
-      profile.saveFile(
-        utf8.encode('new credentials'),
-        validate: (path, _) async {
-          staged = path;
-          return null;
-        },
-      ),
-      throwsA(isA<FileSystemException>()),
-    );
+      await expectLater(
+        profile.saveFile(
+          utf8.encode('new credentials'),
+          validate: (path, _) async {
+            staged = path;
+            return null;
+          },
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
 
-    expect(await sentinel.readAsString(), 'keep');
-    expect(await File(staged!).exists(), isFalse);
-    expect(destination.parent.listSync().map((entry) => entry.path), [
-      destination.path,
-    ]);
-  });
+      expect(await sentinel.readAsString(), 'keep');
+      expect(await File(staged!).exists(), isFalse);
+      expect(destination.parent.listSync().map((entry) => entry.path), [
+        destination.path,
+      ]);
+    },
+  );
 }

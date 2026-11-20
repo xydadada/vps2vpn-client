@@ -272,7 +272,10 @@ void main() {
             authorization) {
           request.response
             ..statusCode = HttpStatus.proxyAuthenticationRequired
-            ..headers.set(HttpHeaders.proxyAuthenticateHeader, 'Basic realm="local"');
+            ..headers.set(
+              HttpHeaders.proxyAuthenticateHeader,
+              'Basic realm="local"',
+            );
         } else {
           accepted++;
           request.response.write(jsonEncode({'name': 'Via proxy'}));

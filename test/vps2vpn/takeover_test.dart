@@ -138,7 +138,9 @@ void main() {
       ['4120', '4188', '5000'],
     );
     expect(
-      calls.where((c) => c.first == 'taskkill').every((c) => c.contains('/PID')),
+      calls
+          .where((c) => c.first == 'taskkill')
+          .every((c) => c.contains('/PID')),
       isTrue,
     );
     expect(scans, 1);

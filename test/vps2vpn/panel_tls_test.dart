@@ -45,66 +45,68 @@ void main() {
       0,
       context,
     );
-    server.listen((request) async {
-      requests.add(request.uri.path);
-      if (request.uri.path == '/s/$_token/api/report') {
-        reports.add(jsonDecode(await utf8.decodeStream(request)));
-        request.response.write('{"ok":true}');
-      } else {
-        request.response.write('{"name":"Pinned member","enabled":true}');
-      }
-      await request.response.close();
-    }, onError: (Object _) {
-      // Pin rejection deliberately aborts the TLS handshake.
-    });
+    server.listen(
+      (request) async {
+        requests.add(request.uri.path);
+        if (request.uri.path == '/s/$_token/api/report') {
+          reports.add(jsonDecode(await utf8.decodeStream(request)));
+          request.response.write('{"ok":true}');
+        } else {
+          request.response.write('{"name":"Pinned member","enabled":true}');
+        }
+        await request.response.close();
+      },
+      onError: (Object _) {
+        // Pin rejection deliberately aborts the TLS handshake.
+      },
+    );
   });
 
   tearDown(() => server.close(force: true));
 
-  Uri base() => vpsApiBase(
-    'http://127.0.0.1:${server.port}/s/$_token?format=clash',
-  )!;
+  Uri base() =>
+      vpsApiBase('http://127.0.0.1:${server.port}/s/$_token?format=clash')!;
 
-  test('upgrades the subscription URL and pins member and report requests', () async {
-    expect(base().scheme, 'https');
-    expect(base().port, server.port);
-    final member = await fetchMember(
-      base(),
-      certificatePins: {fingerprint},
-    );
-    expect(member?.member?.name, 'Pinned member');
-    expect(
-      await reportLine(
-        base(),
-        line: 'hy2',
-        ok: false,
-        host: '127.0.0.1',
-        certificatePins: {fingerprint},
-      ),
-      isTrue,
-    );
-    expect(requests, ['/s/$_token/api/me', '/s/$_token/api/report']);
-    expect(reports, [
-      {'line': 'hy2', 'ok': false, 'host': '127.0.0.1'},
-    ]);
-  });
+  test(
+    'upgrades the subscription URL and pins member and report requests',
+    () async {
+      expect(base().scheme, 'https');
+      expect(base().port, server.port);
+      final member = await fetchMember(base(), certificatePins: {fingerprint});
+      expect(member?.member?.name, 'Pinned member');
+      expect(
+        await reportLine(
+          base(),
+          line: 'hy2',
+          ok: false,
+          host: '127.0.0.1',
+          certificatePins: {fingerprint},
+        ),
+        isTrue,
+      );
+      expect(requests, ['/s/$_token/api/me', '/s/$_token/api/report']);
+      expect(reports, [
+        {'line': 'hy2', 'ok': false, 'host': '127.0.0.1'},
+      ]);
+    },
+  );
 
   test('a wrong pin never sends the bearer token request', () async {
-    expect(
-      await fetchMember(base(), certificatePins: {'00' * 32}),
-      isNull,
-    );
+    expect(await fetchMember(base(), certificatePins: {'00' * 32}), isNull);
     expect(requests, isEmpty);
   });
 
-  test('no pin requires PKI even when the global override trusts everything', () async {
-    final result = await HttpOverrides.runWithHttpOverrides(
-      () => fetchMember(base()),
-      _TrustEverything(),
-    );
-    expect(result, isNull);
-    expect(requests, isEmpty);
-  });
+  test(
+    'no pin requires PKI even when the global override trusts everything',
+    () async {
+      final result = await HttpOverrides.runWithHttpOverrides(
+        () => fetchMember(base()),
+        _TrustEverything(),
+      );
+      expect(result, isNull);
+      expect(requests, isEmpty);
+    },
+  );
 
   test('a wrong pin cannot be bypassed by the global override', () async {
     final result = await HttpOverrides.runWithHttpOverrides(

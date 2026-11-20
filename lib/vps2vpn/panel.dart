@@ -207,10 +207,11 @@ HttpClient _client(
         ? null
         : SecurityContext(withTrustedRoots: false),
   )
-    ..badCertificateCallback = (certificate, host, port) =>
-        host.toLowerCase() == url.host.toLowerCase() &&
-        port == url.port &&
-        certificatePins.contains(sha256.convert(certificate.der).toString())
+    ..badCertificateCallback = (certificate, host, port) {
+      return host.toLowerCase() == url.host.toLowerCase() &&
+          port == url.port &&
+          certificatePins.contains(sha256.convert(certificate.der).toString());
+    }
     ..connectionTimeout = const Duration(seconds: 6)
     ..idleTimeout = const Duration(seconds: 2);
   c.findProxy = (_) =>
@@ -285,9 +286,7 @@ Future<(int, String)> _send(
       req.add(bytes);
     }
     final res = await req.close().timeout(const Duration(seconds: 10));
-    final text = await _responseText(
-      res,
-    ).timeout(const Duration(seconds: 10));
+    final text = await _responseText(res).timeout(const Duration(seconds: 10));
     return (res.statusCode, text);
   } finally {
     client.close(force: true);
