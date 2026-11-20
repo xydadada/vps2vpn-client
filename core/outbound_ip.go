@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"net/netip"
 	"strings"
 	"sync"
@@ -127,7 +128,7 @@ func probeOutboundIpSource(ctx context.Context, url string, proxyName string, ti
 		maxBody:   outboundIpMaxBody,
 		recorder:  hits,
 	})
-	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !mentionsIp(result.Body) {
+	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !sourceAnswerHasIP(result.Body) {
 		return nil
 	}
 	return &OutboundIpResult{
@@ -158,6 +159,43 @@ func nodeHits(chains []string, proxyName string, hits []RouteHit) []RouteHit {
 
 // RFC 6598 space for carrier-grade NAT, which IsPrivate leaves out.
 var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
+
+// Accept an IP only from the field that the upstream actually declares.
+// A 200 HTML error page or a JSON diagnostic containing an incidental public
+// address must not end the hedge before a healthy source can answer.
+func sourceAnswerHasIP(body string) bool {
+	text := strings.TrimSpace(body)
+	if strings.HasPrefix(text, "{") {
+		var record struct {
+			IP      string          `json:"ip"`
+			Error   json.RawMessage `json:"error"`
+			Success *bool           `json:"success"`
+		}
+		if err := json.Unmarshal([]byte(text), &record); err != nil || record.IP == "" {
+			return false
+		}
+		status := strings.TrimSpace(string(record.Error))
+		if status != "" && status != "null" && status != "false" && status != "\"\"" {
+			return false
+		}
+		if record.Success != nil && !*record.Success {
+			return false
+		}
+		return sourceAddressIsPublic(record.IP)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && key == "ip" {
+			return sourceAddressIsPublic(value)
+		}
+	}
+	return false
+}
+
+func sourceAddressIsPublic(value string) bool {
+	addr, err := netip.ParseAddr(strings.TrimSpace(value))
+	return err == nil && mentionsIp(addr.String())
+}
 
 // A rate-limit or captcha page can still answer 200, and Dart cannot fall back
 // once the race is decided, so a body without a public address must not win it.
