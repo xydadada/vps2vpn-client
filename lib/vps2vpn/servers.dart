@@ -58,8 +58,7 @@ void vpsAutoTestOnce(WidgetRef ref, Group group) {
   final profileId = ref.read(currentProfileProvider)?.id;
   WidgetsBinding.instance.addPostFrameCallback((_) {
     // An abandoned frame must not reserve or release another owner's slot.
-    if (!context.mounted ||
-        ref.read(currentProfileProvider)?.id != profileId) {
+    if (!context.mounted || ref.read(currentProfileProvider)?.id != profileId) {
       return;
     }
     _syncAutoTestProfile(ref);

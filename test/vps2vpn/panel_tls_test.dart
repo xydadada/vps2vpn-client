@@ -103,7 +103,9 @@ void main() {
 
   test('a wrong pin never sends the bearer token request', () async {
     expect(
-      (await _localSocket(() => fetchMember(base(), certificatePins: {'00' * 32})))?.problem,
+      (await _localSocket(
+        () => fetchMember(base(), certificatePins: {'00' * 32}),
+      ))?.problem,
       VpsPanelProblem.unreachable,
     );
     expect(requests, isEmpty);

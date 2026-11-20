@@ -274,12 +274,18 @@ void main() {
     test('does not follow a redirect into an unrelated 404', () async {
       meStatus = HttpStatus.found;
       redirect = '/login';
-      expect((await _localSocket(() => fetchMember(base())))?.problem, VpsPanelProblem.unreachable);
+      expect(
+        (await _localSocket(() => fetchMember(base())))?.problem,
+        VpsPanelProblem.unreachable,
+      );
     });
 
     test('rejects an oversized panel body', () async {
       meBody = jsonEncode({'name': 'a' * (1024 * 1024)});
-      expect((await _localSocket(() => fetchMember(base())))?.problem, VpsPanelProblem.unreachable);
+      expect(
+        (await _localSocket(() => fetchMember(base())))?.problem,
+        VpsPanelProblem.unreachable,
+      );
     });
 
     test('authenticates only to the configured fallback proxy', () async {
