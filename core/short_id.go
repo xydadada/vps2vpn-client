@@ -14,7 +14,13 @@ func unmarshalRawConfig(buf []byte) (*config.RawConfig, error) {
 		return config.UnmarshalRawConfig(buf)
 	}
 	var document yaml.Node
-	if yaml.Unmarshal(buf, &document) != nil || !retagShortIDs(&document) {
+	if yaml.Unmarshal(buf, &document) != nil {
+		return config.UnmarshalRawConfig(buf)
+	}
+	if err := validateAliasGraph(&document); err != nil {
+		return nil, err
+	}
+	if !retagShortIDs(&document) {
 		return config.UnmarshalRawConfig(buf)
 	}
 	rawConfig := config.DefaultRawConfig()
@@ -25,6 +31,17 @@ func unmarshalRawConfig(buf []byte) (*config.RawConfig, error) {
 }
 
 func retagShortIDs(node *yaml.Node) bool {
+	return retagShortIDsWithAliases(node, map[*yaml.Node]bool{})
+}
+
+func retagShortIDsWithAliases(node *yaml.Node, aliases map[*yaml.Node]bool) bool {
+	if node.Kind == yaml.AliasNode && node.Alias != nil {
+		if aliases[node.Alias] {
+			return false
+		}
+		aliases[node.Alias] = true
+		return retagShortIDsWithAliases(node.Alias, aliases)
+	}
 	retagged := false
 	if node.Kind == yaml.MappingNode {
 		for i := 0; i+1 < len(node.Content); i += 2 {
@@ -34,13 +51,23 @@ func retagShortIDs(node *yaml.Node) bool {
 		}
 	}
 	for _, child := range node.Content {
-		retagged = retagShortIDs(child) || retagged
+		retagged = retagShortIDsWithAliases(child, aliases) || retagged
 	}
 	return retagged
 }
 
 func retagNumber(node *yaml.Node) bool {
+	return retagNumberWithAliases(node, map[*yaml.Node]bool{})
+}
+
+func retagNumberWithAliases(node *yaml.Node, aliases map[*yaml.Node]bool) bool {
 	switch node.Kind {
+	case yaml.AliasNode:
+		if node.Alias == nil || aliases[node.Alias] {
+			return false
+		}
+		aliases[node.Alias] = true
+		return retagNumberWithAliases(node.Alias, aliases)
 	case yaml.ScalarNode:
 		if node.Style == 0 && (node.Tag == "!!int" || node.Tag == "!!float") {
 			node.Tag = "!!str"
@@ -49,7 +76,7 @@ func retagNumber(node *yaml.Node) bool {
 	case yaml.SequenceNode:
 		retagged := false
 		for _, item := range node.Content {
-			retagged = retagNumber(item) || retagged
+			retagged = retagNumberWithAliases(item, aliases) || retagged
 		}
 		return retagged
 	}

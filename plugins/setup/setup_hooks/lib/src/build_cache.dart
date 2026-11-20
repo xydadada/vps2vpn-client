@@ -84,7 +84,7 @@ class BuildCache {
     final lock = await lockFile.open(mode: FileMode.append);
 
     try {
-      await lock.lock(FileLock.exclusive);
+      await lock.lock(FileLock.blockingExclusive);
       final currentFingerprint = await fingerprint();
       final recordFile = File(p.join(cacheDir, '$safeKey.json'));
       final missReason = _cacheMissReason(

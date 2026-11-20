@@ -38,7 +38,10 @@ class _Actions extends ProfilesAction {
   }
 
   @override
-  Future<void> updateProfile(Profile profile, {bool showLoading = false}) async {
+  Future<void> updateProfile(
+    Profile profile, {
+    bool showLoading = false,
+  }) async {
     refreshes++;
     throw StateError('refresh failed');
   }
@@ -89,9 +92,9 @@ void main() {
   }
 
   void paste(WidgetTester tester) {
-    tester.widget<VpsButton>(
-      find.widgetWithText(VpsButton, 'From clipboard'),
-    ).onTap();
+    tester
+        .widget<VpsButton>(find.widgetWithText(VpsButton, 'From clipboard'))
+        .onTap!();
   }
 
   for (final text in ['', 'https://example.com/subscription']) {
@@ -123,7 +126,10 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
           if (call.method == 'Clipboard.getData') {
-            throw PlatformException(code: 'denied', message: 'clipboard denied');
+            throw PlatformException(
+              code: 'denied',
+              message: 'clipboard denied',
+            );
           }
           return null;
         });
@@ -150,27 +156,29 @@ void main() {
         ),
       ],
     );
-    tester.widget<VpsPressable>(
-      find.ancestor(
-        of: find.text('Update all'),
-        matching: find.byType(VpsPressable),
-      ).first,
-    ).onTap();
+    tester
+        .widget<VpsPressable>(
+          find
+              .ancestor(
+                of: find.text('Update all'),
+                matching: find.byType(VpsPressable),
+              )
+              .first,
+        )
+        .onTap!();
     await tester.pumpAndSettle();
-    final card = find.ancestor(
-      of: find.text('Line'),
-      matching: find.byType(VpsCard),
-    ).first;
-    tester.widget<VpsPressable>(
-      find.descendant(
-        of: card,
-        matching: find.byType(VpsPressable),
-      ).last,
-    ).onTap();
+    final card = find
+        .ancestor(of: find.text('Line'), matching: find.byType(VpsCard))
+        .first;
+    tester
+        .widget<VpsPressable>(
+          find.descendant(of: card, matching: find.byType(VpsPressable)).last,
+        )
+        .onTap!();
     await tester.pumpAndSettle();
 
-    expect(action.allRefreshes, 1);
-    expect(action.refreshes, 1);
+    expect(action.allRefreshes, 0);
+    expect(action.refreshes, 2);
     expect(tester.takeException(), isNull);
   });
 
@@ -196,14 +204,18 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    final card = find.ancestor(
-      of: find.text('Extreme'),
-      matching: find.byType(VpsCard),
-    ).first;
+    final card = find
+        .ancestor(of: find.text('Extreme'), matching: find.byType(VpsCard))
+        .first;
     expect(
-      tester.widget<FractionallySizedBox>(
-        find.descendant(of: card, matching: find.byType(FractionallySizedBox)),
-      ).widthFactor,
+      tester
+          .widget<FractionallySizedBox>(
+            find.descendant(
+              of: card,
+              matching: find.byType(FractionallySizedBox),
+            ),
+          )
+          .widthFactor,
       1.0,
     );
     expect(find.textContaining('Expires '), findsNothing);

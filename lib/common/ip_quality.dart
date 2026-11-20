@@ -181,7 +181,8 @@ Future<_Answer> _query(
       }
       bytes.add(chunk);
     }
-    final json = jsonDecode(utf8.decode(bytes.takeBytes())) as Map<String, dynamic>;
+    final json =
+        jsonDecode(utf8.decode(bytes.takeBytes())) as Map<String, dynamic>;
     final answer = _parse(source, ip, json);
     if (answer == null) {
       throw const _SourceFailure(IpQualitySourceStatus.noType);

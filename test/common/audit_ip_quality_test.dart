@@ -37,10 +37,8 @@ ResponseBody _fallback() => ResponseBody.fromString(
   200,
 );
 
-ResponseBody _laterAnswer() => ResponseBody.fromString(
-  '{"company":{"type":"hosting"}}',
-  200,
-);
+ResponseBody _laterAnswer() =>
+    ResponseBody.fromString('{"company":{"type":"hosting"}}', 200);
 
 Uint8List _document(int length) {
   final prefix = utf8.encode('{"ip":"$_ip","type":"isp","padding":"');
@@ -64,44 +62,66 @@ ResponseBody _chunks(Uint8List bytes) => ResponseBody(
 );
 
 void main() {
-  test('a chunked oversized metadata document cannot win the source race', () async {
-    final adapter = _Adapter((options) => switch (options.uri.host) {
-      'ident.me' => _chunks(_document(_limit + 1)),
-      'iplocate.io' => _laterAnswer(),
-      _ => _unavailable(),
-    });
-    final dio = Dio()..httpClientAdapter = adapter;
-    addTearDown(dio.close);
+  test(
+    'a chunked oversized metadata document cannot win the source race',
+    () async {
+      final adapter = _Adapter(
+        (options) => switch (options.uri.host) {
+          'ident.me' => _chunks(_document(_limit + 1)),
+          'iplocate.io' => _laterAnswer(),
+          _ => _unavailable(),
+        },
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      addTearDown(dio.close);
 
-    final result = await lookupIpQuality(dio, _ip, cancelToken: CancelToken());
-    await pumpEventQueue();
+      final result = await lookupIpQuality(
+        dio,
+        _ip,
+        cancelToken: CancelToken(),
+      );
+      await pumpEventQueue();
 
-    expect(result.source, IpQualitySource.ipLocate);
-    expect(adapter.cancelled, contains('ident.me'));
-  });
+      expect(result.source, IpQualitySource.ipLocate);
+      expect(adapter.cancelled, contains('ident.me'));
+    },
+  );
 
-  test('an oversized Content-Length is rejected even with a short body', () async {
-    final adapter = _Adapter((options) => switch (options.uri.host) {
-      'ident.me' => ResponseBody.fromString(
-        '{"ip":"$_ip","type":"isp"}',
-        200,
-        headers: {Headers.contentLengthHeader: ['${_limit + 1}']},
-      ),
-      'iplocate.io' => _laterAnswer(),
-      _ => _unavailable(),
-    });
-    final dio = Dio()..httpClientAdapter = adapter;
-    addTearDown(dio.close);
+  test(
+    'an oversized Content-Length is rejected even with a short body',
+    () async {
+      final adapter = _Adapter(
+        (options) => switch (options.uri.host) {
+          'ident.me' => ResponseBody.fromString(
+            '{"ip":"$_ip","type":"isp"}',
+            200,
+            headers: {
+              Headers.contentLengthHeader: ['${_limit + 1}'],
+            },
+          ),
+          'iplocate.io' => _laterAnswer(),
+          _ => _unavailable(),
+        },
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      addTearDown(dio.close);
 
-    final result = await lookupIpQuality(dio, _ip, cancelToken: CancelToken());
+      final result = await lookupIpQuality(
+        dio,
+        _ip,
+        cancelToken: CancelToken(),
+      );
 
-    expect(result.source, IpQualitySource.ipLocate);
-  });
+      expect(result.source, IpQualitySource.ipLocate);
+    },
+  );
 
   test('metadata exactly at the body limit is still accepted', () async {
-    final adapter = _Adapter((options) => options.uri.host == 'ident.me'
-        ? _chunks(_document(_limit))
-        : _unavailable());
+    final adapter = _Adapter(
+      (options) => options.uri.host == 'ident.me'
+          ? _chunks(_document(_limit))
+          : _unavailable(),
+    );
     final dio = Dio()..httpClientAdapter = adapter;
     addTearDown(dio.close);
 
@@ -141,11 +161,13 @@ void main() {
         hedge: const Duration(milliseconds: 5),
       ),
       throwsA(
-        isA<IpQualityLookupException>().having(
-          (error) => error.failures.map((item) => item.status),
-          'source statuses',
-          everyElement(IpQualitySourceStatus.timeout),
-        ).having((error) => error.failures.length, 'source count', 6),
+        isA<IpQualityLookupException>()
+            .having(
+              (error) => error.failures.map((item) => item.status),
+              'source statuses',
+              everyElement(IpQualitySourceStatus.timeout),
+            )
+            .having((error) => error.failures.length, 'source count', 6),
       ),
     );
     await pumpEventQueue();
@@ -158,15 +180,17 @@ void main() {
   test('an inferred fallback also releases the timed-out source', () async {
     final pending = StreamController<Uint8List>();
     var closed = false;
-    final adapter = _Adapter((options) => switch (options.uri.host) {
-      'ident.me' => ResponseBody(
-        pending.stream,
-        200,
-        onClose: () => closed = true,
-      ),
-      'ip-api.com' => _fallback(),
-      _ => _unavailable(),
-    });
+    final adapter = _Adapter(
+      (options) => switch (options.uri.host) {
+        'ident.me' => ResponseBody(
+          pending.stream,
+          200,
+          onClose: () => closed = true,
+        ),
+        'ip-api.com' => _fallback(),
+        _ => _unavailable(),
+      },
+    );
     final dio = Dio()..httpClientAdapter = adapter;
     addTearDown(dio.close);
     addTearDown(pending.close);

@@ -17,7 +17,6 @@ import 'package:fl_clash/common/proxy.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:rust_api/rust_api.dart' as rust_api;
 
 /// Process image (lower case) → the product name people know.
 const vpsRivalImages = <String, String>{
@@ -92,11 +91,29 @@ class VpsSystemProxy {
 
   /// Points at our own mixed port on this machine.
   bool isOurs(int port) {
-    if (!enabled || port <= 0 || port > 65535 || (pac?.isNotEmpty ?? false)) {
+    if (!enabled || port <= 0 || port > 65535 || (pac?.isNotEmpty ?? false))
       return false;
+    final entries = (server ?? '').split(';');
+    final protocols = <String>{};
+    for (final entry in entries) {
+      final parts = entry.trim().split('=');
+      if (parts.length > 2 || parts.last.isEmpty) return false;
+      if (parts.length == 2 && !protocols.add(parts.first.toLowerCase())) {
+        return false;
+      }
+      final uri = Uri.tryParse('http://${parts.last}');
+      if (uri == null ||
+          uri.userInfo.isNotEmpty ||
+          uri.path.isNotEmpty ||
+          uri.hasQuery ||
+          uri.hasFragment ||
+          !uri.hasPort ||
+          uri.port != port ||
+          !const ['127.0.0.1', 'localhost', '::1'].contains(uri.host)) {
+        return false;
+      }
     }
-    final endpoint = server?.trim().toLowerCase();
-    return endpoint == '127.0.0.1:$port' || endpoint == 'localhost:$port';
+    return protocols.isEmpty || protocols.containsAll(const ['http', 'https']);
   }
 }
 
@@ -127,7 +144,7 @@ Future<ProcessResult> _run(String executable, List<String> args) =>
 
 /// Other proxy apps running now. Empty off Windows or when tasklist fails.
 Future<List<VpsRival>> scanRivals({VpsRun run = _run}) async {
-  if (!Platform.isWindows && identical(run, _run)) return const [];
+  if (!Platform.isWindows) return const [];
   try {
     final r = await run('tasklist', ['/FO', 'CSV', '/NH']);
     if (r.exitCode != 0) return const [];
@@ -144,11 +161,11 @@ Future<List<String>> quitRivals(
 }) async {
   if (rivals.isEmpty) return const [];
   if (_underTest && identical(run, _run)) return rivalNames(rivals);
-  for (final pid in {for (final r in rivals) r.pid}) {
+  for (final image in {for (final r in rivals) r.image}) {
     try {
       // /T takes the app's own core with it; /F because tray apps ignore a
       // polite close (they hide to the tray instead).
-      await run('taskkill', ['/F', '/T', '/PID', '$pid']);
+      await run('taskkill', ['/F', '/T', '/IM', image]);
     } catch (_) {}
   }
   // Give Windows a moment to release their ports and TUN adapters.
@@ -241,6 +258,7 @@ final vpsTakeoverReport = ValueNotifier<VpsTakeoverReport>(
 );
 
 Timer? _guard;
+int _takeoverRevision = 0;
 
 /// `flutter test` must never close the developer's own proxy apps or touch
 /// the real port and system proxy, whatever the test drives.
@@ -250,19 +268,22 @@ final bool _underTest = Platform.environment.containsKey('FLUTTER_TEST');
 /// report what they see; nothing is closed or changed.
 Future<void> vpsBeforeConnect(Ref ref, {bool Function()? isCurrent}) async {
   if (!Platform.isWindows || _underTest) return;
-  bool current() => ref.mounted && (isCurrent?.call() ?? true);
+  final revision = ++_takeoverRevision;
+  bool current() =>
+      ref.mounted &&
+      revision == _takeoverRevision &&
+      (isCurrent?.call() ?? true);
   bool canAct() =>
       current() &&
       !safeModeBuild &&
       !ref.read(safeModeProvider) &&
       ref.read(appSettingProvider).takeover;
-  if (!current()) return;
-  final act = canAct();
   final rivals = await scanRivals();
   if (!current()) return;
+  final act = canAct();
   final names = rivalNames(rivals);
   var still = const <String>[];
-  if (canAct() && rivals.isNotEmpty) {
+  if (act && rivals.isNotEmpty) {
     still = await quitRivals(rivals);
   }
   if (!current()) return;
@@ -281,10 +302,7 @@ Future<void> vpsBeforeConnect(Ref ref, {bool Function()? isCurrent}) async {
           .update((s) => s.copyWith(mixedPort: next));
     }
     if (canAct() && !ref.read(networkSettingProvider).systemProxy) {
-      final proxy = await readSystemProxy();
-      if (canAct() && proxy != null && proxy.active) {
-        cleared = await rust_api.stopSystemProxy();
-      }
+      cleared = await clearStaleSystemProxy();
     }
   }
   if (!current()) return;
@@ -298,6 +316,19 @@ Future<void> vpsBeforeConnect(Ref ref, {bool Function()? isCurrent}) async {
     dryRun: safeModeBuild || ref.read(safeModeProvider),
   );
   _startGuard(ref);
+}
+
+Future<bool> clearStaleSystemProxy({VpsRun run = _run}) async {
+  if (!Platform.isWindows || (_underTest && identical(run, _run))) return false;
+  try {
+    final result = await run(Platform.resolvedExecutable, [
+      '--clear-stale-proxy',
+    ]);
+    return result.exitCode == 0 &&
+        (int.tryParse('${result.stdout}'.trim()) ?? 0) > 0;
+  } catch (_) {
+    return false;
+  }
 }
 
 /// Only detects (for the overview notice); never closes anything.
@@ -320,39 +351,43 @@ Future<void> vpsScanOnly() async {
 /// app takes it.
 void _startGuard(Ref ref) {
   _guard?.cancel();
+  final revision = _takeoverRevision;
+  bool isCurrent() =>
+      ref.mounted &&
+      revision == _takeoverRevision &&
+      !safeModeBuild &&
+      !ref.read(safeModeProvider) &&
+      ref.read(appSettingProvider).takeover &&
+      ref.read(proxyStateProvider).isStart &&
+      ref.read(proxyStateProvider).systemProxy;
   if (safeModeBuild ||
       ref.read(safeModeProvider) ||
-      !ref.read(appSettingProvider).takeover) {
+      !ref.read(appSettingProvider).takeover)
     return;
-  }
-  var busy = false;
+  var reading = false;
   _guard = Timer.periodic(const Duration(seconds: 20), (timer) async {
     if (!ref.mounted ||
         ref.read(safeModeProvider) ||
-        !ref.read(appSettingProvider).takeover ||
-        !ref.read(isStartProvider)) {
+        !ref.read(appSettingProvider).takeover) {
       timer.cancel();
       return;
     }
-    if (busy) return;
     final state = ref.read(proxyStateProvider);
-    if (!state.isStart || !state.systemProxy || state.pacScript != null) return;
-    busy = true;
+    if (!state.isStart) {
+      timer.cancel();
+      return;
+    }
+    if (!state.systemProxy || reading) return;
+    reading = true;
     try {
-      final proxy = await readSystemProxy();
-      if (!timer.isActive ||
-          !ref.mounted ||
-          ref.read(safeModeProvider) ||
-          !ref.read(appSettingProvider).takeover ||
-          ref.read(proxyStateProvider) != state) {
-        return;
-      }
-      if (proxy != null && !proxy.isOurs(state.port)) {
-        await systemProxyQueue?.apply(state);
+      final proxy = state.pacScript == null ? await readSystemProxy() : null;
+      if (isCurrent() &&
+          (state.pacScript != null ||
+              proxy != null && !proxy.isOurs(state.port))) {
+        await systemProxyQueue?.refresh(isCurrent: isCurrent);
       }
     } finally {
-      busy = false;
+      reading = false;
     }
   });
-  ref.onDispose(_guard!.cancel);
 }

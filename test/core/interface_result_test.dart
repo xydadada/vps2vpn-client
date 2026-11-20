@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fl_clash/core/desktop/model.dart';
 import 'package:fl_clash/core/interface.dart';
 import 'package:fl_clash/core/method.dart';
@@ -108,6 +110,62 @@ void main() {
     expect(await core.getProxyDefinition('p'), isNull);
     expect(await core.getMitmCertificate(), isNull);
   });
+
+  test(
+    'decrypt does not invoke the Core when the app cannot read a file',
+    () async {
+      final home = await Directory.systemTemp.createTemp('decrypt-missing-');
+      addTearDown(() => home.delete(recursive: true));
+      await expectLater(
+        core.decryptConfig('${home.path}/missing.age', 'AGE-SECRET-KEY-1A'),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(core.invoked, isEmpty);
+    },
+  );
+
+  test(
+    'decrypt rejects an oversized ordinary file before invoking the Core',
+    () async {
+      final home = await Directory.systemTemp.createTemp('decrypt-large-');
+      addTearDown(() => home.delete(recursive: true));
+      final file = File('${home.path}/large.age');
+      final output = await file.open(mode: FileMode.write);
+      try {
+        await output.truncate(64 << 20);
+      } finally {
+        await output.close();
+      }
+
+      await expectLater(
+        core.decryptConfig(file.path, 'AGE-SECRET-KEY-1A'),
+        throwsA(
+          isA<CoreMethodException>().having(
+            (error) => error.code,
+            'code',
+            'request_too_large',
+          ),
+        ),
+      );
+      expect(core.invoked, isEmpty);
+    },
+  );
+
+  test(
+    'decrypt still requires a result after reading a valid local file',
+    () async {
+      final home = await Directory.systemTemp.createTemp('decrypt-result-');
+      addTearDown(() => home.delete(recursive: true));
+      final file = File('${home.path}/profile.age');
+      await file.writeAsBytes([0, 128, 255]);
+
+      await expectLater(
+        core.decryptConfig(file.path, 'AGE-SECRET-KEY-1A'),
+        _emptyResult,
+      );
+      expect(core.invoked, [CoreMethod.configDecrypt]);
+    },
+  );
 
   test('calls nobody waits on absorb a Core that is gone', () async {
     final core = _DisconnectedCore();

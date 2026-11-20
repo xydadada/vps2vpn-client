@@ -27,7 +27,8 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull, reason: '$expiry');
-      expect(find.text(currentAppLocalizations.infiniteTime), findsWidgets);
+      expect(find.text(currentAppLocalizations.unknown), findsWidgets);
+      expect(find.text(currentAppLocalizations.infiniteTime), findsNothing);
     }
   });
   testWidgets('hides expiry when both values do not fit', (tester) async {

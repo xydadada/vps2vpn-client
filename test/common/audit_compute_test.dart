@@ -58,33 +58,33 @@ void main() {
     expect(state.testUrl, isNull);
   });
 
-  test('a deep valid selection chain resolves without using the call stack', () {
-    const count = 10000;
-    final groups = [
-      for (var i = 0; i < count; i++)
-        Group(
-          name: 'g$i',
-          type: GroupType.Selector,
-          testUrl: i == count - 1 ? 'https://last.test' : null,
-          all: [
-            Proxy(
-              name: i == count - 1 ? 'leaf' : 'g${i + 1}',
-              type: 'ss',
-            ),
-          ],
-        ),
-    ];
-    final selections = {
-      for (var i = 0; i < count; i++)
-        'g$i': i == count - 1 ? 'leaf' : 'g${i + 1}',
-    };
-    final state = computeRealSelectedProxyState(
-      'g0',
-      groups: groups,
-      selectedMap: selections,
-    );
-    expect(state.proxyName, 'leaf');
-    expect(state.testUrl, 'https://last.test');
-    expect(state.group, isTrue);
-  });
+  test(
+    'a deep valid selection chain resolves without using the call stack',
+    () {
+      const count = 10000;
+      final groups = [
+        for (var i = 0; i < count; i++)
+          Group(
+            name: 'g$i',
+            type: GroupType.Selector,
+            testUrl: i == count - 1 ? 'https://last.test' : null,
+            all: [
+              Proxy(name: i == count - 1 ? 'leaf' : 'g${i + 1}', type: 'ss'),
+            ],
+          ),
+      ];
+      final selections = {
+        for (var i = 0; i < count; i++)
+          'g$i': i == count - 1 ? 'leaf' : 'g${i + 1}',
+      };
+      final state = computeRealSelectedProxyState(
+        'g0',
+        groups: groups,
+        selectedMap: selections,
+      );
+      expect(state.proxyName, 'leaf');
+      expect(state.testUrl, 'https://last.test');
+      expect(state.group, isTrue);
+    },
+  );
 }

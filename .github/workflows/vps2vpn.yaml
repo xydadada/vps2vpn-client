@@ -14,7 +14,7 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.50.0'
-  GO_VERSION: '1.27.1'
+  GO_VERSION: '1.27.4'
 
 jobs:
   windows:
@@ -70,6 +70,27 @@ jobs:
       - name: Package
         run: dart tool/package.dart windows --env stable -v
 
+      - name: Record build inputs
+        shell: pwsh
+        run: |
+          $modules = @(git submodule status --recursive)
+          $trackedChanges = @(git status --porcelain --untracked-files=no)
+          $ca = Get-FileHash core/Clash.Meta/component/ca/ca-certificates.crt -Algorithm SHA256
+          $artifacts = @(Get-ChildItem dist -File -Recurse | ForEach-Object {
+            @{ path = [IO.Path]::GetRelativePath((Get-Location).Path, $_.FullName); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
+          })
+          $record = @{
+            source_commit = (git rev-parse HEAD)
+            submodules = $modules
+            tracked_changes = $trackedChanges
+            go = (go version)
+            rust = (rustc --version)
+            flutter = ((flutter --version --machine) | ConvertFrom-Json)
+            ca_bundle_sha256 = $ca.Hash
+            artifacts = $artifacts
+          }
+          $record | ConvertTo-Json -Depth 8 | Set-Content dist/build-inputs.json -Encoding utf8
+
       - name: Name the installer for the panel
         shell: pwsh
         run: |
@@ -95,6 +116,7 @@ jobs:
           path: |
             release
             dist/*.zip
+            dist/build-inputs.json
           if-no-files-found: ignore
 
       - name: Upload end-to-end results

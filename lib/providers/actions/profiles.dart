@@ -40,6 +40,7 @@ class ProfilesAction extends _$ProfilesAction {
 
   Future<void> deleteProfile(int id) async {
     _updates.remove(id);
+    cancelProfileWrite(id);
     await ref.read(profilesProvider.notifier).del(id);
     await clearEffect(id);
     final currentProfileId = ref.read(currentProfileIdProvider);
@@ -81,6 +82,7 @@ class ProfilesAction extends _$ProfilesAction {
 
   void putProfile(Profile profile) {
     _updates.remove(profile.id);
+    cancelProfileWrite(profile.id);
     ref.read(profilesProvider.notifier).put(profile);
     if (ref.read(currentProfileIdProvider) != null) return;
     ref.read(currentProfileIdProvider.notifier).value = profile.id;
@@ -205,6 +207,82 @@ class ProfilesAction extends _$ProfilesAction {
       return true;
     } catch (_) {
       if (claim.isCurrent()) rethrow;
+      return false;
+    } finally {
+      claim.release();
+    }
+  }
+
+  void renameProfile(int id, String label) {
+    if (!ref.mounted) return;
+    final latest = ref.read(profilesProvider).getProfile(id);
+    if (latest != null) putProfile(latest.copyWith(label: label));
+  }
+
+  Future<bool> saveProfileEdit(
+    Profile original,
+    Profile edited, {
+    Uint8List? bytes,
+    Future<void> Function()? beforeRefresh,
+    bool Function()? canCommit,
+  }) async {
+    if (original.id != edited.id || original.type != edited.type) return false;
+    final claim = _claimProfileWrite(original);
+    bool current() => claim.isCurrent() && canCommit?.call() != false;
+    Profile merge(Profile latest) => latest.copyWith(
+      label: latest.label == original.label ? edited.label : latest.label,
+      url: edited.url,
+      ageSecretKey: edited.ageSecretKey,
+      autoUpdate: latest.autoUpdate == original.autoUpdate
+          ? edited.autoUpdate
+          : latest.autoUpdate,
+      autoUpdateDuration:
+          latest.autoUpdateDuration == original.autoUpdateDuration
+          ? edited.autoUpdateDuration
+          : latest.autoUpdateDuration,
+    );
+
+    try {
+      if (!current()) return false;
+      final needsRefresh =
+          edited.type == ProfileType.url &&
+          (edited.url != original.url ||
+              edited.ageSecretKey != original.ageSecretKey);
+      Profile? saved;
+      if (bytes != null) {
+        saved = await edited.saveFile(
+          bytes,
+          validate: (path, key) => _core.validateProfile(path, key),
+          shouldCommit: current,
+        );
+      } else if (needsRefresh) {
+        await beforeRefresh?.call();
+        if (!current()) return false;
+        saved = await edited.update(
+          validate: (path, key) => _core.validateProfile(path, key),
+          shouldCommit: current,
+        );
+      }
+      if (!current()) return false;
+      final latest = ref.read(profilesProvider).getProfile(original.id)!;
+      var result = merge(latest);
+      if (saved != null) {
+        result = result.copyWith(
+          lastUpdateDate: saved.lastUpdateDate,
+          subscriptionInfo: needsRefresh
+              ? saved.subscriptionInfo
+              : latest.subscriptionInfo,
+        );
+      }
+      ref.read(profilesProvider.notifier).put(result);
+      if (saved != null && ref.read(currentProfileIdProvider) == original.id) {
+        ref
+            .read(setupActionProvider.notifier)
+            .applyProfileDebounce(silence: true);
+      }
+      return true;
+    } catch (_) {
+      if (current()) rethrow;
       return false;
     } finally {
       claim.release();
@@ -552,12 +630,9 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   Future<void> clearEffect(int profileId) async {
+    cancelProfileWrite(profileId);
     final profilePath = await appPath.getProfilePath(profileId.toString());
-    final profileFile = File(profilePath);
-    final isExists = await profileFile.exists();
-    if (isExists) {
-      await profileFile.safeDelete(recursive: true);
-    }
+    await safeDeletePath(profilePath);
     try {
       await _core.clearEffect(profileId);
     } catch (error) {

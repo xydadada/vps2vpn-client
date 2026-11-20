@@ -80,18 +80,29 @@ fn stop_locked() -> bool {
 /// Clears a `127.0.0.1:<port>` proxy or PAC URL that nothing listens behind. The
 /// installer and uninstaller call it after killing the app, whose exit path is
 /// what normally turns the system proxy off.
-fn clear_stale() -> bool {
+fn clear_stale() -> Result<usize, ()> {
     let _settings = lock_settings();
     let mut released = HashMap::new();
-    let cleared =
-        for_each_connection(|connection| clear_stale_for_connection(connection, &mut released));
-    let notified = notify_settings_changed();
-    cleared && notified
+    let mut count = 0;
+    let cleared = for_each_connection(|connection| {
+        clear_stale_for_connection(connection, &mut released, &mut count)
+    });
+    let notified = count == 0 || notify_settings_changed();
+    if cleared && notified {
+        Ok(count)
+    } else {
+        Err(())
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn flclash_clear_stale_proxy() -> bool {
-    clear_stale()
+    clear_stale().is_ok()
+}
+
+#[no_mangle]
+pub extern "C" fn flclash_clear_stale_proxy_count() -> i32 {
+    clear_stale().map_or(-1, |count| count as i32)
 }
 
 fn lock_settings() -> MutexGuard<'static, ()> {
@@ -144,9 +155,43 @@ fn set_options(connection: PWSTR, options: &mut [INTERNET_PER_CONN_OPTIONW]) -> 
 }
 
 fn apply_to_connections(options: &mut [INTERNET_PER_CONN_OPTIONW]) -> bool {
-    let applied = for_each_connection(|connection| set_options(connection, options));
-    let notified = notify_settings_changed();
+    let mut changed = false;
+    let applied = for_each_connection(|connection| {
+        if options_match(connection, options) {
+            return true;
+        }
+        changed = true;
+        set_options(connection, options)
+    });
+    let notified = !changed || notify_settings_changed();
     applied && notified
+}
+
+fn options_match(connection: PWSTR, expected: &[INTERNET_PER_CONN_OPTIONW]) -> bool {
+    let mut actual: Vec<_> = expected
+        .iter()
+        .map(|option| string_option(option.dwOption, null_mut()))
+        .collect();
+    let mut list = option_list(connection, &mut actual);
+    let mut size = size_of::<INTERNET_PER_CONN_OPTION_LISTW>() as u32;
+    let queried = unsafe {
+        InternetQueryOptionW(
+            null(),
+            INTERNET_OPTION_PER_CONNECTION_OPTION,
+            (&mut list as *mut INTERNET_PER_CONN_OPTION_LISTW).cast(),
+            &mut size,
+        ) != 0
+    };
+    let mut matches = queried;
+    for (actual, expected) in actual.iter().zip(expected) {
+        if actual.dwOption == INTERNET_PER_CONN_FLAGS {
+            matches &= unsafe { actual.Value.dwValue == expected.Value.dwValue };
+        } else {
+            let value = unsafe { take_global_string(actual.Value.pszValue) };
+            matches &= value == unsafe { read_wide_string(expected.Value.pszValue) };
+        }
+    }
+    matches
 }
 
 fn notify_settings_changed() -> bool {
@@ -189,7 +234,11 @@ fn for_each_connection(mut visit: impl FnMut(PWSTR) -> bool) -> bool {
     success
 }
 
-fn clear_stale_for_connection(connection: PWSTR, released: &mut HashMap<u16, bool>) -> bool {
+fn clear_stale_for_connection(
+    connection: PWSTR,
+    released: &mut HashMap<u16, bool>,
+    count: &mut usize,
+) -> bool {
     let mut options = [
         flags_option(0),
         string_option(INTERNET_PER_CONN_PROXY_SERVER, null_mut()),
@@ -228,10 +277,22 @@ fn clear_stale_for_connection(connection: PWSTR, released: &mut HashMap<u16, boo
     if cleared == flags {
         return true;
     }
-    set_options(connection, &mut [flags_option(cleared | PROXY_TYPE_DIRECT)])
+    let changed = set_options(connection, &mut [flags_option(cleared | PROXY_TYPE_DIRECT)]);
+    if changed {
+        *count += 1;
+    }
+    changed
 }
 
 unsafe fn take_global_string(value: PWSTR) -> String {
+    let text = read_wide_string(value);
+    if !value.is_null() {
+        GlobalFree(value.cast());
+    }
+    text
+}
+
+unsafe fn read_wide_string(value: PWSTR) -> String {
     if value.is_null() {
         return String::new();
     }
@@ -239,9 +300,7 @@ unsafe fn take_global_string(value: PWSTR) -> String {
     while *value.add(len) != 0 {
         len += 1;
     }
-    let text = String::from_utf16_lossy(std::slice::from_raw_parts(value, len));
-    GlobalFree(value.cast());
-    text
+    String::from_utf16_lossy(std::slice::from_raw_parts(value, len))
 }
 
 /// `taskkill /f` returns once TerminateProcess has been issued, which is

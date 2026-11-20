@@ -112,7 +112,11 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '代理模式', 'Proxy mode'),
-                        style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(
+                          context,
+                          size: 14.5,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -149,7 +153,11 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '接管方式', 'Takeover'),
-                        style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(
+                          context,
+                          size: 14.5,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -785,10 +793,10 @@ class _Stats extends ConsumerWidget {
     }
     final expireDate = sub?.expireDate;
     if (expireDate != null) {
-      final days = expireDate.difference(DateTime.now()).inDays;
-      expire = days >= 0
-          ? tr(context, '还剩 $days 天', '$days days left')
-          : tr(context, '已到期', 'Expired');
+      final diff = expireDate.difference(DateTime.now());
+      expire = diff.isNegative
+          ? tr(context, '已到期', 'Expired')
+          : tr(context, '还剩 ${diff.inDays} 天', '${diff.inDays} days left');
     }
     final p = VpsPalette.of(context);
     final groups = ref.watch(currentGroupsStateProvider).value;
@@ -837,6 +845,7 @@ class _Stats extends ConsumerWidget {
           label: tr(context, '当前延迟', 'Latency'),
           value: switch (latency) {
             null => '—',
+            0 => '…',
             < 0 => tr(context, '超时', 'Timeout'),
             final d => '$d ms',
           },
@@ -1097,7 +1106,11 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                   children: [
                     Text(
                       tr(context, 'AI 服务可用性', 'AI availability'),
-                      style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(
+                        context,
+                        size: 14.5,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     Text(
                       ref.watch(isStartProvider)

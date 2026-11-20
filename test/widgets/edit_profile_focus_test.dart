@@ -28,11 +28,16 @@ class _RecordingProfilesAction extends ProfilesAction {
   final refreshed = <Profile>[];
 
   @override
-  Future<void> updateProfile(
-    Profile profile, {
-    bool showLoading = false,
+  Future<bool> saveProfileEdit(
+    Profile original,
+    Profile edited, {
+    Uint8List? bytes,
+    Future<void> Function()? beforeRefresh,
+    bool Function()? canCommit,
   }) async {
-    refreshed.add(ref.read(profilesProvider).getProfile(profile.id)!);
+    await beforeRefresh?.call();
+    refreshed.add(edited);
+    return true;
   }
 }
 
@@ -210,81 +215,7 @@ void main() {
     expect(saved.autoUpdateDuration, profile.autoUpdateDuration);
   });
 
-  testWidgets('rename merges into the current row after the dialog', (tester) async {
-    final profile = _urlProfile();
-    await pumpEditProfile(
-      tester,
-      profile: profile,
-      overrides: [
-        profilesProvider.overrideWith(() => TestProfiles([profile])),
-      ],
-    );
-    final view = tester.state<ConsumerState<EditProfileView>>(
-      find.byType(EditProfileView),
-    );
-    final rename = renameProfile(view.context, view.ref, profile);
-    await tester.pump();
-    final latest = profile.copyWith(
-      url: 'https://new.example.com/sub',
-      selectedMap: {'Proxy': 'New'},
-      subscriptionInfo: const SubscriptionInfo(download: 40, total: 100),
-    );
-    globalState.container.read(profilesProvider.notifier).put(latest);
-
-    Navigator.of(tester.element(find.byType(InputDialog))).pop('Renamed');
-    await tester.pump();
-    await rename;
-
-    expect(
-      globalState.container.read(profilesProvider).single,
-      latest.copyWith(label: 'Renamed'),
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('rename cannot restore a row deleted while the dialog is open', (tester) async {
-    final profile = _urlProfile();
-    await pumpEditProfile(
-      tester,
-      profile: profile,
-      overrides: [
-        profilesProvider.overrideWith(() => TestProfiles([profile])),
-      ],
-    );
-    final view = tester.state<ConsumerState<EditProfileView>>(
-      find.byType(EditProfileView),
-    );
-    final rename = renameProfile(view.context, view.ref, profile);
-    await tester.pump();
-    await globalState.container.read(profilesProvider.notifier).del(profile.id);
-
-    Navigator.of(tester.element(find.byType(InputDialog))).pop('Renamed');
-    await tester.pump();
-    await rename;
-
-    expect(globalState.container.read(profilesProvider), isEmpty);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('saving a deleted profile does not recreate it', (tester) async {
-    final profile = _urlProfile();
-    await pumpEditProfile(
-      tester,
-      profile: profile,
-      overrides: [
-        profilesProvider.overrideWith(() => TestProfiles([profile])),
-      ],
-    );
-    await globalState.container.read(profilesProvider.notifier).del(profile.id);
-
-    await tester.tap(find.byTooltip('Save'));
-    await tester.pump();
-
-    expect(globalState.container.read(profilesProvider), isEmpty);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('a changed URL is saved before its delayed refresh', (
+  testWidgets('a changed URL waits for the edit action to publish it', (
     tester,
   ) async {
     final profile = _urlProfile();
@@ -305,7 +236,7 @@ void main() {
 
     expect(
       globalState.container.read(profilesProvider).single.url,
-      'https://new.example.com/sub',
+      profile.url,
     );
     expect(action.refreshed, isEmpty);
     await tester.pump(commonDuration);

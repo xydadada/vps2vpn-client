@@ -145,27 +145,6 @@ void main() {
 
   Finder label(String text) => find.text(text, findRichText: true);
 
-  testWidgets('extreme usage and expiry cannot wrap or crash the dashboard',
-      (tester) async {
-    const largest = 9223372036854775807;
-    setUpProfiles([
-      _profile(
-        1,
-        type: ProfileType.url,
-        info: const SubscriptionInfo(
-          upload: largest,
-          download: largest,
-          total: largest,
-          expire: largest,
-        ),
-      ),
-    ]);
-    await pumpDesktopCard(tester);
-    expect(find.textContaining('100%', findRichText: true), findsOneWidget);
-    expect(find.text('Remote'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('offers to add a profile without profiles', (tester) async {
     setUpProfiles([]);
     await pumpCard(tester);
@@ -200,6 +179,26 @@ void main() {
     expect(find.textContaining('42%', findRichText: true), findsOneWidget);
     expect(find.text('42 GB / 100 GB'), findsOneWidget);
     expect(find.textContaining('30 days left'), findsOneWidget);
+  });
+
+  testWidgets('invalid expiry and huge usage do not break the card', (
+    tester,
+  ) async {
+    setUpProfiles([
+      _profile(
+        1,
+        info: const SubscriptionInfo(
+          upload: 9223372036854775807,
+          download: 1,
+          total: 100,
+          expire: 8640000000001,
+        ),
+      ),
+    ]);
+    await pumpDesktopCard(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text(currentAppLocalizations.unknown), findsOneWidget);
+    expect(find.textContaining('100%', findRichText: true), findsOneWidget);
   });
 
   testWidgets('the desktop card puts the days left beside its update time', (

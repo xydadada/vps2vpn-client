@@ -39,13 +39,20 @@ class VpsServersPage extends ConsumerStatefulWidget {
   ConsumerState<VpsServersPage> createState() => _VpsServersPageState();
 }
 
-/// Groups already speed-tested since the app started, so opening the page
-/// again does not fire another round of probes.
 final _autoTested = <String>{};
+int? _autoTestedProfile;
 
-/// Speed-tests [group] once per app session, after the current frame.
+void _syncAutoTestProfile(WidgetRef ref) {
+  final pid = ref.read(currentProfileProvider)?.id;
+  if (_autoTestedProfile != pid) {
+    _autoTestedProfile = pid;
+    _autoTested.clear();
+  }
+}
+
 void vpsAutoTestOnce(WidgetRef ref, Group group) {
   if (group.name.isEmpty || group.all.isEmpty) return;
+  _syncAutoTestProfile(ref);
   if (!_autoTested.add(group.name)) return;
   final context = ref.context;
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -78,6 +85,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
 
   void _autoTest(Group group) {
     if (group.name.isEmpty || group.all.isEmpty) return;
+    _syncAutoTestProfile(ref);
     if (!_autoTested.add(group.name)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -287,6 +295,7 @@ class _GroupTab extends StatelessWidget {
     final p = VpsPalette.of(context);
     return VpsPressable(
       onTap: onTap,
+      selected: selected,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -346,6 +355,7 @@ class _ProxyCard extends ConsumerWidget {
     return VpsCard(
       onTap: onTap,
       highlight: selected,
+      selected: selected,
       radius: 14,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
@@ -375,7 +385,11 @@ class _ProxyCard extends ConsumerWidget {
                         friendlyLineName(context, proxy.name),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: vpsText(context, size: 14, weight: FontWeight.w600),
+                        style: vpsText(
+                          context,
+                          size: 14,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     if (fastest) ...[

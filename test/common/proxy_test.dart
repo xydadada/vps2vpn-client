@@ -114,4 +114,43 @@ void main() {
 
     expect(proxy.calls, ['start 7890', 'stop', 'stop']);
   });
+
+  test('a delayed refresh cannot revive a newer stop', () async {
+    final proxy = _FakeProxy();
+    final queue = SystemProxyQueue(proxy);
+    final inFlight = Completer<bool>();
+    proxy.held = inFlight.future;
+    unawaited(queue.apply(_state(isStart: true)));
+    await pumpEventQueue();
+    final refresh = queue.refresh(isCurrent: () => true);
+    final stopped = queue.apply(_state(isStart: false));
+    inFlight.complete(true);
+    await Future.wait([refresh, stopped]);
+    expect(proxy.calls, ['start 7890', 'stop']);
+  });
+
+  test('refresh checks authorization when its turn arrives', () async {
+    final proxy = _FakeProxy();
+    final queue = SystemProxyQueue(proxy);
+    final inFlight = Completer<bool>();
+    proxy.held = inFlight.future;
+    unawaited(queue.apply(_state(isStart: true)));
+    await pumpEventQueue();
+    var allowed = true;
+    final refresh = queue.refresh(isCurrent: () => allowed);
+    allowed = false;
+    inFlight.complete(true);
+    await refresh;
+    expect(proxy.calls, ['start 7890']);
+  });
+
+  test('refresh cannot start a closed or never configured queue', () async {
+    final proxy = _FakeProxy();
+    final queue = SystemProxyQueue(proxy);
+    await queue.refresh(isCurrent: () => true);
+    await queue.apply(_state(isStart: true));
+    await queue.close();
+    await queue.refresh(isCurrent: () => true);
+    expect(proxy.calls, ['start 7890', 'stop']);
+  });
 }

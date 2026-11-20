@@ -307,6 +307,8 @@ hooks:
     expect(spec, contains('\nRelease: 2026111612%{?dist}\n'));
     expect(spec, contains('\nBuildArch: aarch64'));
     expect(spec, contains('\n%postun\nupdate-mime-database'));
+    expect(spec, contains('%attr(0644, root, root)'));
+    expect(spec, isNot(contains('%attr(4755,')));
   });
 
   test('the deb postrm removes the launcher link even when it is gone', () {
@@ -335,6 +337,10 @@ hooks:
     expect(
       appImageDesktopEntry(context, context.makeConfig('appimage')),
       contains(wmClass),
+    );
+    expect(
+      appImageDesktopEntry(context, context.makeConfig('appimage')),
+      contains('\nExec=${context.linuxBinaryName} %u\n'),
     );
   });
 
@@ -465,6 +471,67 @@ hooks:
       );
 
       expect(() => writeManifest(dir, [rs, dev]), throwsA(isA<PackageError>()));
+    });
+
+    test('rejects manifest path traversal before copying artifacts', () async {
+      final dir = p.join(temp.path, 'input');
+      final out = p.join(temp.path, 'output', 'nested');
+      final entry = await artifact(
+        dir,
+        ReleaseOs.linux,
+        ReleaseArch.amd64,
+        'deb',
+      );
+      File(p.join(dir, entry.name)).copySync(p.join(temp.path, 'victim'));
+      final victim = File(p.join(temp.path, 'output', 'victim'));
+      victim.parent.createSync(recursive: true);
+      victim.writeAsStringSync('preserve');
+      for (final name in [
+        '../victim',
+        r'..\victim',
+        p.join(temp.path, 'victim'),
+        r'C:\victim',
+        '.',
+        'artifact\nname',
+        manifestName,
+        'MANIFEST.JSON',
+        'artifact.',
+        releaseChecksumsName(entry.line, entry.version),
+      ]) {
+        File(p.join(dir, manifestName)).writeAsStringSync(
+          jsonEncode({
+            'artifacts': [
+              {...entry.toJson(), 'name': name},
+            ],
+          }),
+        );
+        await expectLater(
+          mergeManifests([dir], out),
+          throwsA(isA<PackageError>()),
+        );
+        expect(victim.readAsStringSync(), 'preserve');
+      }
+    });
+
+    test('rejects a manifest with a valid hash but incorrect size', () async {
+      final dir = p.join(temp.path, 'input');
+      final entry = await artifact(
+        dir,
+        ReleaseOs.linux,
+        ReleaseArch.amd64,
+        'deb',
+      );
+      File(p.join(dir, manifestName)).writeAsStringSync(
+        jsonEncode({
+          'artifacts': [
+            {...entry.toJson(), 'size': entry.size + 1},
+          ],
+        }),
+      );
+      await expectLater(
+        mergeManifests([dir], p.join(temp.path, 'output')),
+        throwsA(isA<PackageError>()),
+      );
     });
   });
 }

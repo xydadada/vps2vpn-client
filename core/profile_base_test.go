@@ -543,3 +543,53 @@ func TestHandleGetProfileOutboundsReturnsOnlyExplicitCertificatePins(t *testing.
 		t.Fatalf("pins = %v, want %v", outbounds.TLSFingerprints, want)
 	}
 }
+
+func TestRejectedProfileDoesNotReplaceTheLastConfig(t *testing.T) {
+	path := writeBaseProfile(t, "rules:\n  - MATCH,missing-proxy\n")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	previous := []byte("rules:\n  - MATCH,DIRECT\n")
+	if err := os.WriteFile(configPath, previous, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfigWithBase(&SetupBase{Path: path, Overlay: "{}"}, configPath); err == nil {
+		t.Fatal("invalid outbound accepted")
+	}
+	actual, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(actual, previous) {
+		t.Fatalf("rejected profile replaced the previous config: %s", actual)
+	}
+}
+
+func TestWriteDocumentPreservesRepeatedLargeAlias(t *testing.T) {
+	var text strings.Builder
+	text.WriteString("x-shared: &shared\n")
+	for i := 0; i < encodeSliceLength+1; i++ {
+		fmt.Fprintf(&text, "  - DOMAIN,example-%d.test,DIRECT\n", i)
+	}
+	text.WriteString("rules: *shared\n")
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(text.String()), &document); err != nil {
+		t.Fatal(err)
+	}
+	path, err := writeDocumentFile(t.TempDir(), "*.yaml", &document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Shared []string `yaml:"x-shared"`
+		Rules  []string `yaml:"rules"`
+	}
+	if err := yaml.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Shared) != encodeSliceLength+1 || !reflect.DeepEqual(result.Shared, result.Rules) {
+		t.Fatalf("shared sequences changed: %d shared values, %d rules", len(result.Shared), len(result.Rules))
+	}
+}

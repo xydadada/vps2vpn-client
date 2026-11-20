@@ -32,17 +32,15 @@ Finder _texts() => find.descendant(
 const _gb = 1024 * 1024 * 1024;
 
 void main() {
-  testWidgets('invalid and huge quotas do not break the account card', (tester) async {
+  testWidgets('invalid and huge quotas do not break the account card', (
+    tester,
+  ) async {
     for (final quota in [double.nan, double.infinity, -1.0, 1e308]) {
       await _pump(
         tester,
         const VpsAccountCard(),
         VpsMemberResult(
-          member: VpsMember(
-            name: 'Boundary',
-            enabled: true,
-            quotaGb: quota,
-          ),
+          member: VpsMember(name: 'Boundary', enabled: true, quotaGb: quota),
         ),
       );
       expect(tester.takeException(), isNull);
@@ -50,7 +48,9 @@ void main() {
     }
   });
 
-  testWidgets('large usage remains positive and fills the quota', (tester) async {
+  testWidgets('large usage remains positive and fills the quota', (
+    tester,
+  ) async {
     await _pump(
       tester,
       const VpsAccountCard(),

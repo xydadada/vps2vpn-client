@@ -716,10 +716,7 @@ Ads = type=http-response,pattern=$pattern,script-path=${urlOf('/ads.js')}
         '[Script]\nA = type=cron,cronexp="0 * * * *",script-path=a.js\n',
       );
       final snapshot = (await action().consentSnapshot(original.id))!;
-      await action().edit(
-        original,
-        '[General]\ndns-server = 203.0.113.53\n',
-      );
+      await action().edit(original, '[General]\ndns-server = 203.0.113.53\n');
 
       final applied = await action().recordConsent(
         original.id,
@@ -736,24 +733,27 @@ Ads = type=http-response,pattern=$pattern,script-path=${urlOf('/ads.js')}
       expect(current.asksConsent, isTrue);
     });
 
-    test('ordinary database read-back preserves an unchanged consent snapshot', () async {
-      final original = await action().create(
-        '[Script]\nA = type=cron,cronexp="0 * * * *",script-path=a.js\n',
-      );
-      final snapshot = (await action().consentSnapshot(original.id))!;
-      await stored();
+    test(
+      'ordinary database read-back preserves an unchanged consent snapshot',
+      () async {
+        final original = await action().create(
+          '[Script]\nA = type=cron,cronexp="0 * * * *",script-path=a.js\n',
+        );
+        final snapshot = (await action().consentSnapshot(original.id))!;
+        await stored();
 
-      final applied = await action().recordConsent(
-        original.id,
-        asksConsent: snapshot.module.asksConsent,
-        agreed: true,
-        contentVersion: snapshot.version,
-        expected: snapshot.module,
-      );
+        final applied = await action().recordConsent(
+          original.id,
+          asksConsent: snapshot.module.asksConsent,
+          agreed: true,
+          contentVersion: snapshot.version,
+          expected: snapshot.module,
+        );
 
-      expect(applied, isTrue);
-      expect((await stored()).single.accepted, isTrue);
-    });
+        expect(applied, isTrue);
+        expect((await stored()).single.accepted, isTrue);
+      },
+    );
   });
 
   group('overlapping module publications', () {
@@ -773,7 +773,10 @@ Ads = type=http-response,pattern=$pattern,script-path=${urlOf('/ads.js')}
       final current = (await stored()).single;
       expect(current.name, 'New');
       expect(current.url, urlOf('/new.sgmodule'));
-      expect(await (await contentFile(current)).readAsString(), bodies['/new.sgmodule']);
+      expect(
+        await (await contentFile(current)).readAsString(),
+        bodies['/new.sgmodule'],
+      );
     });
 
     test('an older edit cannot replace a newer file and resources', () async {
@@ -809,65 +812,74 @@ Ads = type=http-response,pattern=$pattern,script-path=${urlOf('/ads.js')}
       expect(await files(appPath.mitmResourcesDirPath), isEmpty);
     });
 
-    test('a response arriving after deletion cannot recreate content', () async {
-      bodies = {
-        '/module.sgmodule': '#!name=Original\n[URL Rewrite]\n^https://a - reject\n',
-      };
-      final old = await action().addFromUrl(urlOf('/module.sgmodule'));
-      final entered = Completer<void>();
-      final release = Completer<void>();
-      addTearDown(() {
-        if (!release.isCompleted) release.complete();
-      });
-      serve = (incoming) async {
-        entered.complete();
-        await release.future;
-        incoming.response.write('#!name=Late\n[URL Rewrite]\n^https://b - reject\n');
-        await incoming.response.close();
-      };
-      final pending = action().updateModule(old);
-      await entered.future.timeout(const Duration(seconds: 5));
+    test(
+      'a response arriving after deletion cannot recreate content',
+      () async {
+        bodies = {
+          '/module.sgmodule':
+              '#!name=Original\n[URL Rewrite]\n^https://a - reject\n',
+        };
+        final old = await action().addFromUrl(urlOf('/module.sgmodule'));
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        addTearDown(() {
+          if (!release.isCompleted) release.complete();
+        });
+        serve = (incoming) async {
+          entered.complete();
+          await release.future;
+          incoming.response.write(
+            '#!name=Late\n[URL Rewrite]\n^https://b - reject\n',
+          );
+          await incoming.response.close();
+        };
+        final pending = action().updateModule(old);
+        await entered.future.timeout(const Duration(seconds: 5));
 
-      await action().deleteModule(old);
-      release.complete();
-      await pending;
-      await action().clean();
+        await action().deleteModule(old);
+        release.complete();
+        await pending;
+        await action().clean();
 
-      expect(await stored(), isEmpty);
-      expect(await files(appPath.mitmModulesDirPath), isEmpty);
-    });
+        expect(await stored(), isEmpty);
+        expect(await files(appPath.mitmModulesDirPath), isEmpty);
+      },
+    );
 
-    test('old argument resources cannot publish after a newer argument change', () async {
-      final old = await action().create(
-        '[Argument]\nExtra = switch,false\n'
-        '[URL Rewrite]\n^https://a - reject\n'
-        '[Script]\nExtra = type=http-response,pattern=^https://b,'
-        'script-path=${urlOf('/extra.js')},enable={Extra}\n',
-      );
-      final entered = Completer<void>();
-      final release = Completer<void>();
-      addTearDown(() {
-        if (!release.isCompleted) release.complete();
-      });
-      serve = (incoming) async {
-        entered.complete();
-        await release.future;
-        incoming.response.write(r'$done({})');
-        await incoming.response.close();
-      };
-      final pending = action().setArguments(old, const {'Extra': 'true'});
-      await entered.future.timeout(const Duration(seconds: 5));
+    test(
+      'old argument resources cannot publish after a newer argument change',
+      () async {
+        final old = await action().create(
+          '[Argument]\nExtra = switch,false\n'
+          '[URL Rewrite]\n^https://a - reject\n'
+          '[Script]\nExtra = type=http-response,pattern=^https://b,'
+          'script-path=${urlOf('/extra.js')},enable={Extra}\n',
+        );
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        addTearDown(() {
+          if (!release.isCompleted) release.complete();
+        });
+        serve = (incoming) async {
+          entered.complete();
+          await release.future;
+          incoming.response.write(r'$done({})');
+          await incoming.response.close();
+        };
+        final pending = action().setArguments(old, const {'Extra': 'true'});
+        await entered.future.timeout(const Duration(seconds: 5));
 
-      await action().setArguments(old, const {'Extra': 'false'});
-      release.complete();
-      await pending;
-      await action().clean();
+        await action().setArguments(old, const {'Extra': 'false'});
+        release.complete();
+        await pending;
+        await action().clean();
 
-      final current = (await stored()).single;
-      expect(current.arguments, {'Extra': 'false'});
-      expect(current.resources, isEmpty);
-      expect(await files(appPath.mitmResourcesDirPath), isEmpty);
-    });
+        final current = (await stored()).single;
+        expect(current.arguments, {'Extra': 'false'});
+        expect(current.resources, isEmpty);
+        expect(await files(appPath.mitmResourcesDirPath), isEmpty);
+      },
+    );
   });
 
   test('deleting a module removes its content', () async {

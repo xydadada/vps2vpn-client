@@ -117,6 +117,18 @@ void main() {
     expect(ids(second.trackerInfos), ['b', 'a']);
     expect(second.ranking.ids, ['b', 'a']);
   });
+
+  test('resets its baseline when the system clock moves backwards', () {
+    final ranker = _Ranker();
+    ranker.rank([_tracker('a')], t0);
+    ranker.rank([_tracker('a', download: 1000)], at(1));
+
+    final reset = ranker.rank([_tracker('a', download: 2000)], at(-3599));
+    final resumed = ranker.rank([_tracker('a', download: 5000)], at(-3598));
+
+    expect(reset.single.downloadSpeed, 0);
+    expect(resumed.single.downloadSpeed, 3000);
+  });
 }
 
 class _Ranker {

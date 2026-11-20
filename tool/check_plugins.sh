@@ -11,9 +11,8 @@ endgroup() {
   if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::endgroup::"; fi
 }
 
-shopt -s nullglob
+shopt -s nullglob globstar
 manifests=(plugins/*/pubspec.yaml)
-shopt -u nullglob
 
 if [[ ${#manifests[@]} -eq 0 ]]; then
   echo "no plugin packages found under plugins/" >&2
@@ -25,19 +24,20 @@ tested=0
 
 for manifest in "${manifests[@]}"; do
   package="$(dirname "$manifest")"
+  tests=("$package"/test/**/*_test.dart)
   group "$package"
   (
     cd "$package"
     flutter pub get
     flutter analyze --no-fatal-infos
-    if compgen -G 'test/*_test.dart' > /dev/null; then
+    if ((${#tests[@]})); then
       flutter test --reporter expanded
     else
       echo "no tests in $package"
     fi
   )
   analyzed=$((analyzed + 1))
-  if compgen -G "$package/test/*_test.dart" > /dev/null; then
+  if ((${#tests[@]})); then
     tested=$((tested + 1))
   fi
   endgroup

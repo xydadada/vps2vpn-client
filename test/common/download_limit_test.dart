@@ -123,10 +123,9 @@ void main() {
     );
     var settled = false;
     final outcome = expectLater(
-      request.getFileResponseForUrl(
-        'https://example.invalid/stalled',
-        maxBytes: 4,
-      ).whenComplete(() => settled = true),
+      request
+          .getFileResponseForUrl('https://example.invalid/stalled', maxBytes: 4)
+          .whenComplete(() => settled = true),
       throwsA(
         isA<DioException>().having(
           (error) => error.type,

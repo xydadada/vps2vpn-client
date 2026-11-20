@@ -91,8 +91,9 @@ Future<ProviderContainer> pumpProfiles(
 }
 
 void main() {
-  testWidgets('subscription totals do not wrap at the signed integer limit',
-      (tester) async {
+  testWidgets('subscription totals do not wrap at the signed integer limit', (
+    tester,
+  ) async {
     const largest = 9223372036854775807;
     final profile = urlProfile('large usage').copyWith(
       subscriptionInfo: const SubscriptionInfo(

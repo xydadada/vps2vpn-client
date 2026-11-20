@@ -7,8 +7,10 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/common/yaml"
@@ -48,9 +50,9 @@ func handleCompileRuleSet(params CompileRuleSetParams) (*RuleSetInfo, error) {
 	if !ok {
 		return nil, &MethodError{Code: "invalid_arguments", Message: "invalid rule set name"}
 	}
-	key := "rule-set:" + params.Name
+	key := "rule-set:" + source
 	if !claimUpdate(key) {
-		return nil, &MethodError{Code: "resource_updating", Message: "rule set is already being updated"}
+		return nil, &MethodError{Code: "rule_set_updating", Message: "rule set is already being compiled"}
 	}
 	defer releaseUpdate(key)
 	var buf []byte
@@ -96,27 +98,36 @@ func writeRuleSetFile(path string, buf []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	file, err := os.CreateTemp(filepath.Dir(path), ".rule-set-*")
+	// Always create a fresh file inside the user-owned directory.
+	file, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
 	temp := file.Name()
 	defer os.Remove(temp)
-	if err := file.Chmod(0o644); err != nil {
-		_ = file.Close()
-		return err
+	if err = file.Chmod(0o644); err == nil {
+		_, err = file.Write(buf)
 	}
-	_, err = file.Write(buf)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
 	if err != nil {
 		return err
 	}
-	if err := os.Rename(temp, path); err != nil {
+	if err := renameReplacing(temp, path); err != nil {
 		return err
 	}
+	scheduleReclaimOwnership()
 	return nil
+}
+
+func renameReplacing(temp, path string) error {
+	err := os.Rename(temp, path)
+	for i := 0; err != nil && runtime.GOOS == "windows" && i < 50; i++ {
+		time.Sleep(10 * time.Millisecond)
+		err = os.Rename(temp, path)
+	}
+	return err
 }
 
 func compileRuleSet(buf []byte, allowEmpty bool) (*RuleSetInfo, []byte, error) {

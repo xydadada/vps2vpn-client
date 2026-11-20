@@ -2,7 +2,7 @@ script_template: inno_setup.iss
 app_id: F8EE8064-EE4B-4485-B7D9-5929895B51AB
 app_name: vps2vpn
 publisher: vps2vpn
-publisher_url: https://github.com/chen08209/FlClash
+publisher_url: https://github.com/xydadada/vps2vpn-client
 display_name: vps2vpn
 executable_name: vps2vpn.exe
 setup_icon_file: windows\runner\resources\app_icon.ico

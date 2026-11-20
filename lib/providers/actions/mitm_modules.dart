@@ -121,11 +121,14 @@ class MitmModulesAction extends _$MitmModulesAction {
   }
 
   bool _matchesContentSource(MitmModule? current, MitmModule expected) {
-    if (current == null || current.id != expected.id || current.url != expected.url) {
+    if (current == null ||
+        current.id != expected.id ||
+        current.url != expected.url) {
       return false;
     }
     bool sameMap(Map<String, String> a, Map<String, String> b) =>
-        a.length == b.length && a.entries.every((entry) => b[entry.key] == entry.value);
+        a.length == b.length &&
+        a.entries.every((entry) => b[entry.key] == entry.value);
     return sameMap(current.arguments, expected.arguments) &&
         sameMap(current.resources, expected.resources);
   }

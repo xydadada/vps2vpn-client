@@ -30,9 +30,16 @@ void main() {
     test('rejects an invalid config without touching the saved file', () async {
       final profile = Profile.normal(label: 'p');
       final bytes = Uint8List.fromList(utf8.encode('bad: ['));
+      String? temporaryPath;
 
       await expectLater(
-        profile.saveFile(bytes, validate: (_, _) async => 'invalid config'),
+        profile.saveFile(
+          bytes,
+          validate: (path, _) async {
+            temporaryPath = path;
+            return 'invalid config';
+          },
+        ),
         throwsA(
           isA<MessageException>().having(
             (e) => e.message,
@@ -44,6 +51,25 @@ void main() {
 
       final savedFile = await profile.file;
       expect(await savedFile.length(), 0);
+      expect(await File(temporaryPath!).exists(), isFalse);
+    });
+
+    test('cleans the temporary config when validation throws', () async {
+      final profile = Profile.normal(label: 'p');
+      final failure = StateError('validator failure');
+      String? temporaryPath;
+
+      await expectLater(
+        profile.saveFile(
+          Uint8List.fromList(utf8.encode('proxies: []')),
+          validate: (path, _) async {
+            temporaryPath = path;
+            throw failure;
+          },
+        ),
+        throwsA(same(failure)),
+      );
+      expect(await File(temporaryPath!).exists(), isFalse);
     });
 
     test('copies validated bytes and stamps the update time', () async {

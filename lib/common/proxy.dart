@@ -40,10 +40,12 @@ class SystemProxyQueue {
   Future<void> _tail = Future.value();
   bool _closed = false;
   bool _applied = false;
+  ProxyState? _desired;
 
   SystemProxyQueue(this._proxy);
 
   Future<void> apply(ProxyState state) {
+    _desired = state;
     return _enqueue(() async {
       if (_closed) {
         return;
@@ -59,6 +61,23 @@ class SystemProxyQueue {
         }
       } else {
         await _stop();
+      }
+    });
+  }
+
+  Future<void> refresh({required bool Function() isCurrent}) {
+    return _enqueue(() async {
+      final state = _desired;
+      if (_closed ||
+          !isCurrent() ||
+          state == null ||
+          !state.isStart ||
+          !state.systemProxy) {
+        return;
+      }
+      _applied = true;
+      if (!await _proxy.start(state.port, state.bassDomain, state.pacScript)) {
+        _logFailure();
       }
     });
   }

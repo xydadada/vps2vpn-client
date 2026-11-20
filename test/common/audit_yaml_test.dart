@@ -24,7 +24,8 @@ String _aliasDag(int levels, {bool merge = false}) {
 
 void main() {
   test('normal aliases keep independent copies and merge precedence', () {
-    final document = loadPlainYaml('''
+    final document =
+        loadPlainYaml('''
 first: &first
   port: 443
   nested: {values: [first]}
@@ -35,7 +36,8 @@ left:
   <<: [*first, *second]
   port: 8443
 right: *first
-''') as Map<String, Object?>;
+''')
+            as Map<String, Object?>;
 
     final left = document['left']! as Map<String, Object?>;
     final right = document['right']! as Map<String, Object?>;
@@ -137,12 +139,17 @@ right: *first
   });
 
   test('literal editor mode preserves merge keys with independent aliases', () {
-    final document = loadPlainYaml('''
+    final document =
+        loadPlainYaml('''
 base: &base {port: 443}
 target: {<<: *base, port: 8443}
-''', mergeKeys: false) as Map<String, Object?>;
+''', mergeKeys: false)
+            as Map<String, Object?>;
     final target = document['target']! as Map<String, Object?>;
-    expect(target, {'<<': {'port': 443}, 'port': 8443});
+    expect(target, {
+      '<<': {'port': 443},
+      'port': 8443,
+    });
     (target['<<']! as Map<String, Object?>)['port'] = 80;
     expect(document['base'], {'port': 443});
   });
@@ -150,7 +157,9 @@ target: {<<: *base, port: 8443}
   test('proxy group edits reject expansion before converting ignored keys', () {
     const group = ProxyGroup(id: 1, name: 'Kept', type: GroupType.Selector);
     expect(
-      () => group.withDefinitionYaml('name: Edited\ntype: select\n${_aliasDag(24)}'),
+      () => group.withDefinitionYaml(
+        'name: Edited\ntype: select\n${_aliasDag(24)}',
+      ),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,

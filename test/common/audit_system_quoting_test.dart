@@ -16,30 +16,41 @@ void main() {
   ];
 
   for (final path in paths) {
-    test('the elevation command is one escaped AppleScript string: ${jsonEncode(path)}', () {
-      final script = System.macOSElevationScript(path);
-      expect(script, startsWith(prefix));
-      expect(script, endsWith(suffix));
-      final literal = script.substring(prefix.length, script.length - suffix.length);
+    test(
+      'the elevation command is one escaped AppleScript string: ${jsonEncode(path)}',
+      () {
+        final script = System.macOSElevationScript(path);
+        expect(script, startsWith(prefix));
+        expect(script, endsWith(suffix));
+        final literal = script.substring(
+          prefix.length,
+          script.length - suffix.length,
+        );
 
-      // Apple's documented quote, slash and whitespace escapes are a subset
-      // of JSON's string escapes. Decoding must recover the entire shell
-      // command, including its independent POSIX quoting, as one value.
-      expect(jsonDecode(literal), System.macOSElevationShell(path));
-    });
+        // AppleScript decodes these escapes before shell parsing.
+        expect(jsonDecode(literal), System.macOSElevationShell(path));
+      },
+    );
   }
 
-  test('osascript decodes the literal without executing the elevation command', () async {
-    for (final path in paths.where((path) => !path.contains('\r'))) {
-      final script = System.macOSElevationScript(path);
-      final literal = script.substring(prefix.length, script.length - suffix.length);
-      final result = await Process.run('osascript', ['-e', 'return $literal']);
+  test(
+    'osascript decodes the literal without executing the elevation command',
+    () async {
+      for (final path in paths.where((path) => !path.contains('\r'))) {
+        final script = System.macOSElevationScript(path);
+        final literal = script.substring(
+          prefix.length,
+          script.length - suffix.length,
+        );
+        final result = await Process.run('osascript', [
+          '-e',
+          'return $literal',
+        ]);
 
-      expect(result.exitCode, 0, reason: result.stderr.toString());
-      expect(
-        result.stdout,
-        '${System.macOSElevationShell(path)}\n',
-      );
-    }
-  }, skip: !Platform.isMacOS);
+        expect(result.exitCode, 0, reason: result.stderr.toString());
+        expect(result.stdout, '${System.macOSElevationShell(path)}\n');
+      }
+    },
+    skip: !Platform.isMacOS,
+  );
 }

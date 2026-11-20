@@ -11,26 +11,29 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/datetime.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
-import 'package:flutter/foundation.dart';
+import 'package:fl_clash/vps2vpn/line_watch.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+export 'line_watch.dart' show VpsLineHealth;
 
 final _token = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
 
 /// `<sub>/api/` for a vps2vpn subscription link, else null.
 Uri? vpsApiBase(String subUrl) {
   final uri = Uri.tryParse(subUrl.trim());
-  if (uri == null ||
-      uri.host.isEmpty ||
-      !(uri.isScheme('http') || uri.isScheme('https'))) {
+  if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
     return null;
   }
   final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
   if (segs.length != 2 || segs[0] != 's' || !_token.hasMatch(segs[1])) {
     return null;
   }
+  // The member API is served over HTTPS only, on the same host and port,
+  // even when the subscription itself is a plain-HTTP link.
   return Uri(
     scheme: 'https',
     host: uri.host,
@@ -145,6 +148,7 @@ class VpsMember {
     this.usedUp = 0,
     this.usedDown = 0,
     this.quotaGb = 0,
+    this.limited,
     this.expireAt,
     this.ai,
     this.client,
@@ -160,18 +164,23 @@ class VpsMember {
 
   /// What applies after sharing; 0 = unlimited.
   final double quotaGb;
+  final bool? limited;
+
+  bool get isLimited => limited ?? quotaBytes > 0;
   final DateTime? expireAt;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
   double get used => _int(usedUp).toDouble() + _int(usedDown).toDouble();
 
-  /// Zero keeps the existing unlimited/unknown quota presentation. Validate
-  /// here as well as at JSON decoding because callers can construct a member.
+  /// [isLimited] distinguishes an exhausted effective quota from unlimited.
   double get quotaBytes {
     final bytes = quotaGb * (1024 * 1024 * 1024);
     return bytes.isFinite && bytes > 0 ? bytes : 0;
   }
+
+  static bool _positive(Object? value) =>
+      value is num && value.isFinite && value > 0;
 
   static int _int(Object? value) {
     if (value is! num || !value.isFinite || value <= 0) return 0;
@@ -190,6 +199,7 @@ class VpsMember {
       },
       usedUp: _int(json['used_up']),
       usedDown: _int(json['used_down']),
+      limited: _positive(json['quota_gb']) || _positive(quota),
       quotaGb: quota is num && quota.isFinite && quota > 0
           ? quota.toDouble()
           : 0,
@@ -202,11 +212,76 @@ class VpsMember {
 
 /// [member] when the panel answered; [linkChanged] when it said the token
 /// is unknown (rotated or removed), so the user has to import the new link.
+enum VpsPanelProblem { unavailable, httpsRequired, unreachable }
+
 class VpsMemberResult {
-  const VpsMemberResult({this.member, this.linkChanged = false});
+  const VpsMemberResult({this.member, this.linkChanged = false, this.problem});
 
   final VpsMember? member;
   final bool linkChanged;
+  final VpsPanelProblem? problem;
+
+  static VpsMemberResult fromResponse(Uri base, int code, String text) {
+    Object? json;
+    try {
+      json = jsonDecode(text);
+    } on FormatException {
+      json = null;
+    }
+    if (json is Map && json['service'] == 'vps2vpn') {
+      if (base.isScheme('https') &&
+          code == HttpStatus.unauthorized &&
+          json['error'] == 'token_invalid') {
+        return const VpsMemberResult(linkChanged: true);
+      }
+      if (code == HttpStatus.upgradeRequired &&
+          json['error'] == 'https_required') {
+        return const VpsMemberResult(problem: VpsPanelProblem.httpsRequired);
+      }
+    }
+    // The panel answers an unknown token with a plain 404 (no JSON, so the
+    // panel cannot be fingerprinted). Over verified HTTPS that means the
+    // link was rotated or removed.
+    if (base.isScheme('https') && code == HttpStatus.notFound) {
+      return const VpsMemberResult(linkChanged: true);
+    }
+    if (code == HttpStatus.ok &&
+        json is Map<String, Object?> &&
+        json['name'] is String &&
+        json['enabled'] is bool) {
+      return VpsMemberResult(member: VpsMember.fromJson(json));
+    }
+    return VpsMemberResult(
+      problem: code == HttpStatus.notFound || code == HttpStatus.ok
+          ? VpsPanelProblem.unavailable
+          : VpsPanelProblem.unreachable,
+    );
+  }
+}
+
+class VpsRequestScope {
+  final _clients = <HttpClient>{};
+  bool _closed = false;
+
+  bool get closed => _closed;
+
+  void attach(HttpClient client) {
+    if (_closed) {
+      client.close(force: true);
+      throw const HttpException('Panel request cancelled');
+    }
+    _clients.add(client);
+  }
+
+  void detach(HttpClient client) => _clients.remove(client);
+
+  void close() {
+    _closed = true;
+    for (final client in _clients) {
+      client.close(force: true);
+    }
+    _clients.clear();
+  }
 }
 
 HttpClient _client(
@@ -280,6 +355,7 @@ Future<(int, String)> _send(
   int? proxyPort,
   String? proxyCredentials,
   Set<String> certificatePins = const {},
+  VpsRequestScope? scope,
 }) async {
   final client = _client(
     url,
@@ -288,12 +364,13 @@ Future<(int, String)> _send(
     certificatePins: certificatePins,
   );
   try {
+    scope?.attach(client);
     final req = body == null
         ? await client.getUrl(url)
         : await client.postUrl(url);
     req.followRedirects = false;
     if (body != null) {
-      // Keep the small JSON request bounded by an explicit body length.
+      // A fixed length also supports panels predating chunked request handling.
       final bytes = utf8.encode(jsonEncode(body));
       req.headers
         ..set('X-V2V', '1')
@@ -305,6 +382,7 @@ Future<(int, String)> _send(
     final text = await _responseText(res).timeout(const Duration(seconds: 10));
     return (res.statusCode, text);
   } finally {
+    scope?.detach(client);
     client.close(force: true);
   }
 }
@@ -316,25 +394,25 @@ Future<VpsMemberResult?> fetchMember(
   int? proxyPort,
   String? proxyCredentials,
   Set<String> certificatePins = const {},
+  VpsRequestScope? scope,
 }) async {
+  var result = const VpsMemberResult(problem: VpsPanelProblem.unreachable);
   for (final port in [null, ?proxyPort]) {
+    if (scope?.closed == true) return null;
     try {
       final (code, text) = await _send(
         base.resolve('me'),
         proxyPort: port,
         proxyCredentials: proxyCredentials,
         certificatePins: certificatePins,
+        scope: scope,
       );
-      if (code == HttpStatus.notFound) {
-        return const VpsMemberResult(linkChanged: true);
-      }
-      if (code != HttpStatus.ok) continue;
-      final json = jsonDecode(text);
-      if (json is! Map<String, Object?>) continue;
-      return VpsMemberResult(member: VpsMember.fromJson(json));
+      if (scope?.closed == true) return null;
+      result = VpsMemberResult.fromResponse(base, code, text);
+      if (result.member != null || result.linkChanged) return result;
     } catch (_) {}
   }
-  return null;
+  return scope?.closed == true ? null : result;
 }
 
 /// Always direct: the line being reported is the one that is down.
@@ -344,12 +422,14 @@ Future<bool> reportLine(
   required bool ok,
   required String host,
   Set<String> certificatePins = const {},
+  VpsRequestScope? scope,
 }) async {
   try {
     final (code, _) = await _send(
       base.resolve('report'),
       body: {'line': line, 'ok': ok, 'host': host},
       certificatePins: certificatePins,
+      scope: scope,
     );
     return code == HttpStatus.ok;
   } catch (_) {
@@ -365,36 +445,6 @@ String? vpsLineKind(Map<String, dynamic> def) {
     'vless' when def['reality-opts'] != null => 'reality',
     _ => null,
   };
-}
-
-/// One report per change: [threshold] failures in a row → down; the first
-/// success after that → up again. Blips in between say nothing.
-class VpsLineHealth {
-  VpsLineHealth({this.threshold = 3}) : assert(threshold > 0);
-
-  final int threshold;
-  final _fails = <String, int>{};
-  final _down = <String>{};
-
-  /// false = report down, true = report up, null = nothing to say.
-  bool? record(String key, bool ok) {
-    if (ok) {
-      _fails.remove(key);
-      return _down.contains(key) ? true : null;
-    }
-    final n = (_fails[key] ?? 0) + 1;
-    _fails[key] = n < threshold ? n : threshold;
-    if (n >= threshold && !_down.contains(key)) return false;
-    return null;
-  }
-
-  void acknowledge(String key, bool ok) {
-    if (ok) {
-      _down.remove(key);
-    } else {
-      _down.add(key);
-    }
-  }
 }
 
 /// Only pins already stored for this exact subscription host may authenticate
@@ -427,127 +477,138 @@ Future<Set<String>> _profileCertificatePins(
 }
 
 /// The signed-in member for the current subscription, or null when it is
-/// not a vps2vpn link (or the panel did not answer).
+/// not a vps2vpn link.
 final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
   ref,
 ) async {
-  final profile = ref.watch(currentProfileProvider);
-  final base = vpsApiBase(profile?.url ?? '');
+  final (profileId, url, _) = ref.watch(
+    currentProfileProvider.select(
+      (p) => (p?.id, p?.url ?? '', p?.lastUpdateDate),
+    ),
+  );
+  final base = vpsApiBase(url);
   if (base == null) return null;
+  if (!ref.watch(appVisibleProvider)) return null;
   final on = ref.watch(isStartProvider);
-  final port = on ? ref.read(patchClashConfigProvider).mixedPort : null;
+  final port = on
+      ? ref.watch(patchClashConfigProvider.select((p) => p.mixedPort))
+      : null;
   final credentials = ref.watch(
     networkSettingProvider.select((state) => state.authentication.credentials),
   );
-  final keep = ref.keepAlive();
-  // Refresh now and then while someone looks.
-  final timer = Timer(const Duration(minutes: 5), () {
-    keep.close();
-    ref.invalidateSelf();
+  final scope = VpsRequestScope();
+  Timer? timer;
+  var listening = true;
+  var finished = false;
+  var interval = const Duration(minutes: 5);
+  void schedule() {
+    timer?.cancel();
+    if (listening && finished && ref.mounted) {
+      timer = Timer(interval, ref.invalidateSelf);
+    }
+  }
+
+  ref.onCancel(() {
+    listening = false;
+    timer?.cancel();
   });
-  ref.onDispose(timer.cancel);
-  final pins = await _profileCertificatePins(ref, profile!.id, base);
+  ref.onResume(() {
+    listening = true;
+    schedule();
+  });
+  ref.onDispose(() {
+    timer?.cancel();
+    scope.close();
+  });
+  final pins = await _profileCertificatePins(ref, profileId!, base);
   if (!ref.mounted) return null;
-  return fetchMember(
+  final result = await fetchMember(
     base,
     proxyPort: port,
     proxyCredentials: credentials.firstOrNull,
     certificatePins: pins,
+    scope: scope,
   );
+  if (result?.problem == VpsPanelProblem.unreachable) {
+    interval = const Duration(seconds: 30);
+  }
+  finished = true;
+  schedule();
+  return result;
 });
 
-Timer? _watch;
-
-/// While connected, quietly tests each line of the smart group and tells the
-/// panel when one keeps failing (and when it is back), so the owner can move
-/// it to a new port. Never in safe mode or tests.
-void vpsStartLineWatch(Ref ref) {
-  _watch?.cancel();
-  if (safeModeBuild ||
-      ref.read(safeModeProvider) ||
-      Platform.environment.containsKey('FLUTTER_TEST')) {
+final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
+  if (ref.watch(safeModeProvider) ||
+      Platform.environment.containsKey('FLUTTER_TEST') ||
+      !ref.watch(isStartProvider) ||
+      ref.watch(coreStatusProvider) != CoreStatus.connected) {
     return;
   }
-  var busy = false;
-  Uri? subscription;
-  var health = VpsLineHealth();
-  _watch = Timer.periodic(const Duration(minutes: 4), (timer) async {
-    if (!ref.mounted ||
-        ref.read(safeModeProvider) ||
-        !ref.read(isStartProvider)) {
-      timer.cancel();
-      return;
-    }
-    if (busy) return;
-    final base = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
-    if (base != subscription) {
-      subscription = base;
-      health = VpsLineHealth();
-    }
-    if (base == null) return;
-    busy = true;
-    try {
-      await _checkLines(ref, base, timer, health);
-    } finally {
-      busy = false;
-    }
-  });
-  ref.onDispose(_watch!.cancel);
-}
-
-Future<void> _checkLines(
-  Ref ref,
-  Uri base,
-  Timer timer,
-  VpsLineHealth health,
-) async {
-  bool current() =>
-      timer.isActive &&
-      ref.mounted &&
-      !ref.read(safeModeProvider) &&
-      ref.read(isStartProvider) &&
-      vpsApiBase(ref.read(currentProfileProvider)?.url ?? '') == base;
-  if (!current()) return;
-  final controller = ref.read(coreHandlerProvider);
-  final groups = ref.read(groupsProvider);
-  final smart = groups.where((g) => g.name == vpsSmartGroupName).firstOrNull;
-  if (smart == null) return;
-  final profileId = ref.read(currentProfileProvider)?.id;
-  if (profileId == null) return;
-  final pins = await _profileCertificatePins(ref, profileId, base);
-  if (!current()) return;
-  for (final proxy in smart.all) {
-    if (!current()) return;
-    try {
-      final def = await controller.getProxyDefinition(proxy.name);
-      if (!current()) return;
-      if (def == null) continue;
-      final kind = vpsLineKind(def);
-      final host = '${def['server'] ?? ''}';
-      if (kind == null || host.isEmpty) continue;
-      final delay = await controller.testDelay(
+  final (profileId, url, _) = ref.watch(
+    currentProfileProvider.select(
+      (p) => (p?.id, p?.url ?? '', p?.lastUpdateDate),
+    ),
+  );
+  final base = vpsApiBase(url);
+  if (base == null) return;
+  final core = ref.watch(coreHandlerProvider);
+  final scope = VpsRequestScope();
+  final watch = VpsLineWatch(
+    lines: () async {
+      if (!await ref.read(setupActionProvider.notifier).inputsApplied() ||
+          !ref.mounted) {
+        return [];
+      }
+      final smart = ref
+          .read(groupsProvider)
+          .where((g) => g.name == vpsSmartGroupName)
+          .firstOrNull;
+      if (smart == null) return [];
+      final lines = <VpsWatchedLine>[];
+      for (final proxy in smart.all) {
+        final def = await core.getProxyDefinition(proxy.name);
+        if (!ref.mounted) return [];
+        if (def == null) continue;
+        final kind = vpsLineKind(def);
+        final host = '${def['server'] ?? ''}';
+        if (kind == null || host.isEmpty) continue;
+        lines.add(
+          VpsWatchedLine(
+            name: proxy.name,
+            kind: kind,
+            host: host,
+            testUrl: smart.testUrl ?? defaultTestUrl,
+          ),
+        );
+      }
+      return lines;
+    },
+    probe: (line) async {
+      final delay = await core.testDelay(
         TestDelayParams(
-          proxyName: proxy.name,
-          testUrl: smart.testUrl ?? defaultTestUrl,
+          proxyName: line.name,
+          testUrl: line.testUrl,
           timeout: 5000,
         ),
       );
-      if (!current()) return;
-      final ok = (delay.value ?? -1) > 0;
-      final key = '$kind@$host';
-      final change = health.record(key, ok);
-      if (change != null &&
-          await reportLine(
-            base,
-            line: kind,
-            ok: change,
-            host: host,
-            certificatePins: pins,
-          )) {
-        health.acknowledge(key, change);
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('vps2vpn line watch: $e');
-    }
-  }
-}
+      return (delay.value ?? -1) > 0;
+    },
+    report: (line, ok) async {
+      final pins = await _profileCertificatePins(ref, profileId!, base);
+      if (!ref.mounted) return false;
+      return reportLine(
+        base,
+        line: line.kind,
+        ok: ok,
+        host: line.host,
+        certificatePins: pins,
+        scope: scope,
+      );
+    },
+  );
+  ref.onDispose(() {
+    watch.dispose();
+    scope.close();
+  });
+  watch.start();
+});

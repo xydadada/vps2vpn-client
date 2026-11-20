@@ -65,8 +65,8 @@ func TestHandleMethodCallSpillsALargeResultToAFile(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" {
 		info, _ := os.Stat(envelope.File)
-		if info.Mode().Perm() != 0o644 {
-			t.Errorf("mode = %v, want the host to be able to read it", info.Mode().Perm())
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("mode = %v, want only the host owner to be able to read it", info.Mode().Perm())
 		}
 	}
 }

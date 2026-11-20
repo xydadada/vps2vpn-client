@@ -124,6 +124,12 @@ jobs:
       - name: Native bridge tests
         if: ${{ !cancelled() && steps.rust_dependencies.outcome == 'success' }}
         run: cargo test --locked --manifest-path plugins/rust_api/rust/Cargo.toml
+      - name: Windows runner boundary tests
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        run: |
+          cmake -S windows/tests -B build/runner-tests
+          cmake --build build/runner-tests --config Release
+          ctest --test-dir build/runner-tests -C Release --output-on-failure
 
   flutter-static:
     runs-on: ubuntu-24.04
@@ -355,7 +361,10 @@ jobs:
       - name: Install Android native build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang libclang-dev
+          sudo apt-get install -y clang libclang-dev llvm
+          clang_library_dir="$(llvm-config --libdir)"
+          test -f "$clang_library_dir/libclang.so"
+          echo "LIBCLANG_PATH=$clang_library_dir" >> "$GITHUB_ENV"
           rustup toolchain install 1.99.0 --profile minimal
           rustup target add --toolchain 1.99.0 aarch64-linux-android
           test -d "$JAVA_HOME_21_X64"
@@ -415,3 +424,60 @@ jobs:
         if: ${{ !cancelled() && steps.android_dependencies.outcome == 'success' }}
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest :common:testDebugUnitTest :service:testDebugUnitTest -Ptarget-platform=android-arm64
+
+  desktop-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: windows
+          - os: macos-15
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - name: Enable Windows long paths
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Fetch verified CA bundle
+        shell: bash
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+          else
+            echo "$CA_BUNDLE_SHA256  $bundle" | shasum -a 256 -c -
+          fi
+      - name: Build desktop release with normal native hooks
+        run: |
+          flutter pub get
+          flutter build ${{ matrix.platform }} --release -v
+      - name: Package Windows installer
+        if: runner.os == 'Windows'
+        run: dart tool/package.dart windows --env stable -v
+      - name: Windows installation and takeover acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setups = @(Get-ChildItem dist -Filter '*-setup.exe')
+          if ($setups.Count -ne 1) { throw 'Expected exactly one built installer' }
+          ./.github/scripts/takeover-e2e.ps1 -Setup $setups[0].FullName -Out e2e

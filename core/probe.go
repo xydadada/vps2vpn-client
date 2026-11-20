@@ -348,16 +348,19 @@ func runProbe(parent context.Context, req probeRequest) *ProbeResult {
 		result.Chains = route.chains
 	}
 	if req.maxBody > 0 {
-		result.Body = readProbeBody(response.Body, req.maxBody, req.until)
+		result.Body, err = readProbeBody(response.Body, req.maxBody, req.until)
+		if err != nil {
+			return fail(err)
+		}
 	}
 	return result
 }
 
-func readProbeBody(body io.Reader, maxBody int64, until func(string) bool) string {
+func readProbeBody(body io.Reader, maxBody int64, until func(string) bool) (string, error) {
 	limited := io.LimitReader(body, maxBody)
 	if until == nil {
-		payload, _ := io.ReadAll(limited)
-		return string(payload)
+		payload, err := io.ReadAll(limited)
+		return string(payload), err
 	}
 	var buffer bytes.Buffer
 	chunk := make([]byte, probeScanChunk)
@@ -367,12 +370,14 @@ func readProbeBody(body io.Reader, maxBody int64, until func(string) bool) strin
 			start := max(0, buffer.Len()-probeScanOverlap)
 			buffer.Write(chunk[:n])
 			if until(string(buffer.Bytes()[start:])) {
-				break
+				return buffer.String(), nil
 			}
 		}
 		if err != nil {
-			break
+			if errors.Is(err, io.EOF) {
+				return buffer.String(), nil
+			}
+			return buffer.String(), err
 		}
 	}
-	return buffer.String()
 }

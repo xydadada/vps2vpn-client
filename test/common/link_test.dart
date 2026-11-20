@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:fl_clash/common/link.dart';
+import 'package:fl_clash/state.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,6 +42,40 @@ void main() {
     await emit('flclash://install-config?url=https://example.com/a.yaml');
 
     expect(received, ['https://example.com/a.yaml']);
+  });
+
+  test('app link diagnostics omit subscription credentials', () async {
+    final oldPrint = debugPrint;
+    final attached = globalState.isAttach;
+    final messages = <String>[];
+    globalState.isAttach = false;
+    debugPrint = (message, {wrapWidth}) => messages.add(message ?? '');
+    addTearDown(() {
+      debugPrint = oldPrint;
+      globalState.isAttach = attached;
+    });
+    const url =
+        'https://private-user:private-pass@example.invalid/s/'
+        'secret-path-token?token=secret-query-token#secret-fragment';
+    await listen();
+    await emit(
+      Uri(
+        scheme: 'vps2vpn',
+        host: 'install-config',
+        queryParameters: {'url': url},
+      ).toString(),
+    );
+    expect(received, [url]);
+    expect(messages.join(), contains('onAppLink: vps2vpn'));
+    for (final secret in [
+      'private-user',
+      'private-pass',
+      'secret-path-token',
+      'secret-query-token',
+      'secret-fragment',
+    ]) {
+      expect(messages.join(), isNot(contains(secret)));
+    }
   });
 
   test('an install-config link without a url is ignored', () async {

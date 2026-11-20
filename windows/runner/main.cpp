@@ -14,8 +14,14 @@ constexpr char kClearStaleProxyArgument[] = "--clear-stale-proxy";
 
 bool ClearStaleProxy() {
   const auto clear_stale_proxy =
-      RustApiFunction<bool (*)()>("flclash_clear_stale_proxy");
-  return clear_stale_proxy != nullptr && clear_stale_proxy();
+      RustApiFunction<int (*)()>("flclash_clear_stale_proxy_count");
+  if (clear_stale_proxy == nullptr) return false;
+  const int count = clear_stale_proxy();
+  const std::string output = std::to_string(count) + "\n";
+  DWORD written = 0;
+  ::WriteFile(::GetStdHandle(STD_OUTPUT_HANDLE), output.data(),
+              static_cast<DWORD>(output.size()), &written, nullptr);
+  return count >= 0;
 }
 
 HWND FindRunningWindow() {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -123,7 +124,7 @@ func handleServiceCheck(params *ServiceCheckParams) []ServiceCheckItem {
 	}
 
 	timeout := timeoutFromMillis(params.Timeout, defaultProbeTimeout)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout*serviceSweepBudgetFactor)
+	ctx, cancel := context.WithTimeout(context.Background(), min(timeout, time.Duration(math.MaxInt64/serviceSweepBudgetFactor))*serviceSweepBudgetFactor)
 	defer cancel()
 
 	// Claimed before queueing, so a check waiting for a slot is cancelled the

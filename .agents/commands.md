@@ -461,7 +461,7 @@ only once every build and every check job passes.
 
 `bash tool/check_plugins.sh` is that plugin gate, and CI runs the same script.
 It discovers every `plugins/*/pubspec.yaml`, analyzes each package, and runs
-`flutter test` wherever `test/*_test.dart` exists. Adding a plugin package needs
+`flutter test` wherever `test/**/*_test.dart` exists, including nested test folders. Adding a plugin package needs
 no workflow edit.
 
 ### CI Caches

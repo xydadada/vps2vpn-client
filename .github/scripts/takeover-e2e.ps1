@@ -31,7 +31,15 @@ function Shot($proc, $name) {
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $dc = $g.GetHdc(); [W]::PrintWindow($h, $dc, 2) | Out-Null; $g.ReleaseHdc($dc)
   $bmp.Save((Join-Path $Out "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+  $g.Dispose()
+  $bmp.Dispose()
   "screenshot $name.png"
+}
+
+function StopInstalledApp {
+  Get-Process vps2vpn, vps2vpnCore -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($dir + '\', [StringComparison]::OrdinalIgnoreCase) } |
+    Stop-Process -Force
 }
 
 # 1. Install silently.
@@ -54,7 +62,7 @@ $app = Start-Process $exe -PassThru
 Start-Sleep 20
 Shot $app 'first-run'
 $prefs = Join-Path $env:APPDATA 'vps2vpn\vps2vpn\shared_preferences.json'
-Get-Process vps2vpn, vps2vpnCore -ErrorAction SilentlyContinue | Stop-Process -Force
+StopInstalledApp
 Start-Sleep 3
 Check (Test-Path $prefs) 'settings file created on first run'
 
@@ -98,6 +106,8 @@ $newPort = $after.patchClashConfig.'mixed-port'
 Check ($newPort -and [int]$newPort -ne $port -and [int]$newPort -ge 17890 -and [int]$newPort -lt 17990) "moved off the taken port $port (now $newPort)"
 $reg = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 "system proxy: enable=$($reg.ProxyEnable) server=$($reg.ProxyServer)"
+$ownedProxy = '(^|[;=])(?:127\.0\.0\.1|localhost|\[::1\]):' + [regex]::Escape("$newPort") + '(?:;|$)'
+Check ($reg.ProxyEnable -eq 1 -and "$($reg.ProxyServer)" -match $ownedProxy) 'system proxy points to the active mixed port'
 
 # 5. Uninstall. Ending the app by force leaves our system proxy behind, as a
 # crash would; the uninstaller must clear it or the PC loses the internet.
@@ -105,7 +115,7 @@ $reg = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Interne
 $flclashData = Join-Path $env:APPDATA 'com.follow\clash'
 New-Item -ItemType Directory -Force $flclashData | Out-Null
 Set-Content (Join-Path $flclashData 'marker.txt') 'FlClash data'
-Get-Process vps2vpn, vps2vpnCore -ErrorAction SilentlyContinue | Stop-Process -Force
+StopInstalledApp
 Stop-Process -Id $holder.Id -Force -ErrorAction SilentlyContinue
 Start-Sleep 2
 $un = Join-Path $dir 'unins000.exe'
@@ -120,7 +130,7 @@ Check (-not (Get-Process vps2vpn, vps2vpnCore, vps2vpnHelperService -ErrorAction
 Check (-not (Get-Service vps2vpnHelperService -ErrorAction SilentlyContinue)) 'helper service unregistered'
 $reg = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 "system proxy after uninstall: enable=$($reg.ProxyEnable) server=$($reg.ProxyServer)"
-Check (-not ($reg.ProxyEnable -eq 1 -and "$($reg.ProxyServer)" -match ':1?7890')) 'uninstall cleared our system proxy'
+Check (-not ($reg.ProxyEnable -eq 1 -and "$($reg.ProxyServer)" -match $ownedProxy)) 'uninstall cleared our system proxy'
 Check (Test-Path (Join-Path $flclashData 'marker.txt')) "FlClash's data left untouched"
 
 if ($failures.Count) { "`n$($failures.Count) check(s) failed:"; $failures; exit 1 }

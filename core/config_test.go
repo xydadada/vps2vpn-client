@@ -1107,3 +1107,10 @@ func TestControllerRecreationAppliesEachSecretBeforeReturning(t *testing.T) {
 		t.Fatal("disabled controller still accepts connections")
 	}
 }
+
+func TestTimeoutFromMillisDoesNotOverflow(t *testing.T) {
+	const largest = int64(1<<63 - 1)
+	if got := timeoutFromMillis(largest, time.Second); got <= 0 || got > time.Duration(largest) {
+		t.Fatalf("positive timeout overflowed: %v", got)
+	}
+}

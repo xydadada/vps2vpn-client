@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -10,18 +10,35 @@ const MAX_REQUEST_BYTES: usize = 16 * 1024;
 const MAX_CONCURRENT_REQUESTS: usize = 32;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-static SCRIPT: Mutex<String> = Mutex::new(String::new());
-static REVISION: AtomicU64 = AtomicU64::new(0);
+#[derive(Default)]
+struct Script {
+    text: String,
+    revision: u64,
+}
+
+impl Script {
+    fn update(&mut self, text: String) -> u64 {
+        if self.text != text {
+            self.text = text;
+            self.revision = self.revision.wrapping_add(1);
+        }
+        self.revision
+    }
+}
+
+static SCRIPT: Mutex<Script> = Mutex::new(Script {
+    text: String::new(),
+    revision: 0,
+});
 
 /// Serves `script` and returns its URL. The listener stays up for the life of
-/// the process; each call gets a fresh query so systems that cache a PAC file
-/// by URL fetch the new script.
+/// the process; a changed script gets a fresh query to invalidate URL caches.
 pub fn serve(script: String) -> Option<String> {
-    *SCRIPT
+    let revision = SCRIPT
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = script;
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .update(script);
     let address = (*listener_address())?;
-    let revision = REVISION.fetch_add(1, Ordering::SeqCst);
     Some(format!("http://{address}{PAC_PATH}?v={revision}"))
 }
 
@@ -84,6 +101,7 @@ fn respond(mut stream: TcpStream, deadline: Instant) {
     let script = SCRIPT
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .text
         .clone();
     let _ = write_before_deadline(&mut stream, &response(&head, &script), deadline);
 }
@@ -175,7 +193,9 @@ mod tests {
     #[test]
     fn rejects_a_header_that_exceeds_the_size_limit() {
         let (mut server, mut client) = connection();
-        client.write_all(&vec![b'x'; MAX_REQUEST_BYTES + 1]).unwrap();
+        client
+            .write_all(&vec![b'x'; MAX_REQUEST_BYTES + 1])
+            .unwrap();
         assert!(read_head(&mut server, Instant::now() + REQUEST_TIMEOUT).is_none());
     }
 
@@ -241,12 +261,10 @@ mod tests {
         server.set_nonblocking(false).unwrap();
         let payload = vec![b'x'; 16 * 1024 * 1024];
         let started = Instant::now();
-        assert!(write_before_deadline(
-            &mut server,
-            &payload,
-            started + Duration::from_millis(100),
-        )
-        .is_none());
+        assert!(
+            write_before_deadline(&mut server, &payload, started + Duration::from_millis(100),)
+                .is_none()
+        );
         assert!(started.elapsed() < Duration::from_secs(2));
     }
 
@@ -259,6 +277,15 @@ mod tests {
             read_head(&mut server, Instant::now() + REQUEST_TIMEOUT).as_deref(),
             Some(head),
         );
+    }
+
+    #[test]
+    fn unchanged_script_keeps_its_cache_key() {
+        let mut script = Script::default();
+        let first = script.update("one".into());
+        assert_eq!(script.update("one".into()), first);
+        assert_ne!(script.update("two".into()), first);
+        assert_eq!(script.text, "two");
     }
 
     #[test]

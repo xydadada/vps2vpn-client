@@ -433,10 +433,12 @@ void main() {
       expect(decoded.payload.text, text);
     });
 
-    test('text within Latin-1 carries no ECI header', () {
-      final decoded = _Decoded.of(QrMatrix.encode('café')!);
-      expect(decoded.payload.eci, isNull);
-      expect(decoded.payload.text, 'café');
+    test('text within Latin-1 uses the default byte encoding', () {
+      for (final text in ['café', 'Ångström', '£ÿ', '\u0080']) {
+        final decoded = _Decoded.of(QrMatrix.encode(text)!);
+        expect(decoded.payload.eci, isNull);
+        expect(decoded.payload.text, text);
+      }
     });
 
     test('all non-ASCII Latin-1 bytes retain the default interpretation', () {

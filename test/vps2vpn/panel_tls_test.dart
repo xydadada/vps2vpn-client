@@ -92,7 +92,10 @@ void main() {
   );
 
   test('a wrong pin never sends the bearer token request', () async {
-    expect(await fetchMember(base(), certificatePins: {'00' * 32}), isNull);
+    expect(
+      (await fetchMember(base(), certificatePins: {'00' * 32}))?.problem,
+      VpsPanelProblem.unreachable,
+    );
     expect(requests, isEmpty);
   });
 
@@ -103,7 +106,7 @@ void main() {
         () => fetchMember(base()),
         _TrustEverything(),
       );
-      expect(result, isNull);
+      expect(result?.problem, VpsPanelProblem.unreachable);
       expect(requests, isEmpty);
     },
   );
@@ -113,7 +116,7 @@ void main() {
       () => fetchMember(base(), certificatePins: {'00' * 32}),
       _TrustEverything(),
     );
-    expect(result, isNull);
+    expect(result?.problem, VpsPanelProblem.unreachable);
     expect(requests, isEmpty);
   });
 }

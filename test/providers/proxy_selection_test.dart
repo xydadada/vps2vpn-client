@@ -55,13 +55,22 @@ void main() {
         coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
         profilesProvider.overrideWith(
           () => TestProfiles([
-            const Profile(id: 1, selectedMap: {'Proxy': 'Old'}),
-            const Profile(id: 2, selectedMap: {'Proxy': 'Other'}),
+            const Profile(
+              id: 1,
+              autoUpdateDuration: defaultUpdateDuration,
+              selectedMap: {'Proxy': 'Old'},
+            ),
+            const Profile(
+              id: 2,
+              autoUpdateDuration: defaultUpdateDuration,
+              selectedMap: {'Proxy': 'Other'},
+            ),
           ]),
         ),
         currentProfileIdProvider.overrideWithBuild((_, _) => 1),
       ],
     );
+    container.listen(currentProfileIdProvider, (_, _) {});
     action = container.read(proxiesActionProvider.notifier);
   });
 
@@ -74,25 +83,28 @@ void main() {
   String? selected() =>
       container.read(currentProfileProvider)?.selectedMap['Proxy'];
 
-  test('serializes selections and a superseded failure cannot roll back', () async {
-    final first = action.changeProxy(groupName: 'Proxy', proxyName: 'A');
-    await pumpEventQueue();
-    final second = action.changeProxy(groupName: 'Proxy', proxyName: 'B');
-    await pumpEventQueue();
-    expect(sent, ['A']);
-    expect(selected(), 'B');
+  test(
+    'serializes selections and a superseded failure cannot roll back',
+    () async {
+      final first = action.changeProxy(groupName: 'Proxy', proxyName: 'A');
+      await pumpEventQueue();
+      final second = action.changeProxy(groupName: 'Proxy', proxyName: 'B');
+      await pumpEventQueue();
+      expect(sent, ['A']);
+      expect(selected(), 'B');
 
-    replies[0].completeError(StateError('first request failed'));
-    await first;
-    await pumpEventQueue();
-    expect(sent, ['A', 'B']);
-    expect(selected(), 'B');
-    replies[1].complete(const ChangeProxyResult(changed: true));
-    await second;
+      replies[0].completeError(StateError('first request failed'));
+      await first;
+      await pumpEventQueue();
+      expect(sent, ['A', 'B']);
+      expect(selected(), 'B');
+      replies[1].complete(const ChangeProxyResult(changed: true));
+      await second;
 
-    expect(selected(), 'B');
-    expect(container.read(routeTrackerProvider).picks, 1);
-  });
+      expect(selected(), 'B');
+      expect(container.read(routeTrackerProvider).picks, 1);
+    },
+  );
 
   test('a later failure restores the last accepted choice', () async {
     final first = action.changeProxy(groupName: 'Proxy', proxyName: 'A');
@@ -136,18 +148,21 @@ void main() {
     verifyNever(core.resetConnections);
   });
 
-  test('a successful old reply cannot reset another profile connections', () async {
-    final first = action.changeProxy(groupName: 'Proxy', proxyName: 'A');
-    await pumpEventQueue();
-    container.read(currentProfileIdProvider.notifier).value = 2;
-    replies[0].complete(const ChangeProxyResult(changed: true));
-    await first;
+  test(
+    'a successful old reply cannot reset another profile connections',
+    () async {
+      final first = action.changeProxy(groupName: 'Proxy', proxyName: 'A');
+      await pumpEventQueue();
+      container.read(currentProfileIdProvider.notifier).value = 2;
+      replies[0].complete(const ChangeProxyResult(changed: true));
+      await first;
 
-    expect(selected(), 'Other');
-    expect(container.read(routeTrackerProvider).picks, 0);
-    verifyNever(core.closeConnections);
-    verifyNever(core.resetConnections);
-  });
+      expect(selected(), 'Other');
+      expect(container.read(routeTrackerProvider).picks, 0);
+      verifyNever(core.closeConnections);
+      verifyNever(core.resetConnections);
+    },
+  );
 
   testWidgets('changing profiles cancels a queued debounce', (tester) async {
     action.changeProxyDebounce('Proxy', 'A');

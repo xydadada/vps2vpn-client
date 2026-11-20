@@ -82,7 +82,9 @@ void main() {
           widget is Semantics && widget.properties.label == Color(color).hex,
     );
 
-    testWidgets('starts on the vps2vpn coral among the system colors', (tester) async {
+    testWidgets('starts on the vps2vpn coral among the system colors', (
+      tester,
+    ) async {
       container
           .read(themeSettingProvider.notifier)
           .update((_) => defaultThemeProps);

@@ -121,8 +121,9 @@ install(CODE "
     if(NOT helper_src_hash STREQUAL helper_dst_hash)
       message(STATUS \"Stopping the Helper running from \${helper_dst} before installing the Debug build\")
       file(TO_NATIVE_PATH \"\${helper_dst}\" helper_dst_native)
+      string(REPLACE \"'\" \"''\" helper_dst_quoted \"\${helper_dst_native}\")
       execute_process(COMMAND powershell -NoProfile -NonInteractive -Command
-        \"Get-Process -Name vps2vpnHelperService -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '\${helper_dst_native}' } | Stop-Process -Force\"
+        \"Get-Process -Name vps2vpnHelperService -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '\${helper_dst_quoted}' } | Stop-Process -Force\"
         OUTPUT_QUIET ERROR_QUIET)
     endif()
   endif()

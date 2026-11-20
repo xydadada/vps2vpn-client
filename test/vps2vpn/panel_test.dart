@@ -171,31 +171,44 @@ void main() {
     expect(h.record('hy2@a', false), isNull);
     expect(h.record('hy2@a', false), isNull);
     expect(h.record('hy2@a', false), isFalse);
-    h.acknowledge('hy2@a', false);
+    h.complete(h.pending('hy2@a', DateTime.now())!, true, DateTime.now());
     expect(h.record('hy2@a', false), isNull, reason: 'already reported');
     expect(h.record('tuic@a', false), isNull, reason: 'lines are separate');
     expect(h.record('hy2@a', true), isTrue);
-    h.acknowledge('hy2@a', true);
+    h.complete(h.pending('hy2@a', DateTime.now())!, true, DateTime.now());
     expect(h.record('hy2@a', true), isNull);
   });
 
-  test('retries a change until the panel acknowledges it', () {
+  test('retains failed reports until a successful delivery', () {
     final h = VpsLineHealth(threshold: 2);
+    final now = DateTime.utc(2026);
     expect(h.record('hy2@a', false), isNull);
     expect(h.record('hy2@a', false), isFalse);
-    expect(h.record('hy2@a', false), isFalse);
-    h.acknowledge('hy2@a', false);
+    final down = h.pending('hy2@a', now)!;
+    h.complete(down, false, now);
     expect(h.record('hy2@a', false), isNull);
+    expect(h.pending('hy2@a', now), isNull);
+    final retryAt = now.add(const Duration(minutes: 4));
+    expect(h.pending('hy2@a', retryAt), same(down));
+    h.complete(down, true, retryAt);
+    expect(h.pending('hy2@a', retryAt), isNull);
     expect(h.record('hy2@a', true), isTrue);
-    expect(h.record('hy2@a', true), isTrue);
-    h.acknowledge('hy2@a', true);
+    final up = h.pending('hy2@a', retryAt)!;
+    h.complete(up, true, retryAt);
     expect(h.record('hy2@a', true), isNull);
+    expect(h.pending('hy2@a', retryAt), isNull);
   });
 
-  test('does not report recovery for an unacknowledged outage', () {
+  test('recovery replaces an outage whose response may have been lost', () {
     final h = VpsLineHealth(threshold: 1);
+    final now = DateTime.utc(2026);
     expect(h.record('hy2@a', false), isFalse);
-    expect(h.record('hy2@a', true), isNull);
+    final down = h.pending('hy2@a', now)!;
+    expect(h.record('hy2@a', true), isTrue);
+    final up = h.pending('hy2@a', now)!;
+    h.complete(down, true, now);
+    expect(h.pending('hy2@a', now), same(up));
+    expect(up.ok, isTrue);
   });
 
   group('against a local panel', () {
@@ -253,12 +266,12 @@ void main() {
     test('does not follow a redirect into an unrelated 404', () async {
       meStatus = HttpStatus.found;
       redirect = '/login';
-      expect(await fetchMember(base()), isNull);
+      expect((await fetchMember(base()))?.problem, VpsPanelProblem.unreachable);
     });
 
     test('rejects an oversized panel body', () async {
       meBody = jsonEncode({'name': 'a' * (1024 * 1024)});
-      expect(await fetchMember(base()), isNull);
+      expect((await fetchMember(base()))?.problem, VpsPanelProblem.unreachable);
     });
 
     test('authenticates only to the configured fallback proxy', () async {
@@ -278,7 +291,9 @@ void main() {
             );
         } else {
           accepted++;
-          request.response.write(jsonEncode({'name': 'Via proxy'}));
+          request.response.write(
+            jsonEncode({'name': 'Via proxy', 'enabled': true}),
+          );
         }
         await request.response.close();
       });
@@ -291,10 +306,11 @@ void main() {
       expect(accepted, 1);
     });
 
-    test('a 404 means the link was replaced', () async {
+    test('a plain HTTP 404 is not trusted as a rotated link', () async {
       meStatus = HttpStatus.notFound;
       final r = await fetchMember(base());
-      expect(r!.linkChanged, isTrue);
+      expect(r!.linkChanged, isFalse);
+      expect(r.problem, VpsPanelProblem.unavailable);
     });
 
     test('a report carries the header and the line', () async {
@@ -305,5 +321,38 @@ void main() {
       expect(posts.single.$1, '1');
       expect(posts.single.$2, {'line': 'hy2', 'ok': false, 'host': '1.2.3.4'});
     });
+  });
+
+  test('token rotation is only trusted over HTTPS', () {
+    final base = Uri.parse('https://panel.invalid/s/$_tok/api/');
+    final body = jsonEncode({'service': 'vps2vpn', 'error': 'token_invalid'});
+    expect(VpsMemberResult.fromResponse(base, 401, body).linkChanged, isTrue);
+    expect(
+      VpsMemberResult.fromResponse(
+        base.replace(scheme: 'http'),
+        401,
+        body,
+      ).linkChanged,
+      isFalse,
+    );
+    // The panel answers an unknown token with a bare 404.
+    expect(VpsMemberResult.fromResponse(base, 404, '').linkChanged, isTrue);
+    expect(
+      VpsMemberResult.fromResponse(
+        base.replace(scheme: 'http'),
+        404,
+        '',
+      ).linkChanged,
+      isFalse,
+    );
+    final up = jsonEncode({'service': 'vps2vpn', 'error': 'https_required'});
+    expect(
+      VpsMemberResult.fromResponse(
+        base.replace(scheme: 'http'),
+        426,
+        up,
+      ).problem,
+      VpsPanelProblem.httpsRequired,
+    );
   });
 }

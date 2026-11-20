@@ -272,8 +272,8 @@ func TestHandleCompileRuleSetRejectsOverlappingUpdates(t *testing.T) {
 	<-started
 	_, err := handleCompileRuleSet(params)
 	var methodErr *MethodError
-	if !errors.As(err, &methodErr) || methodErr.Code != "resource_updating" {
-		t.Fatalf("overlapping update = %v, want resource_updating", err)
+	if !errors.As(err, &methodErr) || methodErr.Code != "rule_set_updating" {
+		t.Fatalf("overlapping update = %v, want rule_set_updating", err)
 	}
 	if requests.Load() != 1 {
 		t.Fatal("overlapping update reached the server")

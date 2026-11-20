@@ -356,7 +356,11 @@ Set<String> proxyNamesInUse(
   required Iterable<String> dialerTargets,
   required ProfileOverrides overrides,
 }) => names.intersection({
-  for (final group in groups) ...[...?group.proxies, ?group.defaultSelected],
+  for (final group in groups) ...[
+    ...?group.proxies,
+    ?group.defaultSelected,
+    ?group.emptyFallback,
+  ],
   ...ruleTargets,
   ...dialerTargets,
   ...overrides.dnsProxies,

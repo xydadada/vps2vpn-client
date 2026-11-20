@@ -1,5 +1,4 @@
 import 'package:fl_clash/common/constant.dart';
-import 'package:fl_clash/common/datetime.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -545,10 +544,10 @@ extension CoreMemoryStatsExt on CoreMemoryStats {
 SubscriptionInfo? subscriptionInfoFormCore(Map<String, Object?>? json) {
   if (json == null) return null;
   return SubscriptionInfo(
-    upload: (json['Upload'] as num?)?.toInt() ?? 0,
-    download: (json['Download'] as num?)?.toInt() ?? 0,
-    total: (json['Total'] as num?)?.toInt() ?? 0,
-    expire: unixSecondsOrZero(json['Expire']),
+    upload: trafficCounterOrZero(json['Upload']),
+    download: trafficCounterOrZero(json['Download']),
+    total: trafficCounterOrZero(json['Total']),
+    expire: subscriptionExpiryOrUnknown(json['Expire']),
   );
 }
 

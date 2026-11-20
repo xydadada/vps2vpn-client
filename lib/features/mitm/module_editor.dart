@@ -57,7 +57,7 @@ String mitmNetworkChangeValue(
 Future<bool> answerMitmModule(WidgetRef ref, MitmModule module) async {
   final action = ref.read(mitmModulesActionProvider.notifier);
   final snapshot = await action.consentSnapshot(module.id);
-  if (!ref.mounted || snapshot == null) {
+  if (!ref.context.mounted || snapshot == null) {
     return false;
   }
   module = snapshot.module;
@@ -77,7 +77,7 @@ Future<bool> answerMitmModule(WidgetRef ref, MitmModule module) async {
   } finally {
     content.close();
   }
-  if (!ref.mounted) {
+  if (!ref.context.mounted) {
     return false;
   }
   final asksConsent = read?.asksConsent ?? true;
@@ -134,7 +134,7 @@ Future<bool> answerMitmModule(WidgetRef ref, MitmModule module) async {
     ),
     confirmText: appLocalizations.turnOn,
   );
-  if (!ref.mounted || agreed == null) {
+  if (!ref.context.mounted || agreed == null) {
     return false;
   }
   return action.recordConsent(
@@ -147,7 +147,7 @@ Future<bool> answerMitmModule(WidgetRef ref, MitmModule module) async {
 }
 
 Future<void> offerMitmModule(WidgetRef ref, MitmModule? module) async {
-  if (ref.mounted && module != null && module.awaitsConsent) {
+  if (ref.context.mounted && module != null && module.awaitsConsent) {
     await answerMitmModule(ref, module);
   }
 }

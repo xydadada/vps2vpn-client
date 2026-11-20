@@ -1,8 +1,10 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -75,5 +77,17 @@ func TestHandleGetConfigLeavesProfilesWithoutShortIDsToMihomo(t *testing.T) {
 	}
 	if raw.MixedPort != 7899 || raw.Mode.String() == "" {
 		t.Errorf("raw config = port %d mode %q, want 7899 and the default mode", raw.MixedPort, raw.Mode)
+	}
+}
+
+func TestShortIDRetaggingRejectsAliasAmplification(t *testing.T) {
+	var profile strings.Builder
+	profile.WriteString("short-id: 0123\nx0: &v0 [value]\n")
+	for i := 1; i <= 24; i++ {
+		fmt.Fprintf(&profile, "x%d: &v%d [*v%d, *v%d]\n", i, i, i-1, i-1)
+	}
+	profile.WriteString("proxies: *v24\n")
+	if _, err := unmarshalRawConfig([]byte(profile.String())); err == nil || !strings.Contains(err.Error(), "excessive YAML alias expansion") {
+		t.Fatalf("retagging must reject alias amplification before decode: %v", err)
 	}
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -34,6 +35,7 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   late bool _autoUpdate;
   Uint8List? _editedData;
   bool _attempted = false;
+  bool _saving = false;
   final _fileInfoNotifier = ValueNotifier<FileInfo?>(null);
   late SetupAction _setupAction;
   Uint8List? _fileData;
@@ -55,12 +57,14 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   }
 
   Future<void> _updateFileInfo() async {
-    final file = await widget.profile.file;
-    final fileInfo = await file.getFileInfo();
+    final fileInfo = await globalState.safeRun(() async {
+      final path = await appPath.getProfilePath(widget.profile.id.toString());
+      return File(path).getFileInfo();
+    }, silence: true);
     if (!mounted) {
       return;
     }
-    _fileInfoNotifier.value = fileInfo;
+    _fileInfoNotifier.value = fileInfo ?? const FileInfo(size: 0);
   }
 
   ({_ProfileField field, String message})? _issue(
@@ -116,6 +120,7 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   }
 
   Future<void> _handleConfirm() async {
+    if (_saving) return;
     if (_issue(context.appLocalizations) != null) {
       setState(() {
         _attempted = true;
@@ -123,56 +128,53 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
       return;
     }
     final current = ref.read(profilesProvider).getProfile(widget.profile.id);
-    if (current == null) {
-      return;
-    }
-    final interval = int.tryParse(_autoUpdateDurationController.text);
-    var profile = current.copyWith(
-      url: _urlController.text,
-      ageSecretKey: _ageSecretKeyController.text.trim(),
-      label: _labelController.text,
-      autoUpdate: _autoUpdate,
-      autoUpdateDuration: interval != null && interval > 0
-          ? Duration(minutes: interval)
-          : current.autoUpdateDuration,
-    );
-    final profilesAction = ref.read(profilesActionProvider.notifier);
-    final appLocalizations = context.appLocalizations;
-    final hasUpdate =
-        current.url != profile.url ||
-        current.ageSecretKey != profile.ageSecretKey;
-    if (_fileData != null) {
-      if (profile.type == ProfileType.url && _autoUpdate) {
-        final res = await dialogs.showMessage(
-          title: appLocalizations.tip,
-          message: TextSpan(text: appLocalizations.profileHasUpdate),
+    if (current == null) return;
+    _saving = true;
+    try {
+      final interval = int.tryParse(_autoUpdateDurationController.text);
+      var profile = current.copyWith(
+        url: _urlController.text,
+        ageSecretKey: _ageSecretKeyController.text.trim(),
+        label: _labelController.text,
+        autoUpdate: _autoUpdate,
+        autoUpdateDuration: interval != null && interval > 0
+            ? Duration(minutes: interval)
+            : current.autoUpdateDuration,
+      );
+      final profilesAction = ref.read(profilesActionProvider.notifier);
+      final fileData = _fileData;
+      if (fileData != null) {
+        if (profile.type == ProfileType.url && _autoUpdate) {
+          final res = await dialogs.showMessage(
+            title: context.appLocalizations.tip,
+            message: TextSpan(text: context.appLocalizations.profileHasUpdate),
+          );
+          if (!mounted) return;
+          if (res == true) profile = profile.copyWith(autoUpdate: false);
+        }
+        final saved = await globalState.safeRun(
+          () => profilesAction.saveProfileEdit(
+            current,
+            profile,
+            bytes: fileData,
+            canCommit: () => mounted,
+          ),
         );
-        if (!mounted) {
-          return;
-        }
-        if (res == true) {
-          profile = profile.copyWith(autoUpdate: false);
-        }
+        if (saved != true) return;
+      } else {
+        unawaited(
+          globalState.safeRun(
+            () => profilesAction.saveProfileEdit(
+              current,
+              profile,
+              beforeRefresh: () => Future<void>.delayed(commonDuration),
+            ),
+          ),
+        );
       }
-      final saved = await globalState.safeRun(
-        () => profilesAction.saveProfileFile(profile, _fileData!),
-      );
-      if (saved != true) return;
-    } else if (!hasUpdate) {
-      profilesAction.putProfile(profile);
-    } else {
-      profilesAction.putProfile(profile);
-      unawaited(
-        globalState.safeRun(() async {
-          await Future.delayed(commonDuration);
-          if (hasUpdate) {
-            await profilesAction.updateProfile(profile);
-          }
-        }),
-      );
-    }
-    if (mounted) {
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      _saving = false;
     }
   }
 
@@ -184,18 +186,12 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   }
 
   Future<void> _handleSaveEdit(BuildContext context, Uint8List data) async {
-    final validation = await globalState.safeRun(
-      () async => (
-        issue: await ref
-            .read(profilesActionProvider.notifier)
-            .validateConfigWithData(data),
-      ),
+    final issue = await globalState.safeRun(
+      () => ref
+          .read(profilesActionProvider.notifier)
+          .validateConfigWithData(data),
       silence: false,
     );
-    if (validation == null) {
-      return;
-    }
-    final issue = validation.issue;
     if (issue != null) {
       unawaited(
         dialogs.showAlert(
@@ -258,11 +254,10 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   }
 
   Future<void> _uploadProfileFile() async {
-    final fileData = await globalState.safeRun(() async {
-      final platformFile = await picker.pickerFile();
-      return await platformFile?.readBytes();
-    });
-    if (fileData == null || !mounted) {
+    final platformFile = await globalState.safeRun(picker.pickerFile);
+    if (platformFile == null) return;
+    final fileData = await platformFile.readBytes();
+    if (!mounted) {
       return;
     }
     setState(() {
@@ -280,13 +275,12 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
       title: appLocalizations.tip,
       message: TextSpan(text: appLocalizations.fileIsUpdate),
     );
-    if (!mounted) {
-      return;
-    }
     if (res == true) {
       unawaited(_handleConfirm());
     } else {
-      Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -410,14 +404,10 @@ Future<void> renameProfile(
       validator: (value) => validateProfileName(appLocalizations, value),
     ),
   );
-  if (label == null || !context.mounted) {
+  if (!context.mounted || label == null || label == profile.label) {
     return;
   }
-  final latest = ref.read(profilesProvider).getProfile(profile.id);
-  if (latest == null || label == latest.label) {
-    return;
-  }
-  profilesAction.putProfile(latest.copyWith(label: label));
+  profilesAction.renameProfile(profile.id, label);
 }
 
 class _ProfileNameField extends StatelessWidget {

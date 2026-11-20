@@ -86,10 +86,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const TestApp(
-          locale: Locale('en'),
-          child: VpsHomePage(),
-        ),
+        child: const TestApp(locale: Locale('en'), child: VpsHomePage()),
       ),
     );
     await tester.pumpAndSettle();

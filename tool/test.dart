@@ -171,6 +171,15 @@ List<({String path, List<String> files})> _writeBundles(List<String> files) {
   final directory = Directory(_bundleDir);
   if (directory.existsSync()) directory.deleteSync(recursive: true);
   directory.createSync(recursive: true);
+  final configuration = File(p.join('test', 'flutter_test_config.dart'));
+  if (configuration.existsSync()) {
+    final relative = _posix(
+      p.relative(configuration.path, from: directory.path),
+    );
+    File(
+      p.join(directory.path, 'flutter_test_config.dart'),
+    ).writeAsStringSync("export '$relative';\n");
+  }
 
   final sizes = {for (final file in files) file: File(file).lengthSync()};
   final bundles = List.generate(

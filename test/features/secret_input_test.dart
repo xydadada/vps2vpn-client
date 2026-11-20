@@ -7,8 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers/test_app.dart';
 
 void main() {
-  testWidgets('revealing a secret keeps keyboard learning and rewriting off',
-      (tester) async {
+  testWidgets('revealing a secret keeps keyboard learning and rewriting off', (
+    tester,
+  ) async {
     final controller = TextEditingController(text: 'key-"literal"');
     addTearDown(controller.dispose);
     await tester.pumpWidget(

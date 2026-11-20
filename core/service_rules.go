@@ -22,7 +22,8 @@ var (
 		regexp.MustCompile(`"country_code"\s*:\s*"([A-Za-z]{2})"`),
 	}
 	tikTokRegionPattern    = regexp.MustCompile(`"webapp\.app-context"\s*:\s*\{[^{}]*?"region"\s*:\s*"([^"]*)"`)
-	primeRegionPattern     = regexp.MustCompile(`"currentTerritory":"([^"]+)"`)
+	primeRegionPattern     = regexp.MustCompile(`"currentTerritory"\s*:\s*"([^"]+)"`)
+	primeRestrictedPattern = regexp.MustCompile(`"isServiceRestricted"\s*:\s*(true|false)`)
 	disneyAssertionPattern = regexp.MustCompile(`"assertion"\s*:\s*"([^"]+)"`)
 	disneyRefreshPattern   = regexp.MustCompile(`"refresh_token"\s*:\s*"([^"]+)"`)
 	disneyCountryPattern   = regexp.MustCompile(`"countryCode"\s*:\s*"([^"]+)"`)
@@ -276,13 +277,17 @@ func checkDiscord(env serviceEnv) ServiceCheckItem {
 
 func checkPrimeVideo(env serviceEnv) ServiceCheckItem {
 	result := env.scan("https://www.primevideo.com", func(tail string) bool {
-		return strings.Contains(tail, "isServiceRestricted") || primeRegionPattern.MatchString(tail)
+		return firstSubmatch(primeRestrictedPattern, tail) == "true" || primeRegionPattern.MatchString(tail)
 	})
+	return primeVideoResult(result)
+}
+
+func primeVideoResult(result *ProbeResult) ServiceCheckItem {
 	item := itemFrom(result)
 	if !answered(item, result) {
 		return item
 	}
-	if strings.Contains(result.Body, "isServiceRestricted") {
+	if firstSubmatch(primeRestrictedPattern, result.Body) == "true" {
 		item.Status = serviceUnsupportedRegion
 		return item
 	}

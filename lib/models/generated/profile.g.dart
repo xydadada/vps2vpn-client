@@ -8,10 +8,14 @@ part of '../profile.dart';
 
 _SubscriptionInfo _$SubscriptionInfoFromJson(Map<String, dynamic> json) =>
     _SubscriptionInfo(
-      upload: (json['upload'] as num?)?.toInt() ?? 0,
-      download: (json['download'] as num?)?.toInt() ?? 0,
-      total: (json['total'] as num?)?.toInt() ?? 0,
-      expire: json['expire'] == null ? 0 : unixSecondsOrZero(json['expire']),
+      upload: json['upload'] == null ? 0 : trafficCounterOrZero(json['upload']),
+      download: json['download'] == null
+          ? 0
+          : trafficCounterOrZero(json['download']),
+      total: json['total'] == null ? 0 : trafficCounterOrZero(json['total']),
+      expire: json['expire'] == null
+          ? 0
+          : subscriptionExpiryOrUnknown(json['expire']),
     );
 
 Map<String, dynamic> _$SubscriptionInfoToJson(_SubscriptionInfo instance) =>

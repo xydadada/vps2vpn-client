@@ -34,19 +34,18 @@ const (
 	vpsSmartGroup = "⚡ 智能线路"
 	vpsAIGroup    = "🤖 AI 专线"
 	vpsProbeURL   = "https://www.gstatic.com/generate_204"
+	vpsAIProbeURL = vpsProbeURL + "#vps2vpn-ai"
 )
 
 // Set from CoreOptions.SmartLines before each config load.
 var vpsSmartEnabled atomic.Bool
 
 var vpsAIDomains = []string{
-	"anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com",
-	"openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com",
-	"gemini.google.com", "generativelanguage.googleapis.com", "aistudio.google.com",
+	"anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com", "clau.de",
+	"openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com", "sora.com",
+	"gemini.google.com", "notebooklm.google.com", "generativelanguage.googleapis.com", "aistudio.google.com",
 	"perplexity.ai", "x.ai", "grok.com",
 }
-
-var vpsAIKeywords = []string{"anthropic", "claude", "openai", "chatgpt", "gemini", "perplexity", "grok"}
 
 // vpsLineRank: lower is tried first; -1 means not a line to the outside.
 func vpsLineRank(p map[string]any) int {
@@ -84,11 +83,16 @@ func vpsHasGroup(raw *config.RawConfig, name string) bool {
 }
 
 func vpsNameTaken(raw *config.RawConfig, name string) bool {
-	if vpsHasGroup(raw, name) {
+	if _, exists := raw.ProxyProvider[name]; exists {
 		return true
 	}
 	for _, p := range raw.Proxy {
 		if vpsName(p) == name {
+			return true
+		}
+	}
+	for _, g := range raw.ProxyGroup {
+		if vpsName(g) == name {
 			return true
 		}
 	}
@@ -97,10 +101,28 @@ func vpsNameTaken(raw *config.RawConfig, name string) bool {
 
 func vpsRoutesAI(rules []string) bool {
 	for _, rule := range rules {
-		lower := strings.ToLower(rule)
-		for _, k := range vpsAIKeywords {
-			if strings.Contains(lower, k) {
-				return true
+		fields := strings.SplitN(rule, ",", 3)
+		if len(fields) < 2 {
+			continue
+		}
+		kind := strings.ToUpper(strings.TrimSpace(fields[0]))
+		payload := strings.ToLower(strings.TrimSpace(fields[1]))
+		switch kind {
+		case "RULE-SET", "SUB-RULE", "GEOSITE", "DOMAIN-REGEX", "AND", "OR", "NOT":
+			return true
+		case "DOMAIN", "DOMAIN-SUFFIX":
+			payload = strings.TrimSuffix(payload, ".")
+			for _, domain := range vpsAIDomains {
+				if payload == domain || strings.HasSuffix(payload, "."+domain) ||
+					kind == "DOMAIN-SUFFIX" && strings.HasSuffix(domain, "."+payload) {
+					return true
+				}
+			}
+		case "DOMAIN-KEYWORD":
+			for _, domain := range vpsAIDomains {
+				if payload != "" && strings.Contains(domain, payload) {
+					return true
+				}
 			}
 		}
 	}
@@ -143,6 +165,9 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) vpsEnhancement {
 			}
 		}
 		server, _ := p["server"].(string)
+		if server == "" {
+			server = "\x00" + name
+		}
 		if _, exists := serverOrder[server]; !exists {
 			serverOrder[server] = len(serverOrder)
 		}
@@ -183,8 +208,10 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) vpsEnhancement {
 			g["proxies"] = append([]string{vpsSmartGroup}, members...)
 		case []any:
 			g["proxies"] = append([]any{vpsSmartGroup}, members...)
-		default:
+		case nil:
 			g["proxies"] = []string{vpsSmartGroup}
+		default:
+			continue
 		}
 		change.selector = i
 		break
@@ -195,14 +222,16 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) vpsEnhancement {
 	}
 	aiNames := append([]string(nil), smart...)
 	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
-		"name":             vpsAIGroup,
-		"type":             "fallback",
-		"proxies":          aiNames,
-		"url":              vpsProbeURL,
-		"interval":         120,
-		"timeout":          4000,
-		"max-failed-times": 3,
-		"lazy":             false,
+		"name":               vpsAIGroup,
+		"type":               "fallback",
+		"proxies":            aiNames,
+		"url":                vpsAIProbeURL,
+		"interval":           120,
+		"timeout":            4000,
+		"max-failed-times":   3,
+		"failure-threshold":  3,
+		"recovery-threshold": 3,
+		"lazy":               false,
 	})
 	change.groups++
 	userRules = min(userRules, len(raw.Rule))

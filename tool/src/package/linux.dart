@@ -29,10 +29,6 @@ String? _joined(List<String> values) {
   return values.isEmpty ? null : '${values.join(';')};';
 }
 
-String? _plainJoined(List<String> values) {
-  return values.isEmpty ? null : values.join(';');
-}
-
 Map<String, String> debFiles(
   PackageContext context,
   Map<String, dynamic> config,
@@ -207,7 +203,7 @@ String rpmSpec(PackageContext context, Map<String, dynamic> config) {
     '\n\n',
     '%defattr(-,root,root)\n',
     '\n',
-    '%attr(4755, root, root) %{_datadir}/pixmaps/%{name}.png\n',
+    '%attr(0644, root, root) %{_datadir}/pixmaps/%{name}.png\n',
   ].join();
 }
 
@@ -358,7 +354,7 @@ String appImageDesktopEntry(
   Map<String, dynamic> config,
 ) {
   final binary = context.linuxBinaryName;
-  return '${_desktopEntry({'Name': config['display_name'], 'GenericName': config['generic_name'] ?? 'A Flutter Application', 'Exec': 'LD_LIBRARY_PATH=usr/lib $binary %u', 'Icon': binary, 'Type': 'Application', 'StartupNotify': config['startup_notify'] == true ? 'true' : 'false', 'StartupWMClass': context.linuxApplicationId, 'MimeType': _joined(stringList(config['supported_mime_type'])), 'Categories': _plainJoined(stringList(config['categories'])), 'Keywords': _plainJoined(stringList(config['keywords']))})}\n\n';
+  return '${_desktopEntry({'Name': config['display_name'], 'GenericName': config['generic_name'] ?? 'A Flutter Application', 'Exec': '$binary %u', 'Icon': binary, 'Type': 'Application', 'StartupNotify': config['startup_notify'] == true ? 'true' : 'false', 'StartupWMClass': context.linuxApplicationId, 'MimeType': _joined(stringList(config['supported_mime_type'])), 'Categories': _joined(stringList(config['categories'])), 'Keywords': _joined(stringList(config['keywords']))})}\n\n';
 }
 
 String appImageAppRun(String binary) {

@@ -11,6 +11,7 @@ import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/providers/database.dart';
 import 'package:fl_clash/providers/route_state.dart';
 import 'package:fl_clash/providers/state.dart';
+import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/banner.dart';
@@ -30,6 +31,7 @@ class _CoreContainerState extends ConsumerState<CoreManager>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(vpsLineWatchProvider);
     return widget.child;
   }
 

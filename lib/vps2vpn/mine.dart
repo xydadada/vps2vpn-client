@@ -2,6 +2,7 @@
 // advanced mode.
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
@@ -22,6 +23,29 @@ class VpsMePage extends ConsumerStatefulWidget {
 
 class _VpsMePageState extends ConsumerState<VpsMePage> {
   String? _note;
+  bool _updating = false;
+
+  Future<void> _updateProfiles(List<Profile> profiles) async {
+    if (_updating) return;
+    final action = ref.read(profilesActionProvider.notifier);
+    setState(() => _updating = true);
+    try {
+      await globalState.batchRun(
+        profiles.where((p) => p.type == ProfileType.url).toList(),
+        (profile) async {
+          if (!mounted) return;
+          final current = ref.read(profilesProvider).getProfile(profile.id);
+          if (current == null || current.type != ProfileType.url) return;
+          await action.updateProfile(current, showLoading: true);
+        },
+        label: (profile) => profile.realLabel,
+        concurrency: 1,
+        tag: null,
+      );
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
+  }
 
   Future<void> _paste() async {
     await globalState.safeRun(() async {
@@ -89,18 +113,16 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
           trailing: profiles.isEmpty
               ? null
               : VpsPressable(
-                  onTap: () => globalState.safeRun(
-                    () => ref
-                        .read(profilesActionProvider.notifier)
-                        .updateProfiles(),
-                  ),
+                  onTap: _updating ? null : () => _updateProfiles(profiles),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       VpsIconView(VpsIcon.refresh, size: 15, color: p.accent),
                       const SizedBox(width: 5),
                       Text(
-                        tr(context, '全部更新', 'Update all'),
+                        _updating
+                            ? context.appLocalizations.loading
+                            : tr(context, '全部更新', 'Update all'),
                         style: vpsText(
                           context,
                           size: 13,
@@ -122,11 +144,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               selected: profile.id == currentId,
               onTap: () => ref.read(currentProfileIdProvider.notifier).value =
                   profile.id,
-              onUpdate: () => globalState.safeRun(
-                () => ref
-                    .read(profilesActionProvider.notifier)
-                    .updateProfile(profile, showLoading: true),
-              ),
+              onUpdate: _updating ? null : () => _updateProfiles([profile]),
             ),
           ),
         VpsCard(
@@ -173,7 +191,10 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               ),
               if (_note != null) ...[
                 const SizedBox(height: 10),
-                Text(_note!, style: vpsText(context, size: 12.5, color: p.warn)),
+                Text(
+                  _note!,
+                  style: vpsText(context, size: 12.5, color: p.warn),
+                ),
               ],
             ],
           ),
@@ -318,7 +339,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   children: [
                     Text(
                       'vps2vpn  v${globalState.packageInfo.version}',
-                      style: vpsText(context, size: 15, weight: FontWeight.w700),
+                      style: vpsText(
+                        context,
+                        size: 15,
+                        weight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -426,9 +451,12 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
       ),
       (
         'CMD',
-        'set HTTP_PROXY=$proxy && set HTTPS_PROXY=$proxy && set ALL_PROXY=$proxy',
+        'set "HTTP_PROXY=$proxy" && set "HTTPS_PROXY=$proxy" && set "ALL_PROXY=$proxy"',
       ),
-      ('Bash', 'export http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy'),
+      (
+        'Bash',
+        'export http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy HTTP_PROXY=$proxy HTTPS_PROXY=$proxy ALL_PROXY=$proxy',
+      ),
     ];
     final lanAddress = localIp == null || localIp.isEmpty
         ? null
@@ -581,13 +609,15 @@ class _ProfileCard extends ConsumerWidget {
   final Profile profile;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback onUpdate;
+  final VoidCallback? onUpdate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
     final sub = profile.subscriptionInfo;
-    final used = sub == null ? 0.0 : sub.upload.toDouble() + sub.download.toDouble();
+    final used = sub == null
+        ? 0.0
+        : sub.upload.toDouble() + sub.download.toDouble();
     final total = sub?.total ?? 0;
     final ratio = sub?.usage ?? 0.0;
     String? expire;
@@ -603,6 +633,7 @@ class _ProfileCard extends ConsumerWidget {
     return VpsCard(
       onTap: onTap,
       highlight: selected,
+      selected: selected,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -634,7 +665,11 @@ class _ProfileCard extends ConsumerWidget {
                       profile.realLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(context, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(
+                        context,
+                        size: 14.5,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     Text(
                       [
@@ -658,6 +693,7 @@ class _ProfileCard extends ConsumerWidget {
               if (profile.url.isNotEmpty)
                 VpsPressable(
                   onTap: onUpdate,
+                  semanticLabel: context.appLocalizations.update,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: VpsIconView(
@@ -701,7 +737,10 @@ class _ProfileCard extends ConsumerWidget {
                   ),
                 const Spacer(),
                 if (expire != null)
-                  Text(expire, style: vpsText(context, size: 12.5, color: p.soft)),
+                  Text(
+                    expire,
+                    style: vpsText(context, size: 12.5, color: p.soft),
+                  ),
               ],
             ),
           ],

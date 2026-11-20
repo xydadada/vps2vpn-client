@@ -53,6 +53,7 @@ const PROTOCOL_VERSION: &str = "8";
 const PROTOCOL_VERSION: &str = "6";
 const EXPECTED_CORE_SHA256: &str = env!("CORE_SHA256");
 const LOG_CAPACITY: usize = 100;
+const LOG_ENTRY_BYTES: usize = 8 * 1024;
 const MAX_REQUEST_BODY_BYTES: u64 = 4096;
 const CORE_EXIT_TIMEOUT: Duration = Duration::from_millis(1500);
 const CORE_GRACEFUL_EXIT_TIMEOUT: Duration = Duration::from_millis(3000);
@@ -222,6 +223,8 @@ struct VerifiedCore {
     path: PathBuf,
     directory: PathBuf,
     _handle: File,
+    #[cfg(any(target_os = "linux", windows))]
+    _verified_path: Vec<File>,
 }
 
 impl VerifiedCore {
@@ -231,11 +234,15 @@ impl VerifiedCore {
             .parent()
             .ok_or_else(|| Error::other("Core executable has no parent directory"))?
             .to_path_buf();
+        #[cfg(any(target_os = "linux", windows))]
+        let verified_path = super::install_path::verify(&path).map_err(Error::other)?;
         let handle = open_verified_core(&path, EXPECTED_CORE_SHA256)?;
         Ok(Self {
             path,
             directory,
             _handle: handle,
+            #[cfg(any(target_os = "linux", windows))]
+            _verified_path: verified_path,
         })
     }
 
@@ -356,6 +363,7 @@ fn stop_decision(current: Option<&str>, requested: &str) -> StopDecision {
 static LOGS: Lazy<Mutex<VecDeque<String>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(LOG_CAPACITY)));
 static MANAGED_CORE: Lazy<Mutex<Option<ManagedCore>>> = Lazy::new(|| Mutex::new(None));
+static CORE_OPERATION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
 fn lock_surviving_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
@@ -499,17 +507,13 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
             {
                 let reader = io::BufReader::new(stderr);
                 let session_id = start_params.session_id.clone();
-                if let Err(error) = thread::Builder::new()
-                    .name("core-stderr".into())
-                    .spawn(move || {
-                        for line in reader.lines() {
-                            match line {
-                                Ok(output) => log_message(output),
-                                Err(_) => break,
-                            }
-                        }
-                        reap_exited_core(&session_id);
-                    })
+                if let Err(error) =
+                    thread::Builder::new()
+                        .name("core-stderr".into())
+                        .spawn(move || {
+                            read_core_logs(reader, log_message);
+                            reap_exited_core(&session_id);
+                        })
                 {
                     return startup_failure(&mut managed, "stderr reader startup", error);
                 }
@@ -599,7 +603,39 @@ fn stop_core(stop_params: StopParams) -> warp::reply::Response {
     }
 }
 
-pub(super) fn log_message(message: String) {
+fn read_core_logs(mut reader: impl BufRead, mut emit: impl FnMut(String)) {
+    let mut line = Vec::with_capacity(LOG_ENTRY_BYTES);
+    loop {
+        let buffer = match reader.fill_buf() {
+            Ok([]) | Err(_) => break,
+            Ok(buffer) => buffer,
+        };
+        let end = buffer.iter().position(|byte| *byte == b'\n');
+        let count = end.map_or(buffer.len(), |index| index + 1);
+        let content = end.unwrap_or(count).min(LOG_ENTRY_BYTES - line.len());
+        line.extend_from_slice(&buffer[..content]);
+        reader.consume(count);
+        if end.is_some() {
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            emit(String::from_utf8_lossy(&line).into_owned());
+            line.clear();
+        }
+    }
+    if !line.is_empty() {
+        emit(String::from_utf8_lossy(&line).into_owned());
+    }
+}
+
+pub(super) fn log_message(mut message: String) {
+    if message.len() > LOG_ENTRY_BYTES {
+        let mut boundary = LOG_ENTRY_BYTES;
+        while !message.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
+        message.truncate(boundary);
+    }
     let mut log_buffer = lock_surviving_poison(&LOGS);
     while log_buffer.len() >= LOG_CAPACITY {
         log_buffer.pop_front();
@@ -666,8 +702,17 @@ fn ping(ping_params: PingParams) -> warp::reply::Response {
 }
 
 async fn start_request(start_params: StartParams) -> Result<warp::reply::Response, Infallible> {
+    let permit = CORE_OPERATION
+        .acquire()
+        .await
+        .expect("operation semaphore stays open");
     Ok(
-        match tokio::task::spawn_blocking(move || start(start_params)).await {
+        match tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            start(start_params)
+        })
+        .await
+        {
             Ok(response) => response,
             Err(error) => error_response(
                 "internalError",
@@ -679,8 +724,17 @@ async fn start_request(start_params: StartParams) -> Result<warp::reply::Respons
 }
 
 async fn stop_request(stop_params: StopParams) -> Result<warp::reply::Response, Infallible> {
+    let permit = CORE_OPERATION
+        .acquire()
+        .await
+        .expect("operation semaphore stays open");
     Ok(
-        match tokio::task::spawn_blocking(move || stop_core(stop_params)).await {
+        match tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            stop_core(stop_params)
+        })
+        .await
+        {
             Ok(response) => response,
             Err(error) => error_response(
                 "internalError",
@@ -845,55 +899,91 @@ pub(super) fn ensure_core_sha256_configured() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn release_managed_core_on_shutdown() {
-    let mut managed = lock_surviving_poison(&MANAGED_CORE);
-    if let Err(error) = release_managed_core(&mut managed) {
-        log_message(format!(
-            "Helper could not stop the managed Core on shutdown: {error}"
-        ));
-    }
+pub(super) async fn release_managed_core_on_shutdown() {
+    let permit = CORE_OPERATION
+        .acquire()
+        .await
+        .expect("operation semaphore stays open");
+    let _ = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let mut managed = lock_surviving_poison(&MANAGED_CORE);
+        if let Err(error) = release_managed_core(&mut managed) {
+            log_message(format!(
+                "Helper could not stop the managed Core on shutdown: {error}"
+            ));
+        }
+    })
+    .await;
 }
 
-/// Keep OS peer admission in the incoming stream while using Hyper 1's
-/// maintained HTTP/1 implementation. The helper protocol has no HTTP/2 or
-/// upgrade endpoints. A watcher is registered before spawning each connection
-/// so shutdown also waits for tasks that have not been polled yet.
+#[derive(Clone, Copy)]
+struct HttpLimits {
+    connections: usize,
+    lifetime: Duration,
+    shutdown: Duration,
+}
+
+const HTTP_LIMITS: HttpLimits = HttpLimits {
+    connections: 32,
+    lifetime: Duration::from_secs(15),
+    shutdown: Duration::from_secs(1),
+};
+
 pub(super) async fn serve_incoming_until<I, IO, F>(incoming: I, shutdown: F)
 where
     I: Stream<Item = io::Result<IO>>,
     IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     F: Future<Output = ()> + Send + 'static,
 {
+    serve_incoming_with_limits(incoming, shutdown, HTTP_LIMITS).await;
+}
+
+async fn serve_incoming_with_limits<I, IO, F>(incoming: I, shutdown: F, limits: HttpLimits)
+where
+    I: Stream<Item = io::Result<IO>>,
+    IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    F: Future<Output = ()> + Send + 'static,
+{
     let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+    let mut connections = tokio::task::JoinSet::new();
     let mut incoming = Box::pin(incoming);
     tokio::pin!(shutdown);
     loop {
         let next = tokio::select! {
             biased;
             _ = &mut shutdown => break,
+            _ = connections.join_next(), if !connections.is_empty() => continue,
             next = incoming.next() => next,
         };
         let stream = match next {
             Some(Ok(stream)) => stream,
             Some(Err(error)) => {
                 log_message(format!("Helper could not accept a connection: {error}"));
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
             None => break,
         };
-        let service =
-            hyper_util::service::TowerToHyperService::new(warp::service(routes()));
+        if connections.len() >= limits.connections {
+            continue;
+        }
+        let service = hyper_util::service::TowerToHyperService::new(warp::service(routes()));
         let connection = hyper::server::conn::http1::Builder::new()
+            .keep_alive(false)
+            .max_buf_size(16 * 1024)
             .serve_connection(hyper_util::rt::TokioIo::new(stream), service);
         let watcher = graceful.watcher();
-        tokio::spawn(async move {
-            if let Err(error) = watcher.watch(connection).await {
-                log_message(format!("Helper connection failed: {error}"));
+        connections.spawn(async move {
+            match tokio::time::timeout(limits.lifetime, watcher.watch(connection)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => log_message(format!("Helper connection failed: {error}")),
+                Err(_) => log_message("Helper connection exceeded its deadline".into()),
             }
         });
     }
     drop(incoming);
-    graceful.shutdown().await;
+    let _ = tokio::time::timeout(limits.shutdown, graceful.shutdown()).await;
+    connections.shutdown().await;
 }
 
 #[cfg(all(
@@ -919,8 +1009,12 @@ where
         .await
         .map_err(|error| anyhow::anyhow!("bind helper server: {error}"))?;
     on_started()?;
-    serve_incoming_until(tokio_stream::wrappers::TcpListenerStream::new(listener), shutdown).await;
-    release_managed_core_on_shutdown();
+    serve_incoming_until(
+        tokio_stream::wrappers::TcpListenerStream::new(listener),
+        shutdown,
+    )
+    .await;
+    release_managed_core_on_shutdown().await;
 
     Ok(())
 }
@@ -964,6 +1058,121 @@ mod tests {
                 .unwrap()
                 .unwrap();
         }
+    }
+
+    #[tokio::test]
+    async fn an_incomplete_request_body_cannot_hold_a_connection_forever() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut client, server) = tokio::io::duplex(1024);
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let limits = HttpLimits {
+            connections: 1,
+            lifetime: Duration::from_millis(30),
+            shutdown: Duration::from_millis(30),
+        };
+        let serving = tokio::spawn(serve_incoming_with_limits(
+            tokio_stream::iter([Ok(server)]).chain(tokio_stream::pending()),
+            async move {
+                let _ = stopped.await;
+            },
+            limits,
+        ));
+        client.write_all(b"POST /stop HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{").await.unwrap();
+        let mut response = Vec::new();
+        tokio::time::timeout(Duration::from_secs(1), client.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        stop.send(()).unwrap();
+        serving.await.unwrap();
+        assert!(response.is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_closes_a_stalled_body_before_its_normal_deadline() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut client, server) = tokio::io::duplex(16);
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let limits = HttpLimits {
+            connections: 1,
+            lifetime: Duration::from_secs(60),
+            shutdown: Duration::from_millis(30),
+        };
+        let serving = tokio::spawn(serve_incoming_with_limits(
+            tokio_stream::iter([Ok(server)]).chain(tokio_stream::pending()),
+            async move {
+                let _ = stopped.await;
+            },
+            limits,
+        ));
+        client.write_all(b"POST /stop HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{").await.unwrap();
+        stop.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), serving)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        assert!(response.is_empty());
+    }
+
+    #[tokio::test]
+    async fn excess_connections_are_closed_without_spawning_more_workers() {
+        use tokio::io::AsyncReadExt;
+        let (_first, first_server) = tokio::io::duplex(16);
+        let (_second, second_server) = tokio::io::duplex(16);
+        let (mut excess, excess_server) = tokio::io::duplex(16);
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let limits = HttpLimits {
+            connections: 2,
+            lifetime: Duration::from_secs(60),
+            shutdown: Duration::from_millis(30),
+        };
+        let serving = tokio::spawn(serve_incoming_with_limits(
+            tokio_stream::iter([Ok(first_server), Ok(second_server), Ok(excess_server)])
+                .chain(tokio_stream::pending()),
+            async move {
+                let _ = stopped.await;
+            },
+            limits,
+        ));
+        let mut byte = [0];
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), excess.read(&mut byte))
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
+        stop.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), serving)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[test]
+    fn stderr_lines_have_a_fixed_budget_and_the_next_line_is_preserved() {
+        let mut input = vec![b'x'; 1024 * 1024];
+        input.extend_from_slice(b"\nnext\r\nlast");
+        let mut lines = Vec::new();
+        read_core_logs(io::BufReader::with_capacity(17, input.as_slice()), |line| {
+            lines.push(line)
+        });
+        assert_eq!(
+            lines,
+            ["x".repeat(LOG_ENTRY_BYTES), "next".into(), "last".into()]
+        );
+    }
+
+    #[test]
+    fn truncated_multibyte_logs_remain_valid_utf8_and_bounded() {
+        let marker = "bounded-log-marker:";
+        log_message(format!("{marker}{}", "界".repeat(LOG_ENTRY_BYTES)));
+        let logs = lock_surviving_poison(&LOGS);
+        let line = logs.iter().find(|line| line.starts_with(marker)).unwrap();
+        assert!(line.len() <= LOG_ENTRY_BYTES);
+        assert!(line.ends_with('界'));
     }
 
     static PROCESS_STATE: Mutex<()> = Mutex::new(());
@@ -1016,8 +1225,10 @@ mod tests {
     }
 
     fn adopt_core(session_id: &str) {
-        *lock_surviving_poison(&MANAGED_CORE) =
-            Some(ManagedCore::adopt(session_id.to_string(), spawn_running_core()));
+        *lock_surviving_poison(&MANAGED_CORE) = Some(ManagedCore::adopt(
+            session_id.to_string(),
+            spawn_running_core(),
+        ));
     }
 
     #[test]
@@ -1171,10 +1382,9 @@ mod tests {
         let response = launch_failure_response(&Error::from_raw_os_error(577));
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        let body: serde_json::Value = serde_json::from_slice(
-            &response.into_body().collect().await.unwrap().to_bytes(),
-        )
-        .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
         assert_eq!(body["code"], "processLaunchFailed");
         assert_eq!(body["details"]["osError"], 577);
     }
@@ -1183,10 +1393,9 @@ mod tests {
     async fn a_launch_failure_without_an_os_error_omits_the_details() {
         let response = launch_failure_response(&Error::other("spawn refused"));
 
-        let body: serde_json::Value = serde_json::from_slice(
-            &response.into_body().collect().await.unwrap().to_bytes(),
-        )
-        .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
         assert_eq!(body["message"], "spawn refused");
         assert!(body.get("details").is_none());
     }
@@ -1213,12 +1422,10 @@ mod tests {
     #[allow(clippy::await_holding_lock)]
     async fn launch_releases_the_managed_core_before_rejecting_an_unverified_core() {
         let _state = lock_process_state();
-        *lock_surviving_poison(&MANAGED_CORE) = Some(
-            ManagedCore::adopt(
-                "fedcba9876543210fedcba9876543210".to_string(),
-                spawn_placeholder_core(),
-            ),
-        );
+        *lock_surviving_poison(&MANAGED_CORE) = Some(ManagedCore::adopt(
+            "fedcba9876543210fedcba9876543210".to_string(),
+            spawn_placeholder_core(),
+        ));
 
         let response = launch(StartParams {
             address: ALLOWED_CORE_ADDRESS.to_string(),
@@ -1227,10 +1434,9 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::CONFLICT);
         assert!(lock_surviving_poison(&MANAGED_CORE).is_none());
-        let body: serde_json::Value = serde_json::from_slice(
-            &response.into_body().collect().await.unwrap().to_bytes(),
-        )
-        .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
         assert_eq!(body["code"], "coreVerificationFailed");
     }
 
@@ -1238,8 +1444,10 @@ mod tests {
     fn a_core_that_exits_on_its_own_is_reaped() {
         let _state = lock_process_state();
         let session_id = "0123456789abcdef0123456789abcdef";
-        *lock_surviving_poison(&MANAGED_CORE) =
-            Some(ManagedCore::adopt(session_id.to_string(), spawn_placeholder_core()));
+        *lock_surviving_poison(&MANAGED_CORE) = Some(ManagedCore::adopt(
+            session_id.to_string(),
+            spawn_placeholder_core(),
+        ));
 
         reap_exited_core(session_id);
 
@@ -1250,8 +1458,10 @@ mod tests {
     fn reaping_leaves_a_running_or_newer_core_owned() {
         let _state = lock_process_state();
         let session_id = "0123456789abcdef0123456789abcdef";
-        *lock_surviving_poison(&MANAGED_CORE) =
-            Some(ManagedCore::adopt(session_id.to_string(), spawn_placeholder_core()));
+        *lock_surviving_poison(&MANAGED_CORE) = Some(ManagedCore::adopt(
+            session_id.to_string(),
+            spawn_placeholder_core(),
+        ));
 
         reap_exited_core("fedcba9876543210fedcba9876543210");
         assert!(lock_surviving_poison(&MANAGED_CORE).is_some());
@@ -1370,6 +1580,35 @@ mod tests {
         assert_eq!(status.signal(), Some(libc::SIGKILL));
     }
 
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn shutdown_waits_for_a_process_operation_after_its_caller_disconnects() {
+        let _state = lock_process_state();
+        let session_id = "0123456789abcdef0123456789abcdef";
+        *lock_surviving_poison(&MANAGED_CORE) = Some(ManagedCore::adopt(
+            session_id.into(),
+            spawn_shell_core_once_ready("trap '' TERM; echo ready; exec sleep 30"),
+        ));
+        let request = tokio::spawn(stop_request(StopParams {
+            session_id: session_id.into(),
+        }));
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while CORE_OPERATION.available_permits() != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        request.abort();
+        let _ = request.await;
+        tokio::time::timeout(Duration::from_secs(6), release_managed_core_on_shutdown())
+            .await
+            .unwrap();
+        assert!(lock_surviving_poison(&MANAGED_CORE).is_none());
+        assert_eq!(CORE_OPERATION.available_permits(), 1);
+    }
+
     #[cfg(windows)]
     #[test]
     fn closing_the_job_takes_the_core_down_with_the_helper() {
@@ -1403,22 +1642,19 @@ mod tests {
 
             assert!(managed.is_none());
             assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-            let body: serde_json::Value = serde_json::from_slice(
-                &response.into_body().collect().await.unwrap().to_bytes(),
-            )
-            .unwrap();
+            let body: serde_json::Value =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .unwrap();
             assert_eq!(body["code"], "internalError");
         }
     }
 
     #[test]
     fn terminate_confirms_the_exit_of_a_running_core() {
-        let mut managed = Some(
-            ManagedCore::adopt(
-                "0123456789abcdef0123456789abcdef".to_string(),
-                spawn_running_core(),
-            ),
-        );
+        let mut managed = Some(ManagedCore::adopt(
+            "0123456789abcdef0123456789abcdef".to_string(),
+            spawn_running_core(),
+        ));
 
         release_managed_core(&mut managed).unwrap();
 

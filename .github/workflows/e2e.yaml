@@ -11,6 +11,9 @@ on:
         required: true
         default: v1.0.0
 
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: windows-2022
@@ -25,15 +28,18 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          gh release download '${{ inputs.tag }}' -R '${{ github.repository }}' -p '*-setup.exe' -D installer
+          gh release download -R "$env:GITHUB_REPOSITORY" -p '*-setup.exe' -D installer -- "$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) { throw 'Release installer download failed' }
           Get-ChildItem installer
 
       - name: Install and take over (end to end)
         shell: pwsh
         run: |
-          $setup = (Get-ChildItem installer -Filter '*.exe' | Select-Object -First 1).FullName
-          ./.github/scripts/takeover-e2e.ps1 -Setup $setup -Out e2e
+          $setups = @(Get-ChildItem installer -Filter '*.exe')
+          if ($setups.Count -ne 1) { throw 'Expected exactly one release installer' }
+          ./.github/scripts/takeover-e2e.ps1 -Setup $setups[0].FullName -Out e2e
 
       - name: Upload results
         if: always()

@@ -8,6 +8,7 @@ import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,6 +99,9 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
   void _recheck() {
     _ip.refresh([routedOutbound]);
     _services.refresh(_all);
+    if (!ref.read(vpsMemberProvider).isLoading) {
+      ref.invalidate(vpsMemberProvider);
+    }
   }
 
   @override

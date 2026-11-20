@@ -81,7 +81,9 @@ void _checkPlainYamlGraph(YamlNode root) {
       height = math.max(height, heights[child]! + 1);
       // Saturate before addition; malicious DAGs can exceed int64's range.
       final childWeight = weights[child]!;
-      weight = childWeight > budget - weight ? budget + 1 : weight + childWeight;
+      weight = childWeight > budget - weight
+          ? budget + 1
+          : weight + childWeight;
     }
     if (height > maxDepth) {
       throw const FormatException('YAML nesting is too deep');
@@ -91,7 +93,9 @@ void _checkPlainYamlGraph(YamlNode root) {
     active.remove(node);
   }
   if (weights[root]! > budget) {
-    throw const FormatException('YAML aliases expand beyond the supported size');
+    throw const FormatException(
+      'YAML aliases expand beyond the supported size',
+    );
   }
 }
 

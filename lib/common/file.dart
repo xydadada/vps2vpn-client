@@ -47,15 +47,19 @@ extension FileExt on File {
     try {
       await temp.parent.create(recursive: true);
       await temp.writeAsString(content, flush: true);
-      await temp._renameRetryingWhileHeldOpen(path);
+      await temp.renameReplacing(path);
     } catch (_) {
       await temp.delete().then((_) {}, onError: (_) {});
       rethrow;
     }
   }
 
-  Future<void> _renameRetryingWhileHeldOpen(String target) async {
+  Future<void> renameReplacing(
+    String target, {
+    void Function()? beforeAttempt,
+  }) async {
     for (var attempt = 1; ; attempt++) {
+      beforeAttempt?.call();
       try {
         await rename(target);
         return;
@@ -77,8 +81,9 @@ extension FileSystemEntityExt on FileSystemEntity {
 }
 
 Future<void> safeDeletePath(String path) async {
-  final entity = switch (FileSystemEntity.typeSync(path)) {
+  final entity = switch (FileSystemEntity.typeSync(path, followLinks: false)) {
     FileSystemEntityType.directory => Directory(path),
+    FileSystemEntityType.link => Link(path),
     _ => File(path),
   };
   await entity.safeDelete(recursive: true);

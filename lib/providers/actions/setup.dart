@@ -213,7 +213,6 @@ class SetupAction extends _$SetupAction {
         silence: true,
       );
       if (!_isCurrent(request)) return true;
-      vpsStartLineWatch(ref);
     }
     if (request.initialize) {
       var applied = false;
@@ -794,6 +793,24 @@ class SetupAction extends _$SetupAction {
     FutureOr Function()? onUpdated,
   }) async {
     var profile = ref.read(currentProfileProvider) ?? recoverMissingProfile();
+    final source = profile;
+    final selectedId = ref.read(currentProfileIdProvider);
+    final runRequest = _latestRunRequest;
+    bool current() {
+      if (!ref.mounted ||
+          !identical(_latestRunRequest, runRequest) ||
+          ref.read(currentProfileIdProvider) != selectedId) {
+        return false;
+      }
+      final latest = ref.read(currentProfileProvider);
+      return source == null
+          ? latest == null
+          : latest?.id == source.id &&
+                latest?.type == source.type &&
+                latest?.url == source.url &&
+                latest?.ageSecretKey == source.ageSecretKey;
+    }
+
     // A refresh failure is surfaced by safeRun; setup keeps the old profile.
     if (profile != null) {
       await globalState.safeRun(
@@ -802,12 +819,13 @@ class SetupAction extends _$SetupAction {
             .updateMissingProfile(profile!),
       );
     }
-    if (!ref.mounted) return _SetupTaskResult.failed;
+    if (!current()) return _SetupTaskResult.failed;
     // A download can outlast a selection, edit, or deletion.
     profile = ref.read(currentProfileProvider) ?? recoverMissingProfile();
     commonPrint.log('setup ===> ${profile?.realLabel}');
     final patchConfig = ref.read(patchClashConfigProvider);
     final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
+    if (!current()) return _SetupTaskResult.failed;
     if (!shouldContinueSetup) {
       return _SetupTaskResult.handoffToCoreRestart;
     }
@@ -820,6 +838,7 @@ class SetupAction extends _$SetupAction {
       setupState = state;
       return getProfile(setupState: state, patchConfig: realPatchConfig);
     }, title: 'build profile');
+    if (!current()) return _SetupTaskResult.failed;
     final profileFailed = realProfile == null;
     final setupParams = _setupParams.copyWith(base: realProfile?.base);
     final inputs = switch (setupState) {
@@ -846,6 +865,7 @@ class SetupAction extends _$SetupAction {
     globalState.lastConfigCounts = null;
     if (system.isAndroid) {
       await ref.read(vpnOptionsProvider.future);
+      if (!current()) return _SetupTaskResult.failed;
       await preferences.saveShareState(ref.read(sharedStateProvider));
       await preferences.saveAppliedConfigMd5(null);
     }
@@ -855,6 +875,10 @@ class SetupAction extends _$SetupAction {
     await globalState.loadingRun(
       () async {
         try {
+          if (!current()) {
+            setupFailed = true;
+            return;
+          }
           if (setupParams.base == null) {
             final configFilePath = await appPath.configFilePath;
             await File(configFilePath).writeAsStringAtomically(yamlString);
@@ -873,6 +897,10 @@ class SetupAction extends _$SetupAction {
             }
           }
           try {
+            if (!current()) {
+              setupFailed = true;
+              return;
+            }
             await _core.setupConfig(
               params: setupParams,
               preloadInvoke: preloadInvoke,
@@ -891,6 +919,10 @@ class SetupAction extends _$SetupAction {
             handoffFailure = (e, s);
           }
           rethrow;
+        }
+        if (!current()) {
+          setupFailed = true;
+          return;
         }
         globalState.lastConfigMd5 = yamlMd5;
         globalState.lastConfigCounts =

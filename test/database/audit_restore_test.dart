@@ -126,11 +126,7 @@ void main() {
   test(
     'script bulk insert never commits a partially enumerated input',
     () async {
-      final kept = Script(
-        id: 1,
-        label: 'Kept',
-        lastUpdateTime: DateTime(2026),
-      );
+      final kept = Script(id: 1, label: 'Kept', lastUpdateTime: DateTime(2026));
       final incoming = kept.copyWith(id: 2, label: 'Partial');
       await database.scripts.put(kept.toCompanion());
 
@@ -144,11 +140,7 @@ void main() {
   );
 
   test('script replacement reports an input failure to its caller', () async {
-    final kept = Script(
-      id: 1,
-      label: 'Kept',
-      lastUpdateTime: DateTime(2026),
-    );
+    final kept = Script(id: 1, label: 'Kept', lastUpdateTime: DateTime(2026));
     await database.scripts.put(kept.toCompanion());
 
     await expectLater(

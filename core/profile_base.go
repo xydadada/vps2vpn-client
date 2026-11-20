@@ -154,11 +154,11 @@ func loadConfigWithBase(base *SetupBase, configPath string) (*config.Config, err
 	if err := syncVpsEnhancement(document, raw, change); err != nil {
 		return nil, err
 	}
-	if err := writeConfigDocument(configPath, document); err != nil {
-		return nil, err
-	}
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
+		return nil, err
+	}
+	if err := writeConfigDocument(configPath, document); err != nil {
 		return nil, err
 	}
 	return withPlatformLimits(cfg), nil
@@ -398,12 +398,16 @@ func writeDocumentFile(dir, pattern string, document *yaml.Node) (string, error)
 	if err != nil {
 		return "", err
 	}
+	if err := preparePrivateFile(file); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return "", err
+	}
 	writer := bufio.NewWriterSize(file, 1<<20)
 	err = errors.Join(
 		encodeConfigMapping(writer, document.Content[0]),
 		writer.Flush(),
 		file.Close(),
-		os.Chmod(file.Name(), 0o644),
 	)
 	if err != nil {
 		_ = os.Remove(file.Name())
@@ -438,7 +442,6 @@ func encodeConfigMapping(w io.Writer, mapping *yaml.Node) error {
 			if err := encodeYamlPiece(w, slice, nil); err != nil {
 				return err
 			}
-			clear(items)
 		}
 	}
 	return nil

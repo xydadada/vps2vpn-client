@@ -17,19 +17,15 @@ import 'card.dart';
 import 'profile_detail.dart';
 import 'package:prism_ui/prism_ui.dart';
 
-typedef _Usage = ({double used, int total, double share});
+typedef _Usage = ({int used, int total, double share});
 
 _Usage? _usageOf(Profile? profile) {
   final info = profile?.subscriptionInfo;
   if (info == null || info.total <= 0) {
     return null;
   }
-  final used = info.upload.toDouble() + info.download.toDouble();
-  return (
-    used: used,
-    total: info.total,
-    share: (used / info.total).clamp(0.0, 1.0).toDouble(),
-  );
+  final used = info.used;
+  return (used: used, total: info.total, share: info.usage!);
 }
 
 DateTime? _expiryOf(Profile? profile) => profile?.subscriptionInfo?.expireDate;
@@ -88,6 +84,9 @@ class ProfilesCard extends ConsumerWidget {
         : AppTextStyle.callout;
     final endText = switch ((profile, expiry)) {
       (_, final expiry?) => appLocalizations.profileDaysLeft(_daysLeft(expiry)),
+      (final profile?, null)
+          when (profile.subscriptionInfo?.expire ?? 0) != 0 =>
+        appLocalizations.unknown,
       (final profile?, null) => _sourceOf(context, profile.type),
       _ => null,
     };

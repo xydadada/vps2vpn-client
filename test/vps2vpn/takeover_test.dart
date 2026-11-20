@@ -55,6 +55,41 @@ void main() {
       expect(p.isOurs(7890), isFalse);
     });
 
+    test('matches complete active endpoints, never a substring', () {
+      for (final server in [
+        '127.0.0.1:178900',
+        'http=127.0.0.1:17890;https=proxy.example:3128',
+        '127.0.0.1:17890.evil.example',
+        'http=127.0.0.1:17890',
+      ]) {
+        expect(
+          VpsSystemProxy(enabled: true, server: server).isOurs(17890),
+          isFalse,
+        );
+      }
+      for (final server in [
+        '127.0.0.1:17890',
+        'localhost:17890',
+        '[::1]:17890',
+        'http=127.0.0.1:17890;https=localhost:17890',
+      ]) {
+        expect(
+          VpsSystemProxy(enabled: true, server: server).isOurs(17890),
+          isTrue,
+        );
+      }
+    });
+
+    test('PAC ownership cannot be inferred from the mixed port', () {
+      expect(
+        const VpsSystemProxy(
+          enabled: false,
+          pac: 'https://company.example:17890/a.pac',
+        ).isOurs(17890),
+        isFalse,
+      );
+    });
+
     test('a PAC script counts as an active proxy', () {
       final p = parseInternetSettings(
         '$base    ProxyEnable    REG_DWORD    0x0\r\n'

@@ -10,6 +10,10 @@ import 'clash_config.dart';
 part 'generated/profile.freezed.dart';
 part 'generated/profile.g.dart';
 
+final _profileWriteIntents = <int, Object>{};
+
+void cancelProfileWrite(int id) => _profileWriteIntents.remove(id);
+
 /// Why the config at the path cannot be used, or null.
 typedef ValidateConfig =
     Future<String?> Function(String path, String ageSecretKey);
@@ -17,10 +21,10 @@ typedef ValidateConfig =
 @freezed
 abstract class SubscriptionInfo with _$SubscriptionInfo {
   const factory SubscriptionInfo({
-    @Default(0) int upload,
-    @Default(0) int download,
-    @Default(0) int total,
-    @Default(0) @JsonKey(fromJson: unixSecondsOrZero) int expire,
+    @Default(0) @JsonKey(fromJson: trafficCounterOrZero) int upload,
+    @Default(0) @JsonKey(fromJson: trafficCounterOrZero) int download,
+    @Default(0) @JsonKey(fromJson: trafficCounterOrZero) int total,
+    @Default(0) @JsonKey(fromJson: subscriptionExpiryOrUnknown) int expire,
   }) = _SubscriptionInfo;
 
   factory SubscriptionInfo.fromJson(Map<String, Object?> json) =>
@@ -32,31 +36,35 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
     for (final field in info.split(';')) {
       final separator = field.indexOf('=');
       if (separator == -1) continue;
-      final value = _parseCount(field.substring(separator + 1).trim());
-      if (value != null) {
-        map[field.substring(0, separator).trim().toLowerCase()] = value;
-      }
+      final key = field.substring(0, separator).trim().toLowerCase();
+      final raw = field.substring(separator + 1).trim();
+      map[key] = key == 'expire'
+          ? subscriptionExpiryOrUnknown(raw)
+          : trafficCounterOrZero(num.tryParse(raw));
     }
     return SubscriptionInfo(
       upload: map['upload'] ?? 0,
       download: map['download'] ?? 0,
       total: map['total'] ?? 0,
-      expire: unixSecondsOrZero(map['expire']),
+      expire: map['expire'] ?? 0,
     );
-  }
-
-  static int? _parseCount(String value) {
-    final count = int.tryParse(value);
-    if (count != null) return count;
-    final decimal = double.tryParse(value);
-    return decimal != null && decimal.isFinite ? decimal.truncate() : null;
   }
 }
 
+int trafficCounterOrZero(Object? value) => nonNegativeInt(value) ?? 0;
+
+int subscriptionExpiryOrUnknown(Object? value) {
+  if (value == null || value == 0 || value == '0') return 0;
+  final seconds = unixSecondsOrZero(value);
+  return seconds == 0 ? -1 : seconds;
+}
+
 extension SubscriptionInfoExt on SubscriptionInfo {
-  double? get usage => total > 0
-      ? ((upload.toDouble() + download.toDouble()) / total).clamp(0.0, 1.0)
-      : null;
+  int get used => addTrafficBytes(upload, download);
+
+  int get remaining => total > used ? total - used : 0;
+
+  double? get usage => total > 0 ? (used / total).clamp(0.0, 1.0) : null;
 
   DateTime? get expireDate => dateTimeFromUnixSeconds(expire);
 }
@@ -186,21 +194,32 @@ extension ProfileExtension on Profile {
     required ValidateConfig validate,
     bool Function()? shouldCommit,
   }) async {
-    final response = await request.getFileResponseForUrl(url);
-    if (shouldCommit?.call() == false) return this;
-    final disposition = response.headers.value('content-disposition');
-    final userinfo = response.headers.value('subscription-userinfo');
-    return copyWith(
-      label: label.takeFirstValid([
-        getFileNameForDisposition(disposition),
-        defaultLabel,
-      ]),
-      subscriptionInfo: SubscriptionInfo.formHString(userinfo),
-    ).saveFile(
-      decompressUnlabeled(response.data ?? Uint8List(0)),
-      validate: validate,
-      shouldCommit: shouldCommit,
-    );
+    final intent = Object();
+    _profileWriteIntents[id] = intent;
+    bool current() =>
+        identical(_profileWriteIntents[id], intent) &&
+        shouldCommit?.call() != false;
+    try {
+      final response = await request.getFileResponseForUrl(url);
+      if (!current()) return this;
+      final disposition = response.headers.value('content-disposition');
+      final userinfo = response.headers.value('subscription-userinfo');
+      return await copyWith(
+        label: label.takeFirstValid([
+          getFileNameForDisposition(disposition),
+          defaultLabel,
+        ]),
+        subscriptionInfo: SubscriptionInfo.formHString(userinfo),
+      )._saveFile(
+        decompressUnlabeled(response.data ?? Uint8List(0)),
+        validate: validate,
+        shouldCommit: current,
+      );
+    } finally {
+      if (identical(_profileWriteIntents[id], intent)) {
+        _profileWriteIntents.remove(id);
+      }
+    }
   }
 
   Future<Profile> saveFile(
@@ -208,29 +227,51 @@ extension ProfileExtension on Profile {
     required ValidateConfig validate,
     bool Function()? shouldCommit,
   }) async {
-    final path = await appPath.tempFilePath;
-    final tempFile = File(path);
-    File? staging;
+    final intent = Object();
+    _profileWriteIntents[id] = intent;
     try {
-      await tempFile.safeWriteAsBytes(bytes);
-      final issue = await validate(path, ageSecretKey);
-      if (shouldCommit?.call() == false) return this;
+      return await _saveFile(
+        bytes,
+        validate: validate,
+        shouldCommit: () =>
+            identical(_profileWriteIntents[id], intent) &&
+            shouldCommit?.call() != false,
+      );
+    } finally {
+      if (identical(_profileWriteIntents[id], intent)) {
+        _profileWriteIntents.remove(id);
+      }
+    }
+  }
+
+  Future<Profile> _saveFile(
+    Uint8List bytes, {
+    required ValidateConfig validate,
+    required bool Function() shouldCommit,
+  }) async {
+    final target = File(await appPath.getProfilePath(id.toString()));
+    await target.parent.create(recursive: true);
+    final staging = await target.parent.createTemp('.import-');
+    final tempFile = File('${staging.path}/profile.yaml');
+    try {
+      if (!shouldCommit()) return this;
+      await tempFile.writeAsBytes(bytes, flush: true);
+      final issue = await validate(tempFile.path, ageSecretKey);
+      if (!shouldCommit()) return this;
       if (issue != null) throw MessageException(issue);
-      final target = File(await appPath.getProfilePath(id.toString()));
-      await target.parent.create(recursive: true);
-      staging = File('${target.path}.${tempFile.uri.pathSegments.last}.tmp');
-      await tempFile.copy(staging.path);
-      if (shouldCommit?.call() == false) return this;
-      // Only the metadata rename is synchronous: a newer UI intent cannot
-      // interleave between the ownership check and publishing validated bytes.
-      staging.renameSync(target.path);
+      for (var attempt = 1; ; attempt++) {
+        if (!shouldCommit()) return this;
+        try {
+          tempFile.renameSync(target.path);
+          break;
+        } on FileSystemException {
+          if (attempt == 10) rethrow;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+      }
       return copyWith(lastUpdateDate: DateTime.now());
     } finally {
-      try {
-        await staging?.safeDelete();
-      } finally {
-        await tempFile.safeDelete();
-      }
+      await staging.safeDelete(recursive: true);
     }
   }
 }
