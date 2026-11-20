@@ -25,7 +25,10 @@ final _token = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
 /// `<sub>/api/` for a vps2vpn subscription link, else null.
 Uri? vpsApiBase(String subUrl) {
   final uri = Uri.tryParse(subUrl.trim());
-  if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+  if (uri == null ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty ||
+      !(uri.isScheme('http') || uri.isScheme('https'))) {
     return null;
   }
   final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
