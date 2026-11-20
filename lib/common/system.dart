@@ -91,6 +91,18 @@ class System {
     return 'chown root:admin $path && chmod 4750 $path';
   }
 
+  /// Shell quoting and AppleScript string quoting are separate layers.
+  @visibleForTesting
+  static String macOSElevationScript(String corePath) {
+    final shell = macOSElevationShell(corePath)
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\t', r'\t');
+    return 'do shell script "$shell" with administrator privileges';
+  }
+
   /// Passes [corePath] out-of-band via `osascript` argv so AppleScript never
   /// parses path characters inside a double-quoted string literal.
   @visibleForTesting
