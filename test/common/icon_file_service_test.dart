@@ -102,14 +102,18 @@ void main() {
       await request.response.close();
     });
     final service = IconFileService();
-    final response = await service.get('http://127.0.0.1:${origin.port}/icon');
+    final response = await HttpOverrides.runWithHttpOverrides(
+      () => service.get('http://127.0.0.1:${origin.port}/icon'),
+      HttpOverrides(),
+    );
     expect(response.statusCode, 200);
     expect(response.contentLength, 3);
     expect(response.eTag, 'icon-v1');
     expect(response.fileExtension, '.png');
     expect(await response.content.expand((bytes) => bytes).toList(), [1, 2, 3]);
-    final unchanged = await service.get(
-      'http://127.0.0.1:${origin.port}/unchanged',
+    final unchanged = await HttpOverrides.runWithHttpOverrides(
+      () => service.get('http://127.0.0.1:${origin.port}/unchanged'),
+      HttpOverrides(),
     );
     expect(unchanged.statusCode, 304);
     expect(await unchanged.content.expand((bytes) => bytes).toList(), isEmpty);
