@@ -21,6 +21,7 @@ void main() {
 
     test('ignores links that are not vps2vpn subscriptions', () {
       expect(vpsApiBase(''), isNull);
+      expect(vpsApiBase('https:///s/$_tok'), isNull);
       expect(vpsApiBase('https://example.com/sub?token=$_tok'), isNull);
       expect(vpsApiBase('https://example.com/s/short'), isNull);
       expect(vpsApiBase('https://example.com/s/$_tok/extra'), isNull);
@@ -117,9 +118,30 @@ void main() {
     expect(h.record('hy2@a', false), isNull);
     expect(h.record('hy2@a', false), isNull);
     expect(h.record('hy2@a', false), isFalse);
+    h.acknowledge('hy2@a', false);
     expect(h.record('hy2@a', false), isNull, reason: 'already reported');
     expect(h.record('tuic@a', false), isNull, reason: 'lines are separate');
     expect(h.record('hy2@a', true), isTrue);
+    h.acknowledge('hy2@a', true);
+    expect(h.record('hy2@a', true), isNull);
+  });
+
+  test('retries a change until the panel acknowledges it', () {
+    final h = VpsLineHealth(threshold: 2);
+    expect(h.record('hy2@a', false), isNull);
+    expect(h.record('hy2@a', false), isFalse);
+    expect(h.record('hy2@a', false), isFalse);
+    h.acknowledge('hy2@a', false);
+    expect(h.record('hy2@a', false), isNull);
+    expect(h.record('hy2@a', true), isTrue);
+    expect(h.record('hy2@a', true), isTrue);
+    h.acknowledge('hy2@a', true);
+    expect(h.record('hy2@a', true), isNull);
+  });
+
+  test('does not report recovery for an unacknowledged outage', () {
+    final h = VpsLineHealth(threshold: 1);
+    expect(h.record('hy2@a', false), isFalse);
     expect(h.record('hy2@a', true), isNull);
   });
 
@@ -127,16 +149,25 @@ void main() {
     late HttpServer server;
     final posts = <(String?, Object?)>[];
     var meStatus = HttpStatus.ok;
+    String? meBody;
+    String? redirect;
 
     setUp(() async {
       posts.clear();
       meStatus = HttpStatus.ok;
+      meBody = null;
+      redirect = null;
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((req) async {
         final path = req.uri.path;
         if (path == '/s/$_tok/api/me' && req.method == 'GET') {
           req.response.statusCode = meStatus;
-          req.response.write(jsonEncode({'name': 'Ann', 'enabled': true}));
+          if (redirect != null) {
+            req.response.headers.set(HttpHeaders.locationHeader, redirect!);
+          }
+          req.response.write(
+            meBody ?? jsonEncode({'name': 'Ann', 'enabled': true}),
+          );
         } else if (path == '/s/$_tok/api/report' &&
             req.method == 'POST' &&
             req.contentLength < 0) {
@@ -163,6 +194,44 @@ void main() {
       final r = await fetchMember(base());
       expect(r!.member!.name, 'Ann');
       expect(r.linkChanged, isFalse);
+    });
+
+    test('does not follow a redirect into an unrelated 404', () async {
+      meStatus = HttpStatus.found;
+      redirect = '/login';
+      expect(await fetchMember(base()), isNull);
+    });
+
+    test('rejects an oversized panel body', () async {
+      meBody = jsonEncode({'name': 'a' * (1024 * 1024)});
+      expect(await fetchMember(base()), isNull);
+    });
+
+    test('authenticates only to the configured fallback proxy', () async {
+      meStatus = HttpStatus.serviceUnavailable;
+      final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => proxy.close(force: true));
+      final authorization = 'Basic ${base64Encode(utf8.encode('user:p:a@ss'))}';
+      var accepted = 0;
+      proxy.listen((request) async {
+        if (request.headers.value(HttpHeaders.proxyAuthorizationHeader) !=
+            authorization) {
+          request.response
+            ..statusCode = HttpStatus.proxyAuthenticationRequired
+            ..headers.set(HttpHeaders.proxyAuthenticateHeader, 'Basic realm="local"');
+        } else {
+          accepted++;
+          request.response.write(jsonEncode({'name': 'Via proxy'}));
+        }
+        await request.response.close();
+      });
+      final result = await fetchMember(
+        base(),
+        proxyPort: proxy.port,
+        proxyCredentials: 'user:p:a@ss',
+      );
+      expect(result?.member?.name, 'Via proxy');
+      expect(accepted, 1);
     });
 
     test('a 404 means the link was replaced', () async {

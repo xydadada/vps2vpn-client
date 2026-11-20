@@ -149,6 +149,14 @@ fn quoted_unit_argument(path: &Path) -> String {
     quoted
 }
 
+fn validate_unit_path(executable: &Path) -> Result<()> {
+    let path = executable.to_str().context("helper executable path is not UTF-8")?;
+    if path.chars().any(char::is_control) {
+        bail!("helper executable path contains control characters");
+    }
+    Ok(())
+}
+
 fn unit_contents(executable: &Path, owner: Owner) -> String {
     format!(
         "[Unit]\n\
@@ -179,12 +187,23 @@ fn unit_contents(executable: &Path, owner: Owner) -> String {
 /// The unit runs this binary as root at every boot, so one the invoking user
 /// could overwrite would turn a single polkit approval into standing root.
 fn ensure_root_owned(executable: &Path) -> Result<()> {
-    let directory = executable
-        .parent()
-        .context("helper executable has no parent directory")?;
-    for path in [executable, directory] {
-        let metadata = fs::metadata(path).with_context(|| format!("inspect {}", path.display()))?;
-        if metadata.uid() != 0 || metadata.mode() & 0o022 != 0 {
+    let executable = executable.canonicalize().context("resolve helper executable")?;
+    ensure_root_owned_ancestors(&executable, |path| {
+        let metadata = fs::symlink_metadata(path)?;
+        Ok((metadata.uid(), metadata.mode()))
+    })
+}
+
+fn ensure_root_owned_ancestors(
+    executable: &Path,
+    mut ownership: impl FnMut(&Path) -> std::io::Result<(u32, u32)>,
+) -> Result<()> {
+    if !executable.is_absolute() {
+        bail!("helper executable path must be absolute");
+    }
+    for path in executable.ancestors() {
+        let (uid, mode) = ownership(path).with_context(|| format!("inspect {}", path.display()))?;
+        if uid != 0 || mode & 0o022 != 0 || mode & libc::S_IFMT == libc::S_IFLNK {
             bail!(
                 "{} must be owned by root and not writable by group or others to run as a service; \
                  install the package instead of running an unpacked bundle",
@@ -220,6 +239,7 @@ fn ensure_unit_is_free_for(owner: Owner) -> Result<()> {
 fn install_service() -> Result<()> {
     let executable = std::env::current_exe().context("resolve helper executable path")?;
     ensure_root_owned(&executable)?;
+    validate_unit_path(&executable)?;
     let owner = invoking_owner()?;
     ensure_unit_is_free_for(owner)?;
 
@@ -405,6 +425,46 @@ mod tests {
             quoted_unit_argument(Path::new("/home/u/My Apps/100%/a\"b\\c")),
             r#""/home/u/My Apps/100%%/a\"b\\c""#
         );
+    }
+
+    #[test]
+    fn refuses_a_writable_or_user_owned_ancestor_above_the_app_directory() {
+        let executable = Path::new("/srv/user/app/helper");
+        for (bad_uid, bad_mode) in [(1000, 0o40755), (0, 0o40775), (0, 0o40777), (0, 0o120777)] {
+            let result = ensure_root_owned_ancestors(executable, |path| {
+                Ok(if path == Path::new("/srv/user") {
+                    (bad_uid, bad_mode)
+                } else {
+                    (0, 0o40755)
+                })
+            });
+            assert!(result.is_err());
+        }
+    }
+
+    #[test]
+    fn validates_the_entire_root_owned_path() {
+        let mut checked = Vec::new();
+        ensure_root_owned_ancestors(Path::new("/opt/app/helper"), |path| {
+            checked.push(path.to_path_buf());
+            Ok((0, 0o40755))
+        })
+        .unwrap();
+        assert_eq!(
+            checked,
+            ["/opt/app/helper", "/opt/app", "/opt", "/"].map(std::path::PathBuf::from),
+        );
+        assert!(ensure_root_owned_ancestors(Path::new("app/helper"), |_| Ok((0, 0o755))).is_err());
+    }
+
+    #[test]
+    fn rejects_service_paths_that_could_inject_unit_directives() {
+        assert!(validate_unit_path(Path::new("/opt/My App/helper")).is_ok());
+        for path in ["/opt/app\nRestart=no/helper", "/opt/app\r/helper", "/opt/app\t/helper"] {
+            assert!(validate_unit_path(Path::new(path)).is_err());
+        }
+        use std::os::unix::ffi::OsStrExt;
+        assert!(validate_unit_path(Path::new(OsStr::from_bytes(b"/opt/\xff/helper"))).is_err());
     }
 
     #[test]

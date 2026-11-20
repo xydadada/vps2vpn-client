@@ -15,7 +15,33 @@ fn desktop_file(home: &Path, id: &str) -> PathBuf {
     home.join(".config/autostart").join(format!("{id}.desktop"))
 }
 
+fn desktop_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
+fn desktop_executable(executable: &str) -> String {
+    let mut quoted = String::from("\"");
+    for character in executable.chars() {
+        match character {
+            '"' | '`' | '$' | '\\' => {
+                quoted.push('\\');
+                quoted.push(character);
+            }
+            '%' => quoted.push_str("%%"),
+            _ => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    desktop_value(&quoted)
+}
+
 fn desktop_entry(display_name: &str, executable: &str) -> String {
+    let display_name = desktop_value(display_name);
+    let executable = desktop_executable(executable);
     format!(
         "[Desktop Entry]\n\
          Type=Application\n\
@@ -75,7 +101,7 @@ mod tests {
         assert_eq!(
             fs::read_to_string(&file).unwrap(),
             "[Desktop Entry]\nType=Application\nName=FlClash\n\
-             Comment=FlClash startup script\nExec=/opt/FlClash/FlClash\n\
+             Comment=FlClash startup script\nExec=\"/opt/FlClash/FlClash\"\n\
              StartupNotify=false\nTerminal=false\n",
         );
         assert!(desktop_file(&home, "FlClash").exists());
@@ -84,6 +110,28 @@ mod tests {
         assert!(!file.exists());
         assert!(write(false));
         fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn quotes_executable_paths_and_escapes_desktop_field_codes() {
+        assert_eq!(
+            desktop_executable("/opt/My App/vps2vpn"),
+            "\"/opt/My App/vps2vpn\"",
+        );
+        assert_eq!(
+            desktop_executable(r#"/opt/a"b\c$`%f/vps2vpn"#),
+            r#""/opt/a\\"b\\\\c\\$\\`%%f/vps2vpn""#,
+        );
+    }
+
+    #[test]
+    fn names_and_paths_cannot_inject_desktop_entry_keys() {
+        let entry = desktop_entry("App\nHidden=true", "/opt/app\nTerminal=true");
+        assert!(entry.contains("Name=App\\nHidden=true\n"));
+        assert!(entry.contains("Exec=\"/opt/app\\nTerminal=true\"\n"));
+        assert!(!entry
+            .lines()
+            .any(|line| line == "Hidden=true" || line == "Terminal=true"));
     }
 
     #[test]

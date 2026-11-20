@@ -107,15 +107,18 @@ func loadConfigWithBase(base *SetupBase, configPath string) (*config.Config, err
 	if err := document.Decode(raw); err != nil {
 		return nil, err
 	}
-	if err := writeConfigDocument(configPath, document); err != nil {
-		return nil, err
-	}
 	// The overlay's rules (the user's own, first) stay ahead of the AI rules.
 	var overlay struct {
 		Rules []string `yaml:"rules"`
 	}
 	_ = yaml.Unmarshal([]byte(base.Overlay), &overlay)
-	vps2vpnEnhance(raw, len(overlay.Rules))
+	change := vps2vpnEnhance(raw, len(overlay.Rules))
+	if err := syncVpsEnhancement(document, raw, change); err != nil {
+		return nil, err
+	}
+	if err := writeConfigDocument(configPath, document); err != nil {
+		return nil, err
+	}
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
 		return nil, err
@@ -138,6 +141,11 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 	}
 	if err := yaml.Unmarshal([]byte(base.Overlay), &overlayDocument); err != nil {
 		return nil, err
+	}
+	for _, document := range []*yaml.Node{&profileDocument, &overlayDocument} {
+		if err := validateAliasGraph(document); err != nil {
+			return nil, err
+		}
 	}
 	profile, err := documentMapping(&profileDocument)
 	if err != nil {
@@ -165,6 +173,34 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 	return &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}, nil
 }
 
+func validateAliasGraph(root *yaml.Node) error {
+	states := make(map[*yaml.Node]uint8)
+	var visit func(*yaml.Node) error
+	visit = func(node *yaml.Node) error {
+		if node == nil {
+			return nil
+		}
+		switch states[node] {
+		case 1:
+			return fmt.Errorf("line %d: cyclic YAML alias", node.Line)
+		case 2:
+			return nil
+		}
+		states[node] = 1
+		if err := visit(node.Alias); err != nil {
+			return err
+		}
+		for _, child := range node.Content {
+			if err := visit(child); err != nil {
+				return err
+			}
+		}
+		states[node] = 2
+		return nil
+	}
+	return visit(root)
+}
+
 func documentMapping(document *yaml.Node) (*yaml.Node, error) {
 	node := document
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
@@ -181,6 +217,14 @@ func documentMapping(document *yaml.Node) (*yaml.Node, error) {
 
 // A key the mapping lacks is looked up in its merge keys, as the decoder does.
 func mappingValue(mapping *yaml.Node, key string) *yaml.Node {
+	return mappingValueSeen(mapping, key, make(map[*yaml.Node]bool))
+}
+
+func mappingValueSeen(mapping *yaml.Node, key string, seen map[*yaml.Node]bool) *yaml.Node {
+	if seen[mapping] {
+		return nil
+	}
+	seen[mapping] = true
 	var sources []*yaml.Node
 	for i := 0; i+1 < len(mapping.Content); i += 2 {
 		name, value := mapping.Content[i], mapping.Content[i+1]
@@ -201,7 +245,7 @@ func mappingValue(mapping *yaml.Node, key string) *yaml.Node {
 		}
 		for _, candidate := range candidates {
 			if candidate = resolveAlias(candidate); candidate.Kind == yaml.MappingNode {
-				if value := mappingValue(candidate, key); value != nil {
+				if value := mappingValueSeen(candidate, key, seen); value != nil {
 					return value
 				}
 			}
@@ -359,4 +403,75 @@ func inlineAliases(root *yaml.Node) {
 		}
 	}
 	walk(root)
+}
+
+func configSequence(root *yaml.Node, key string) (*yaml.Node, error) {
+	node := resolveAlias(mappingValue(root, key))
+	if node == nil || isNull(node) {
+		node = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		setMappingValue(root, key, node)
+	}
+	if node.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("%s must be a list", key)
+	}
+	return node, nil
+}
+
+func syncVpsEnhancement(document *yaml.Node, raw *config.RawConfig, change vpsEnhancement) error {
+	root, err := documentMapping(document)
+	if err != nil {
+		return err
+	}
+	if len(change.fingerprints) > 0 {
+		proxies, err := configSequence(root, "proxies")
+		if err != nil {
+			return err
+		}
+		for _, i := range change.fingerprints {
+			if i >= len(proxies.Content) {
+				return fmt.Errorf("proxy index %d is missing", i)
+			}
+			setMappingValue(resolveAlias(proxies.Content[i]), "client-fingerprint",
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "chrome"})
+		}
+	}
+	if change.groups > 0 {
+		groups, err := configSequence(root, "proxy-groups")
+		if err != nil {
+			return err
+		}
+		if i := change.selector; i >= 0 {
+			if i >= len(groups.Content) {
+				return fmt.Errorf("selector index %d is missing", i)
+			}
+			var members yaml.Node
+			if err := members.Encode(raw.ProxyGroup[i]["proxies"]); err != nil {
+				return err
+			}
+			setMappingValue(resolveAlias(groups.Content[i]), "proxies", &members)
+		}
+		for _, group := range raw.ProxyGroup[len(raw.ProxyGroup)-change.groups:] {
+			var node yaml.Node
+			if err := node.Encode(group); err != nil {
+				return err
+			}
+			groups.Content = append(groups.Content, &node)
+		}
+	}
+	if change.rules > 0 {
+		rules, err := configSequence(root, "rules")
+		if err != nil {
+			return err
+		}
+		if change.ruleOffset > len(rules.Content) {
+			return fmt.Errorf("user rule offset %d is out of range", change.ruleOffset)
+		}
+		content := make([]*yaml.Node, 0, len(rules.Content)+change.rules)
+		content = append(content, rules.Content[:change.ruleOffset]...)
+		for _, rule := range raw.Rule[change.ruleOffset : change.ruleOffset+change.rules] {
+			content = append(content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: rule})
+		}
+		rules.Content = append(content, rules.Content[change.ruleOffset:]...)
+	}
+	return nil
 }

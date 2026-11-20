@@ -52,6 +52,7 @@ void main() {
         '    ProxyServer    REG_SZ    127.0.0.1:7890\r\n',
       );
       expect(p.active, isFalse);
+      expect(p.isOurs(7890), isFalse);
     });
 
     test('a PAC script counts as an active proxy', () {
@@ -62,6 +63,34 @@ void main() {
       expect(p.active, isTrue);
       expect(p.isOurs(7890), isFalse);
     });
+  });
+
+  test('proxy ownership requires an exact active loopback endpoint', () {
+    for (final endpoint in [
+      '127.0.0.1:78901',
+      'localhost:78900',
+      'evil.test/127.0.0.1:7890',
+      'http=127.0.0.1:7890;https=proxy.test:443',
+    ]) {
+      expect(
+        VpsSystemProxy(enabled: true, server: endpoint).isOurs(7890),
+        isFalse,
+      );
+    }
+    expect(
+      const VpsSystemProxy(
+        enabled: true,
+        pac: 'https://proxy.test:7890/script.pac',
+      ).isOurs(7890),
+      isFalse,
+    );
+    expect(
+      const VpsSystemProxy(
+        enabled: true,
+        server: 'LOCALHOST:7890',
+      ).isOurs(7890),
+      isTrue,
+    );
   });
 
   group('port', () {
@@ -90,7 +119,7 @@ void main() {
     expect(await quitRivals(const [fake]), ['Probe']);
   });
 
-  test('quitting ends each image once and reports what is left', () async {
+  test('quitting ends observed PIDs and reports what is left', () async {
     final calls = <List<String>>[];
     var scans = 0;
     Future<ProcessResult> run(String exe, List<String> args) async {
@@ -103,11 +132,14 @@ void main() {
       return _ok('');
     }
 
-    if (!Platform.isWindows) return;
     final left = await quitRivals(parseRivals(tasklist), run: run);
     expect(
       calls.where((c) => c.first == 'taskkill').map((c) => c.last).toList(),
-      ['flclash.exe', 'flclashcore.exe', 'verge-mihomo.exe'],
+      ['4120', '4188', '5000'],
+    );
+    expect(
+      calls.where((c) => c.first == 'taskkill').every((c) => c.contains('/PID')),
+      isTrue,
     );
     expect(scans, 1);
     expect(left, ['FlClash']);

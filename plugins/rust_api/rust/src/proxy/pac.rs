@@ -1,12 +1,14 @@
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use super::PAC_PATH;
 
 const MAX_REQUEST_BYTES: usize = 16 * 1024;
+const MAX_CONCURRENT_REQUESTS: usize = 32;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 static SCRIPT: Mutex<String> = Mutex::new(String::new());
 static REVISION: AtomicU64 = AtomicU64::new(0);
@@ -37,17 +39,47 @@ fn listener_address() -> &'static Option<SocketAddr> {
 }
 
 fn accept(listener: TcpListener) {
-    for stream in listener.incoming().flatten() {
+    let active = Arc::new(AtomicUsize::new(0));
+    for stream in listener.incoming() {
+        let Ok(stream) = stream else {
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        };
+        let Some(slot) = RequestSlot::acquire(&active) else {
+            continue;
+        };
+        let deadline = Instant::now() + REQUEST_TIMEOUT;
         let _ = std::thread::Builder::new()
             .name("system-proxy-pac-request".into())
-            .spawn(move || respond(stream));
+            .spawn(move || {
+                let _slot = slot;
+                respond(stream, deadline);
+            });
     }
 }
 
-fn respond(mut stream: TcpStream) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
-    let Some(head) = read_head(&mut stream) else {
+struct RequestSlot(Arc<AtomicUsize>);
+
+impl RequestSlot {
+    fn acquire(active: &Arc<AtomicUsize>) -> Option<Self> {
+        active
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+                (count < MAX_CONCURRENT_REQUESTS).then_some(count + 1)
+            })
+            .ok()
+            .map(|_| Self(Arc::clone(active)))
+    }
+}
+
+impl Drop for RequestSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+fn respond(mut stream: TcpStream, deadline: Instant) {
+    let _ = stream.set_write_timeout(Some(REQUEST_TIMEOUT));
+    let Some(head) = read_head(&mut stream, deadline) else {
         return;
     };
     let script = SCRIPT
@@ -57,10 +89,12 @@ fn respond(mut stream: TcpStream) {
     let _ = stream.write_all(&response(&head, &script));
 }
 
-fn read_head(stream: &mut TcpStream) -> Option<String> {
+fn read_head(stream: &mut TcpStream, deadline: Instant) -> Option<String> {
     let mut head = Vec::new();
     let mut buffer = [0; 1024];
     while !head.windows(4).any(|window| window == b"\r\n\r\n") {
+        let remaining = deadline.checked_duration_since(Instant::now())?;
+        stream.set_read_timeout(Some(remaining)).ok()?;
         let read = stream.read(&mut buffer).ok()?;
         if read == 0 || head.len() + read > MAX_REQUEST_BYTES {
             return None;
@@ -101,6 +135,61 @@ mod tests {
 
     fn text(bytes: Vec<u8>) -> String {
         String::from_utf8(bytes).unwrap()
+    }
+
+    fn connection() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        (listener.accept().unwrap().0, client)
+    }
+
+    #[test]
+    fn limits_active_requests_and_returns_capacity_when_a_request_ends() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let mut slots: Vec<_> = (0..MAX_CONCURRENT_REQUESTS)
+            .map(|_| RequestSlot::acquire(&active).unwrap())
+            .collect();
+        assert!(RequestSlot::acquire(&active).is_none());
+        slots.pop();
+        assert!(RequestSlot::acquire(&active).is_some());
+        drop(slots);
+        assert_eq!(active.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn rejects_a_header_that_exceeds_the_size_limit() {
+        let (mut server, mut client) = connection();
+        client.write_all(&vec![b'x'; MAX_REQUEST_BYTES + 1]).unwrap();
+        assert!(read_head(&mut server, Instant::now() + REQUEST_TIMEOUT).is_none());
+    }
+
+    #[test]
+    fn a_slow_header_cannot_extend_the_request_deadline() {
+        let (mut server, mut client) = connection();
+        let writer = std::thread::spawn(move || {
+            for _ in 0..100 {
+                if client.write_all(b"x").is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        });
+        let started = Instant::now();
+        assert!(read_head(&mut server, started + Duration::from_millis(100)).is_none());
+        assert!(started.elapsed() < Duration::from_secs(1));
+        drop(server);
+        writer.join().unwrap();
+    }
+
+    #[test]
+    fn accepts_a_complete_header_before_the_deadline() {
+        let (mut server, mut client) = connection();
+        let head = "GET /flclash.pac HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        client.write_all(head.as_bytes()).unwrap();
+        assert_eq!(
+            read_head(&mut server, Instant::now() + REQUEST_TIMEOUT).as_deref(),
+            Some(head),
+        );
     }
 
     #[test]

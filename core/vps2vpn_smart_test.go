@@ -1,6 +1,7 @@
 package core
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/metacubex/mihomo/config"
@@ -123,5 +124,51 @@ func TestVps2vpnEnhanceOffByDefault(t *testing.T) {
 	vps2vpnEnhance(raw, 0)
 	if len(raw.ProxyGroup) != 1 {
 		t.Fatal("changed while switched off")
+	}
+}
+
+func TestVps2vpnEnhanceKeepsSecondaryServersTogether(t *testing.T) {
+	vpsOn(t)
+	raw := vpsTestRaw("MATCH,Proxy")
+	raw.Proxy = append(raw.Proxy,
+		map[string]any{"name": "US-REALITY", "type": "vless", "server": "5.6.7.8", "reality-opts": map[string]any{}},
+		map[string]any{"name": "JP-HY2", "type": "hysteria2", "server": "9.10.11.12"},
+	)
+	vps2vpnEnhance(raw, 0)
+	want := []string{"SG-HY2", "SG-REALITY", "US-HY2", "US-REALITY", "JP-HY2"}
+	for _, name := range []string{vpsSmartGroup, vpsAIGroup} {
+		if got := vpsGroup(raw, name)["proxies"]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s order = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestVps2vpnEnhancePreservesStringSliceSelector(t *testing.T) {
+	vpsOn(t)
+	raw := vpsTestRaw("MATCH,Proxy")
+	raw.ProxyGroup[0]["proxies"] = []string{"SG-REALITY", "US-HY2"}
+	vps2vpnEnhance(raw, 0)
+	want := []string{vpsSmartGroup, "SG-REALITY", "US-HY2"}
+	if got := raw.ProxyGroup[0]["proxies"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("selector = %v, want %v", got, want)
+	}
+}
+
+func TestVps2vpnEnhanceDoesNotShadowProxyNames(t *testing.T) {
+	for _, name := range []string{vpsSmartGroup, vpsAIGroup} {
+		t.Run(name, func(t *testing.T) {
+			vpsOn(t)
+			raw := vpsTestRaw("MATCH,Proxy")
+			raw.Proxy = append(raw.Proxy, map[string]any{
+				"name": name, "type": "hysteria2", "server": "9.10.11.12", "port": 443, "password": "p",
+			})
+			vps2vpnEnhance(raw, 0)
+			if vpsGroup(raw, name) != nil {
+				t.Fatalf("generated group shadows proxy %q", name)
+			}
+			if _, err := config.ParseRawConfig(raw); err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+		})
 	}
 }

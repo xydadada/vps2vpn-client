@@ -10,14 +10,14 @@ use windows_sys::Win32::System::Registry::{
 };
 
 use super::entries::{
-    run_value, startup_approved, url_command, url_protocol_key, RUN_KEY, STARTUP_APPROVED_ENABLED,
+    run_value, run_value_matches, startup_approved, url_command, url_protocol_key, RUN_KEY, STARTUP_APPROVED_ENABLED,
     STARTUP_APPROVED_KEY, URL_COMMAND_KEY, URL_PROTOCOL_VALUE,
 };
 
 pub fn autostart_enabled(id: &str, executable: &str) -> bool {
     let registered = Key::open(HKEY_CURRENT_USER, RUN_KEY)
         .and_then(|key| key.string(id))
-        .is_some_and(|value| value == run_value(executable));
+        .is_some_and(|value| run_value_matches(&value, executable));
     registered
         && startup_approved(
             Key::open(HKEY_CURRENT_USER, STARTUP_APPROVED_KEY)
@@ -29,7 +29,7 @@ pub fn autostart_enabled(id: &str, executable: &str) -> bool {
 pub fn set_autostart(id: &str, _display_name: &str, executable: &str, enabled: bool) -> bool {
     if enabled {
         Key::create(HKEY_CURRENT_USER, RUN_KEY)
-            .is_some_and(|key| key.set_string(id, run_value(executable)))
+            .is_some_and(|key| key.set_string(id, &run_value(executable)))
             && Key::create(HKEY_CURRENT_USER, STARTUP_APPROVED_KEY)
                 .is_some_and(|key| key.set(id, REG_BINARY, &STARTUP_APPROVED_ENABLED))
     } else {

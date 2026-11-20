@@ -117,19 +117,25 @@ struct ManagedCore {
     session_id: String,
     child: Child,
     #[cfg(windows)]
-    _job: CoreJob,
+    _job: Option<CoreJob>,
 }
 
 impl ManagedCore {
-    fn adopt(session_id: String, child: Child) -> Result<Self, Error> {
-        #[cfg(windows)]
-        let job = CoreJob::bind(&child)?;
-        Ok(Self {
+    fn adopt(session_id: String, child: Child) -> Self {
+        Self {
             session_id,
             child,
             #[cfg(windows)]
-            _job: job,
-        })
+            _job: None,
+        }
+    }
+
+    fn confine(&mut self) -> Result<(), Error> {
+        #[cfg(windows)]
+        {
+            self._job = Some(CoreJob::bind(&self.child)?);
+        }
+        Ok(())
     }
 
     fn terminate(&mut self) -> Result<(), Error> {
@@ -500,17 +506,10 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
                     reap_exited_core(&session_id);
                 });
             }
-            *managed = match ManagedCore::adopt(start_params.session_id.clone(), child) {
-                Ok(core) => Some(core),
-                Err(error) => {
-                    log_message(format!("Helper could not confine the Core: {error}"));
-                    return error_response(
-                        "internalError",
-                        format!("Core confinement failed: {error}"),
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                    );
-                }
-            };
+            *managed = Some(ManagedCore::adopt(start_params.session_id.clone(), child));
+            if let Err(error) = managed.as_mut().expect("just adopted Core").confine() {
+                return confinement_failure(&mut managed, error);
+            }
             json_response(
                 &StartResponse {
                     session_id: start_params.session_id,
@@ -524,6 +523,25 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
             launch_failure_response(&e)
         }
     }
+}
+
+fn confinement_failure(
+    managed: &mut Option<ManagedCore>,
+    error: Error,
+) -> warp::reply::Response {
+    log_message(format!("Helper could not confine the Core: {error}"));
+    if let Err(stop_error) = release_managed_core(managed) {
+        return error_response(
+            "coreStopFailed",
+            format!("Core confinement failed: {error}; cleanup failed: {stop_error}"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        );
+    }
+    error_response(
+        "internalError",
+        format!("Core confinement failed: {error}"),
+        StatusCode::INTERNAL_SERVER_ERROR,
+    )
 }
 
 fn stop_core(stop_params: StopParams) -> warp::reply::Response {
@@ -916,7 +934,7 @@ mod tests {
 
     fn adopt_core(session_id: &str) {
         *lock_surviving_poison(&MANAGED_CORE) =
-            Some(ManagedCore::adopt(session_id.to_string(), spawn_running_core()).unwrap());
+            Some(ManagedCore::adopt(session_id.to_string(), spawn_running_core()));
     }
 
     #[test]
@@ -1124,8 +1142,7 @@ mod tests {
             ManagedCore::adopt(
                 "fedcba9876543210fedcba9876543210".to_string(),
                 spawn_placeholder_core(),
-            )
-            .unwrap(),
+            ),
         );
 
         let response = launch(StartParams {
@@ -1149,7 +1166,7 @@ mod tests {
         let _state = lock_process_state();
         let session_id = "0123456789abcdef0123456789abcdef";
         *lock_surviving_poison(&MANAGED_CORE) =
-            Some(ManagedCore::adopt(session_id.to_string(), spawn_placeholder_core()).unwrap());
+            Some(ManagedCore::adopt(session_id.to_string(), spawn_placeholder_core()));
 
         reap_exited_core(session_id);
 
@@ -1161,7 +1178,7 @@ mod tests {
         let _state = lock_process_state();
         let session_id = "0123456789abcdef0123456789abcdef";
         *lock_surviving_poison(&MANAGED_CORE) =
-            Some(ManagedCore::adopt(session_id.to_string(), spawn_placeholder_core()).unwrap());
+            Some(ManagedCore::adopt(session_id.to_string(), spawn_placeholder_core()));
 
         reap_exited_core("fedcba9876543210fedcba9876543210");
         assert!(lock_surviving_poison(&MANAGED_CORE).is_some());
@@ -1255,8 +1272,7 @@ mod tests {
             spawn_shell_core_once_ready(
                 "trap 'exit 0' TERM; echo ready; while :; do sleep 0.05; done",
             ),
-        )
-        .unwrap();
+        );
 
         core.terminate().unwrap();
 
@@ -1273,8 +1289,7 @@ mod tests {
         let mut core = ManagedCore::adopt(
             "0123456789abcdef0123456789abcdef".to_string(),
             spawn_shell_core_once_ready("trap '' TERM; echo ready; exec sleep 30"),
-        )
-        .unwrap();
+        );
 
         core.terminate().unwrap();
 
@@ -1285,11 +1300,11 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn closing_the_job_takes_the_core_down_with_the_helper() {
-        let core = ManagedCore::adopt(
+        let mut core = ManagedCore::adopt(
             "0123456789abcdef0123456789abcdef".to_string(),
             spawn_running_core(),
-        )
-        .unwrap();
+        );
+        core.confine().unwrap();
         let ManagedCore {
             mut child, _job, ..
         } = core;
@@ -1303,14 +1318,31 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn confinement_failure_terminates_and_reaps_the_owned_core() {
+        let mut managed = Some(ManagedCore::adopt(
+            "0123456789abcdef0123456789abcdef".to_string(),
+            spawn_running_core(),
+        ));
+
+        let response = confinement_failure(&mut managed, Error::other("job assignment refused"));
+
+        assert!(managed.is_none());
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body: serde_json::Value = serde_json::from_slice(
+            &warp::hyper::body::to_bytes(response.into_body()).await.unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["code"], "internalError");
+    }
+
     #[test]
     fn terminate_confirms_the_exit_of_a_running_core() {
         let mut managed = Some(
             ManagedCore::adopt(
                 "0123456789abcdef0123456789abcdef".to_string(),
                 spawn_running_core(),
-            )
-            .unwrap(),
+            ),
         );
 
         release_managed_core(&mut managed).unwrap();

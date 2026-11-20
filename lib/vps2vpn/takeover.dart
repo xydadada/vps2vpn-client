@@ -92,11 +92,11 @@ class VpsSystemProxy {
 
   /// Points at our own mixed port on this machine.
   bool isOurs(int port) {
-    if (pac != null && pac!.isNotEmpty) {
-      return pac!.contains(':$port');
+    if (!enabled || port <= 0 || port > 65535 || (pac?.isNotEmpty ?? false)) {
+      return false;
     }
-    final s = server ?? '';
-    return s.contains('127.0.0.1:$port') || s.contains('localhost:$port');
+    final endpoint = server?.trim().toLowerCase();
+    return endpoint == '127.0.0.1:$port' || endpoint == 'localhost:$port';
   }
 }
 
@@ -127,7 +127,7 @@ Future<ProcessResult> _run(String executable, List<String> args) =>
 
 /// Other proxy apps running now. Empty off Windows or when tasklist fails.
 Future<List<VpsRival>> scanRivals({VpsRun run = _run}) async {
-  if (!Platform.isWindows) return const [];
+  if (!Platform.isWindows && identical(run, _run)) return const [];
   try {
     final r = await run('tasklist', ['/FO', 'CSV', '/NH']);
     if (r.exitCode != 0) return const [];
@@ -144,11 +144,11 @@ Future<List<String>> quitRivals(
 }) async {
   if (rivals.isEmpty) return const [];
   if (_underTest && identical(run, _run)) return rivalNames(rivals);
-  for (final image in {for (final r in rivals) r.image}) {
+  for (final pid in {for (final r in rivals) r.pid}) {
     try {
       // /T takes the app's own core with it; /F because tray apps ignore a
       // polite close (they hide to the tray instead).
-      await run('taskkill', ['/F', '/T', '/IM', image]);
+      await run('taskkill', ['/F', '/T', '/PID', '$pid']);
     } catch (_) {}
   }
   // Give Windows a moment to release their ports and TUN adapters.
@@ -248,37 +248,46 @@ final bool _underTest = Platform.environment.containsKey('FLUTTER_TEST');
 
 /// Runs before every connect. Safe mode, and takeover switched off, only
 /// report what they see; nothing is closed or changed.
-Future<void> vpsBeforeConnect(Ref ref) async {
+Future<void> vpsBeforeConnect(Ref ref, {bool Function()? isCurrent}) async {
   if (!Platform.isWindows || _underTest) return;
-  final act = !safeModeBuild && ref.read(appSettingProvider).takeover;
+  bool current() => ref.mounted && (isCurrent?.call() ?? true);
+  bool canAct() =>
+      current() &&
+      !safeModeBuild &&
+      !ref.read(safeModeProvider) &&
+      ref.read(appSettingProvider).takeover;
+  if (!current()) return;
+  final act = canAct();
   final rivals = await scanRivals();
+  if (!current()) return;
   final names = rivalNames(rivals);
   var still = const <String>[];
-  if (act && rivals.isNotEmpty) {
+  if (canAct() && rivals.isNotEmpty) {
     still = await quitRivals(rivals);
   }
+  if (!current()) return;
   int? from;
   int? to;
   var cleared = false;
-  if (!safeModeBuild) {
+  if (canAct()) {
     final port = ref.read(patchClashConfigProvider).mixedPort;
     final next = await pickPort(port);
-    if (next != port) {
+    if (!current()) return;
+    if (canAct() && next != port) {
       from = port;
       to = next;
       ref
           .read(patchClashConfigProvider.notifier)
           .update((s) => s.copyWith(mixedPort: next));
     }
-    // TUN mode sets no system proxy, so one left by a closed app would send
-    // every browser to a dead port.
-    if (act && !ref.read(networkSettingProvider).systemProxy) {
+    if (canAct() && !ref.read(networkSettingProvider).systemProxy) {
       final proxy = await readSystemProxy();
-      if (proxy != null && proxy.active) {
+      if (canAct() && proxy != null && proxy.active) {
         cleared = await rust_api.stopSystemProxy();
       }
     }
   }
+  if (!current()) return;
   vpsTakeoverReport.value = VpsTakeoverReport(
     running: act ? const [] : names,
     closed: act ? names.where((n) => !still.contains(n)).toList() : const [],
@@ -286,7 +295,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
     portFrom: from,
     portTo: to,
     clearedProxy: cleared,
-    dryRun: safeModeBuild,
+    dryRun: safeModeBuild || ref.read(safeModeProvider),
   );
   _startGuard(ref);
 }
@@ -311,17 +320,39 @@ Future<void> vpsScanOnly() async {
 /// app takes it.
 void _startGuard(Ref ref) {
   _guard?.cancel();
-  if (safeModeBuild) return;
+  if (safeModeBuild ||
+      ref.read(safeModeProvider) ||
+      !ref.read(appSettingProvider).takeover) {
+    return;
+  }
+  var busy = false;
   _guard = Timer.periodic(const Duration(seconds: 20), (timer) async {
-    final state = ref.read(proxyStateProvider);
-    if (!state.isStart) {
+    if (!ref.mounted ||
+        ref.read(safeModeProvider) ||
+        !ref.read(appSettingProvider).takeover ||
+        !ref.read(isStartProvider)) {
       timer.cancel();
       return;
     }
-    if (!state.systemProxy) return;
-    final proxy = await readSystemProxy();
-    if (proxy != null && !proxy.isOurs(state.port)) {
-      await systemProxyQueue?.apply(state);
+    if (busy) return;
+    final state = ref.read(proxyStateProvider);
+    if (!state.isStart || !state.systemProxy || state.pacScript != null) return;
+    busy = true;
+    try {
+      final proxy = await readSystemProxy();
+      if (!timer.isActive ||
+          !ref.mounted ||
+          ref.read(safeModeProvider) ||
+          !ref.read(appSettingProvider).takeover ||
+          ref.read(proxyStateProvider) != state) {
+        return;
+      }
+      if (proxy != null && !proxy.isOurs(state.port)) {
+        await systemProxyQueue?.apply(state);
+      }
+    } finally {
+      busy = false;
     }
   });
+  ref.onDispose(_guard!.cancel);
 }

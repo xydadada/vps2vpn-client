@@ -40,6 +40,17 @@ ProxyState _state({required bool isStart}) {
 }
 
 void main() {
+  test('proxy commands use shell assignment syntax', () {
+    expect(
+      proxyEnvCommand(7890, isWindows: true),
+      '\$env:all_proxy = \'http://127.0.0.1:7890\'',
+    );
+    expect(
+      proxyEnvCommand(7890, isWindows: false),
+      'export all_proxy=http://127.0.0.1:7890',
+    );
+  });
+
   test('applies changes in the order they come', () async {
     final proxy = _FakeProxy();
     final queue = SystemProxyQueue(proxy);

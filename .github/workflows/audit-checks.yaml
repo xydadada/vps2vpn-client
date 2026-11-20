@@ -1,0 +1,138 @@
+name: vps2vpn audit checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.50.0'
+  GO_VERSION: '1.27.4'
+  RUSTUP_TOOLCHAIN: '1.99.0'
+  CA_BUNDLE: cacert-2026-09-25.pem
+  CA_BUNDLE_SHA256: a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+      - name: Fetch verified CA bundle
+        shell: bash
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+      - name: Core tests
+        working-directory: core
+        run: go test ./...
+      - name: Core static checks
+        working-directory: core
+        run: go vet ./...
+      - name: Android Core static checks
+        working-directory: core
+        env:
+          GOOS: android
+          GOARCH: arm64
+        run: go vet -tags=with_gvisor . ./mobile ./tun ./platform
+      - name: Core race checks
+        working-directory: core
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race .
+
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libsecret-1-dev
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - name: Helper tests
+        run: cargo test --locked --manifest-path services/helper/Cargo.toml
+      - name: Windows service tests
+        if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path services/helper/Cargo.toml --features windows-service
+      - name: Native bridge tests
+        run: cargo test --locked --manifest-path plugins/rust_api/rust/Cargo.toml
+
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install Linux native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libsecret-1-dev
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Configure test hooks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('pubspec.yaml')
+          content = path.read_text()
+          needle = '    setup:\n      build_assets: true'
+          if content.count(needle) != 1:
+              raise SystemExit('Cannot locate the setup hook configuration')
+          path.write_text(content.replace(needle, '    setup:\n      build_assets: false'))
+          PY
+      - name: Fetch verified CA bundle
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+      - name: Tooling tests
+        run: |
+          bash tool/hooks/test.sh
+          node --test .github/scripts/
+      - name: Flutter dependencies
+        run: flutter pub get
+      - name: Flutter analysis
+        run: flutter analyze --no-fatal-infos
+      - name: Flutter tests
+        run: flutter test --concurrency=4 --reporter expanded
+      - name: Plugin checks
+        run: bash tool/check_plugins.sh
+      - name: Setup hook tests
+        working-directory: plugins/setup/setup_hooks
+        run: |
+          dart pub get
+          dart analyze
+          dart test

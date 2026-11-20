@@ -4,8 +4,12 @@ pub const STARTUP_APPROVED_KEY: &str =
 
 pub const STARTUP_APPROVED_ENABLED: [u8; 12] = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-pub fn run_value(executable: &str) -> &str {
-    executable
+pub fn run_value(executable: &str) -> String {
+    format!("\"{executable}\"")
+}
+
+pub fn run_value_matches(value: &str, executable: &str) -> bool {
+    value == run_value(executable) || value == executable
 }
 
 /// Task Manager disables a Run entry with an odd first byte.
@@ -53,10 +57,18 @@ mod tests {
     }
 
     #[test]
-    fn the_run_value_is_the_unquoted_path() {
+    fn the_run_value_quotes_the_executable_path() {
         assert_eq!(
             run_value(r"C:\Program Files\FlClash\FlClash.exe"),
-            r"C:\Program Files\FlClash\FlClash.exe",
+            r#""C:\Program Files\FlClash\FlClash.exe""#,
         );
+    }
+    #[test]
+    fn recognizes_older_bare_entries_without_matching_other_commands() {
+        let executable = r"C:\Program Files\FlClash\FlClash.exe";
+        assert!(run_value_matches(&run_value(executable), executable));
+        assert!(run_value_matches(executable, executable));
+        assert!(!run_value_matches(&format!("{executable} --other"), executable));
+        assert!(!run_value_matches(r"C:\Other\app.exe", executable));
     }
 }

@@ -412,3 +412,97 @@ func TestEncodeConfigMappingKeepsEveryKeyAfterAnOpenEndedScalar(t *testing.T) {
 		t.Errorf("decoded %d rules, want all %d in order", len(decoded.Rules), len(rules))
 	}
 }
+
+func TestMergeProfileBaseRejectsCyclicAliases(t *testing.T) {
+	for name, profile := range map[string]string{
+		"root merge":      "&loop {<<: *loop}\n",
+		"nested sequence": "proxies: &loop [*loop]\n",
+		"nested map":      "x-defaults: &loop {child: *loop}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := mergeProfileBase(&SetupBase{Path: writeBaseProfile(t, profile), Overlay: "{}"})
+			if err == nil || !strings.Contains(err.Error(), "cyclic YAML alias") {
+				t.Fatalf("merge error = %v, want cyclic YAML alias", err)
+			}
+		})
+	}
+	_, err := mergeProfileBase(&SetupBase{Path: writeBaseProfile(t, "rules: []\n"), Overlay: "&loop {<<: *loop}"})
+	if err == nil || !strings.Contains(err.Error(), "cyclic YAML alias") {
+		t.Fatalf("overlay error = %v, want cyclic YAML alias", err)
+	}
+}
+
+func TestValidateAliasGraphAllowsSharedAnchors(t *testing.T) {
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte("x: &base {value: 1}\na: *base\nb: *base\n"), &document); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateAliasGraph(&document); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMappingValueHandlesRepeatedMergeSources(t *testing.T) {
+	value := &yaml.Node{Kind: yaml.ScalarNode, Value: "value"}
+	mapping := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "present"}, value,
+	}}
+	for range 24 {
+		alias := &yaml.Node{Kind: yaml.AliasNode, Alias: mapping}
+		mapping = &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!merge", Value: "<<"},
+			{Kind: yaml.SequenceNode, Content: []*yaml.Node{alias, alias}},
+		}}
+	}
+	if got := mappingValue(mapping, "absent"); got != nil {
+		t.Fatalf("absent value = %v", got)
+	}
+	if got := mappingValue(mapping, "present"); got != value {
+		t.Fatalf("present value = %v, want %v", got, value)
+	}
+}
+
+func TestLoadConfigWithBasePersistsSmartLinesForIndependentReload(t *testing.T) {
+	vpsOn(t)
+	base := &SetupBase{
+		Path:    writeBaseProfile(t, baseProfile),
+		Overlay: "rules: ['DOMAIN,user.test,DIRECT']\n",
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	applied, err := loadConfigWithBase(base, path)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	raw, err := readRawConfig(path)
+	if err != nil {
+		t.Fatalf("read persisted config: %v", err)
+	}
+	if !vpsHasGroup(raw, vpsSmartGroup) || !vpsHasGroup(raw, vpsAIGroup) {
+		t.Fatal("persisted config lost the generated groups")
+	}
+	if raw.Proxy[1]["client-fingerprint"] != "chrome" {
+		t.Fatal("persisted config lost the REALITY fingerprint")
+	}
+	if raw.Rule[0] != "DOMAIN,user.test,DIRECT" || raw.Rule[1] != "DOMAIN-SUFFIX,anthropic.com,"+vpsAIGroup {
+		t.Fatalf("persisted rule order = %v", raw.Rule)
+	}
+	reloaded, err := loadConfig(path)
+	if err != nil || !reflect.DeepEqual(ruleStrings(applied), ruleStrings(reloaded)) {
+		t.Fatalf("independent reload changed effective rules: %v", err)
+	}
+	if _, ok := reloaded.Proxies[vpsAIGroup]; !ok {
+		t.Fatal("independent reload lost the AI group")
+	}
+
+	vpsSmartEnabled.Store(false)
+	if _, err := loadConfigWithBase(base, path); err != nil {
+		t.Fatalf("apply with smart lines disabled: %v", err)
+	}
+	raw, err = readRawConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vpsHasGroup(raw, vpsSmartGroup) || vpsHasGroup(raw, vpsAIGroup) {
+		t.Fatal("disabled smart lines remained in the persisted config")
+	}
+}

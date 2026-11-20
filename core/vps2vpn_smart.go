@@ -83,6 +83,18 @@ func vpsHasGroup(raw *config.RawConfig, name string) bool {
 	return false
 }
 
+func vpsNameTaken(raw *config.RawConfig, name string) bool {
+	if vpsHasGroup(raw, name) {
+		return true
+	}
+	for _, p := range raw.Proxy {
+		if vpsName(p) == name {
+			return true
+		}
+	}
+	return false
+}
+
 func vpsRoutesAI(rules []string) bool {
 	for _, rule := range rules {
 		lower := strings.ToLower(rule)
@@ -95,20 +107,29 @@ func vpsRoutesAI(rules []string) bool {
 	return false
 }
 
+type vpsEnhancement struct {
+	fingerprints []int
+	selector     int
+	groups       int
+	ruleOffset   int
+	rules        int
+}
+
 // vps2vpnEnhance adds the smart groups to raw in place. The AI rules go
 // after the first userRules rules (the user's own); a negative userRules
 // leaves the rules alone.
-func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
+func vps2vpnEnhance(raw *config.RawConfig, userRules int) vpsEnhancement {
+	change := vpsEnhancement{selector: -1}
 	if !vpsSmartEnabled.Load() {
-		return
+		return change
 	}
 	type line struct {
 		name   string
 		server string
 		rank   int
-		order  int
 	}
 	var lines []line
+	serverOrder := make(map[string]int)
 	for i, p := range raw.Proxy {
 		rank := vpsLineRank(p)
 		name := vpsName(p)
@@ -118,22 +139,23 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 		if rank == 1 {
 			if fp, _ := p["client-fingerprint"].(string); fp == "" {
 				p["client-fingerprint"] = "chrome"
+				change.fingerprints = append(change.fingerprints, i)
 			}
 		}
 		server, _ := p["server"].(string)
-		lines = append(lines, line{name: name, server: server, rank: rank, order: i})
+		if _, exists := serverOrder[server]; !exists {
+			serverOrder[server] = len(serverOrder)
+		}
+		lines = append(lines, line{name: name, server: server, rank: rank})
 	}
 	// One line has nothing to fall back to; a second protocol is what makes this useful.
-	if len(lines) < 2 || vpsHasGroup(raw, vpsSmartGroup) {
-		return
+	if len(lines) < 2 || vpsNameTaken(raw, vpsSmartGroup) {
+		return change
 	}
-	// The primary server is the one the subscription lists first. Its lines
-	// come first so a protocol switch never changes the exit IP.
-	primary := lines[0].server
 	sort.SliceStable(lines, func(i, j int) bool {
-		pi, pj := lines[i].server == primary, lines[j].server == primary
-		if pi != pj {
-			return pi
+		si, sj := serverOrder[lines[i].server], serverOrder[lines[j].server]
+		if si != sj {
+			return si < sj
 		}
 		return lines[i].rank < lines[j].rank
 	})
@@ -151,18 +173,25 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 		"max-failed-times": 2,
 		"lazy":             false,
 	})
-	// Offer it first in the main selector.
-	for _, g := range raw.ProxyGroup {
+	change.groups++
+	for i, g := range raw.ProxyGroup {
 		if strings.ToLower(fmt.Sprint(g["type"])) != "select" {
 			continue
 		}
-		members, _ := g["proxies"].([]any)
-		g["proxies"] = append([]any{vpsSmartGroup}, members...)
+		switch members := g["proxies"].(type) {
+		case []string:
+			g["proxies"] = append([]string{vpsSmartGroup}, members...)
+		case []any:
+			g["proxies"] = append([]any{vpsSmartGroup}, members...)
+		default:
+			g["proxies"] = []string{vpsSmartGroup}
+		}
+		change.selector = i
 		break
 	}
 
-	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsHasGroup(raw, vpsAIGroup) {
-		return
+	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsNameTaken(raw, vpsAIGroup) {
+		return change
 	}
 	aiNames := append([]string(nil), smart...)
 	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
@@ -175,11 +204,15 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 		"max-failed-times": 3,
 		"lazy":             false,
 	})
+	change.groups++
 	userRules = min(userRules, len(raw.Rule))
+	change.ruleOffset = userRules
+	change.rules = len(vpsAIDomains)
 	rules := make([]string, 0, len(vpsAIDomains)+len(raw.Rule))
 	rules = append(rules, raw.Rule[:userRules]...)
 	for _, d := range vpsAIDomains {
 		rules = append(rules, "DOMAIN-SUFFIX,"+d+","+vpsAIGroup)
 	}
 	raw.Rule = append(rules, raw.Rule[userRules:]...)
+	return change
 }
