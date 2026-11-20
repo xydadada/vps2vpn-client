@@ -38,13 +38,13 @@ final class DirectCoreLauncher implements CoreProcessLauncher {
   }) async {
     final process = await _startProcess(corePath, [address]);
     process.stdout.listen((_) {});
-    process.stderr
-        .transform(const Utf8Decoder(allowMalformed: true))
-        .listen((error) {
-          if (error.isNotEmpty) {
-            commonPrint.log(error, logLevel: LogLevel.warning);
-          }
-        });
+    process.stderr.transform(const Utf8Decoder(allowMalformed: true)).listen((
+      error,
+    ) {
+      if (error.isNotEmpty) {
+        commonPrint.log(error, logLevel: LogLevel.warning);
+      }
+    });
     return DirectCoreLease(sessionId: sessionId, process: process);
   }
 }

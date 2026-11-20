@@ -189,3 +189,32 @@ Windows 回归用系统 API 从 SDDL 构造真实安全描述符，覆盖受保�
 新增回归覆盖双层转义、空格/引号/反斜杠/美元符/反引号/百分号、换行键边界、旧条目迁移、禁用和重复 Exec、无效输入保留旧文件。Linux 专项测试使用项目已有 glib-sys 的真实 GKeyFile 与 g_shell_parse_argv 解析器验证只产生一个可执行参数；不启动该命令、不修改真实自动启动目录。百分号断言明确位于 field-code 展开之前，不声称该测试运行了桌面会话。等待包含本提交的 native CI 验证。
 
 Windows Run 字符串未引用的候选尚未完成实际解析兼容性验证，因此没有把它列为确认问题，也未修改其行为。
+
+
+## 解密接口与剩余特权文件边界
+
+### CC-15：解密方法把调用方路径交给特权 Core 读取（高，已修改）
+
+基线 [core/config.go:90](https://github.com/xydadada/vps2vpn-client/blob/5860a5ba2ab6001869586561fccb56309db6c3e1/core/config.go#L90) 使用 os.ReadFile(params.Path)，[protocol.go:113](https://github.com/xydadada/vps2vpn-client/blob/5860a5ba2ab6001869586561fccb56309db6c3e1/core/protocol.go#L113) 从 RPC 接收路径。锁定依赖的 [age.DecryptBytes](https://github.com/chen08209/Clash.Meta/blob/5b453f80dbcee6b3ecfb0415bcace24a48c88707/component/age/age.go) 对没有 armor 头的内容直接原样返回，因此“解密”并不是对可读取文件的授权检查。Linux Helper 的 hub.rs 设置子进程 real UID 为安装者但 effective UID 为 root；Windows 服务按 LocalSystem 运行，Core 文件权限可能超过 UI。
+
+本次将文件打开移回应用进程：Dart 保留 decryptConfig(path,key) 的调用签名，在自己的权限下读文件，再发送 base64 data；Go 接收 Data []byte，明确拒绝旧的非空 Path 和缺失/null Data，绝不在此 handler 打开文件。明确的空 data 与缺失 data 区分。普通明文兼容和 age 加密解密均保留；输入预算按现有 64 MiB IPC 帧限制计算，见应用层报告。只有解密方法的可选调试日志被脱敏，当前关闭的调试开关不被描述为活动泄漏。
+
+新增 core/config_decrypt_test.go 的四个主测试：明文/空输入保持、真实 age 加密往返与错误密钥拒绝、普通临时文件也不接受旧路径、真实 handler 参数解码对 missing/null/非法 base64/空 data/合法 data 的契约。配套 Dart 测试通过普通临时文件和 fake invoke 验证 data envelope 与限长；没有访问系统私密文件或执行权限利用。测试是否通过以包含本次提交的最终 CI 为准。此 IPC 参数变化需要同一版本 Dart 与 Core 一起发布，旧 path 调用会得到明确错误；服务端 HTTP API 未变。
+
+### CC-16：其余文件 RPC 缺少独立的特权访问边界（高，未解决，阻止合并）
+
+[core/lifecycle.go:28–35](https://github.com/xydadada/vps2vpn-client/blob/5860a5ba2ab6001869586561fccb56309db6c3e1/core/lifecycle.go#L28) 接受调用方的 home-dir 并用于 constant.SetHomeDir。rule_set.go 的 ruleSetCachePath 只限制文件名字符并按该目录拼接，writeRuleSetFile 会 MkdirAll/CreateTemp/Rename；config.read、config.validate、profile.base 等其他方法也仍按路径操作。名称检查及字符串前缀不能证明祖先目录/链接的实际对象，也不能缩小 Core 的有效操作系统权限。
+
+现有 IPC 的用户/会话限制有作用，但允许驱动 Core 的普通账户与 root/LocalSystem 之间仍有文件权限差异。CC-12/13 保护可执行文件安装链，CC-15 封闭一个直接读取入口；它们没有把配置和缓存全部变成低权限操作。该架构风险由调用链确认，尚未做跨平台权限利用复现，不将所有可能路径描述为已证实可利用。
+
+正确处理需要把文件读取/持久化尽量移到普通权限进程，剩余必需操作使用受限目录句柄及明确的身份/权限模型，并覆盖 Linux、Windows、Android 的调用与恢复流程。不能以 lexical prefix、简单 Lstat 后重新按路径打开，或未验证的全局降权改动宣称消除风险。本 PR 保留此项为合并前阻断，未执行真实提权操作。
+
+## 包含服务路径和自动启动补丁的实际 CI
+
+[run 44720288479](https://github.com/xydadada/vps2vpn-client/actions/runs/44720288479)，head 67e1b651cea71e948124e0dc04dd2ab00bcec855：
+
+- Linux Helper 53 passed；Windows Helper 普通 51 passed、windows-service 54 passed，均 0 failed，包含新增路径/ACL 回归。
+- Native Rust 133 passed，包含新增 7 个 Linux autostart 回归。
+- Go static/vet/Android vet 通过；普通全包 ok core 5.463s；race 仍唯一失败于 CC-11，FAIL core 5.990s。
+- Linux debug 构建命令成功并输出 Built build/linux/x64/debug/bundle/FlClash。日志仍有 File modified during build 提示，后续独立诊断记录于总报告；没有运行该应用。
+- 本段运行早于 CC-15 的 data 解密合同修改，不能用这些结果代替新增合同测试的实际运行。

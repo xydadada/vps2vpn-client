@@ -176,8 +176,9 @@ List<({String path, List<String> files})> _writeBundles(List<String> files) {
     final relative = _posix(
       p.relative(configuration.path, from: directory.path),
     );
-    File(p.join(directory.path, 'flutter_test_config.dart'))
-        .writeAsStringSync("export '$relative';\n");
+    File(
+      p.join(directory.path, 'flutter_test_config.dart'),
+    ).writeAsStringSync("export '$relative';\n");
   }
 
   final sizes = {for (final file in files) file: File(file).lengthSync()};

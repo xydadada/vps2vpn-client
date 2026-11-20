@@ -221,6 +221,7 @@ void main() {
         inspected = true;
         return const VpsSystemProxy(enabled: false);
       }
+
       Future<void> apply(ProxyState state) async {
         fail('must not restore a manual proxy');
       }
@@ -231,9 +232,8 @@ void main() {
         apply: apply,
       );
       await vpsRestoreSystemProxy(
-        current: () => running.copyWith(
-          pacScript: 'function FindProxyForURL() {}',
-        ),
+        current: () =>
+            running.copyWith(pacScript: 'function FindProxyForURL() {}'),
         inspect: inspect,
         apply: apply,
       );
@@ -244,10 +244,8 @@ void main() {
       final applied = <ProxyState>[];
       await vpsRestoreSystemProxy(
         current: () => running,
-        inspect: () async => const VpsSystemProxy(
-          enabled: false,
-          server: '127.0.0.1:7890',
-        ),
+        inspect: () async =>
+            const VpsSystemProxy(enabled: false, server: '127.0.0.1:7890'),
         apply: (value) async => applied.add(value),
       );
       expect(applied, [running]);

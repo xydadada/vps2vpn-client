@@ -94,10 +94,7 @@ void main() {
     expect(VpsMember.fromJson({'quota_eff': 0}).quotaBytes, 0);
     expect(VpsMember.fromJson({'quota_eff': 1.5}).quotaBytes, 1610612736);
     expect(
-      VpsMember.fromJson({
-        'used_up': 9223372036854775807,
-        'used_down': 1,
-      }).used,
+      VpsMember.fromJson({'used_up': 9223372036854775807, 'used_down': 1}).used,
       9223372036854775807,
     );
   });
@@ -118,10 +115,7 @@ void main() {
     );
     expect(VpsClientRelease.fromJson(null), isNull);
     for (final url in ['https:/setup.exe', 'https://user:password@host/x']) {
-      expect(
-        VpsClientRelease.fromJson({'version': '2.0', 'url': url}),
-        isNull,
-      );
+      expect(VpsClientRelease.fromJson({'version': '2.0', 'url': url}), isNull);
     }
   });
 

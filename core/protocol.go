@@ -111,7 +111,8 @@ type InitParams struct {
 }
 
 type DecryptConfigParams struct {
-	Path         string `json:"path"`
+	Data         []byte `json:"data"`
+	Path         string `json:"path,omitempty"` // Legacy input is rejected, never opened.
 	AgeSecretKey string `json:"age-secret-key"`
 }
 

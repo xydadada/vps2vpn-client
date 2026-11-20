@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -34,8 +36,9 @@ abstract class CoreHandlerInterface {
   }) async {
     return await handleWatch(
       onStart: () {
+        final detail = method == CoreMethod.configDecrypt ? '' : ' $arguments';
         commonPrint.log(
-          'Invoke method ${method.wireName} ${DateTime.now()} $arguments',
+          'Invoke method ${method.wireName} ${DateTime.now()}$detail',
         );
       },
       function: () => invokeMethod(
@@ -135,11 +138,29 @@ abstract class CoreHandlerInterface {
     );
   }
 
-  Future<String> decryptConfig(String path, String ageSecretKey) {
+  Future<String> decryptConfig(String path, String ageSecretKey) async {
+    // Base64 expands by 4/3; leave room for the key and the RPC envelope.
+    final budget =
+        (64 << 20) - 1024 - utf8.encode(jsonEncode(ageSecretKey)).length;
+    final maxBytes = budget < 0 ? -1 : (budget ~/ 4) * 3;
+    void checkSize(int length) {
+      if (length > maxBytes) {
+        throw const CoreMethodException(
+          code: 'request_too_large',
+          message: 'Encrypted profile exceeds the 64 MiB Core request limit',
+        );
+      }
+    }
+
+    checkSize(0);
+    final file = File(path);
+    checkSize(await file.length());
+    final data = await file.readAsBytes();
+    checkSize(data.length);
     return _query(
       CoreMethod.configDecrypt,
       _cast<String>,
-      arguments: {'path': path, 'age-secret-key': ageSecretKey},
+      arguments: {'data': base64Encode(data), 'age-secret-key': ageSecretKey},
     );
   }
 

@@ -40,7 +40,10 @@ void main() {
     HttpOverrides.global = null;
     loadAppLocalizations(const Locale('en'));
     registerFallbackValue(
-      const SetupParams(selectedMap: {}, options: CoreOptions(testUrl: '')),
+      const SetupParams(
+        selectedMap: {},
+        options: CoreOptions(testUrl: ''),
+      ),
     );
     globalState.packageInfo = PackageInfo(
       appName: 'test',
@@ -117,11 +120,10 @@ void main() {
   String url(String path) => 'http://127.0.0.1:${server.port}$path';
 
   Future<Profile> seed() async {
-    final profile = await Profile.normal(label: 'P', url: url('/old'))
-        .saveFile(
-          Uint8List.fromList('original'.codeUnits),
-          validate: (_, _) async => null,
-        );
+    final profile = await Profile.normal(label: 'P', url: url('/old')).saveFile(
+      Uint8List.fromList('original'.codeUnits),
+      validate: (_, _) async => null,
+    );
     container.read(profilesProvider.notifier).put(profile);
     return profile;
   }
@@ -269,7 +271,9 @@ void main() {
       validation.result.complete(null);
       expect(await pending, isFalse);
       expect(
-        await File(await appPath.getProfilePath(profile.id.toString())).exists(),
+        await File(
+          await appPath.getProfilePath(profile.id.toString()),
+        ).exists(),
         isFalse,
       );
       if (change == 'source') {
@@ -307,8 +311,9 @@ void main() {
       if (change == 'delete') {
         expect(container.read(profilesProvider), isEmpty);
         expect(
-          await File(await appPath.getProfilePath(profile.id.toString()))
-              .exists(),
+          await File(
+            await appPath.getProfilePath(profile.id.toString()),
+          ).exists(),
           isFalse,
         );
       } else {
@@ -319,25 +324,28 @@ void main() {
     });
   }
 
-  test('the current source edit refreshes and preserves later metadata', () async {
-    final profile = await seed();
-    final action = container.read(profilesActionProvider.notifier);
-    final gate = Completer<void>();
-    final pending = action.saveProfileEdit(
-      profile,
-      profile.copyWith(url: url('/new')),
-      beforeRefresh: () => gate.future,
-    );
-    container
-        .read(profilesProvider.notifier)
-        .put(profile.copyWith(label: 'renamed while closing'));
-    gate.complete();
-    expect(await pending, isTrue);
-    final latest = container.read(profilesProvider).single;
-    expect(latest.label, 'renamed while closing');
-    expect(latest.url, url('/new'));
-    expect(await content(latest), contains('# /new'));
-  });
+  test(
+    'the current source edit refreshes and preserves later metadata',
+    () async {
+      final profile = await seed();
+      final action = container.read(profilesActionProvider.notifier);
+      final gate = Completer<void>();
+      final pending = action.saveProfileEdit(
+        profile,
+        profile.copyWith(url: url('/new')),
+        beforeRefresh: () => gate.future,
+      );
+      container
+          .read(profilesProvider.notifier)
+          .put(profile.copyWith(label: 'renamed while closing'));
+      gate.complete();
+      expect(await pending, isTrue);
+      final latest = container.read(profilesProvider).single;
+      expect(latest.label, 'renamed while closing');
+      expect(latest.url, url('/new'));
+      expect(await content(latest), contains('# /new'));
+    },
+  );
 
   for (final change in ['delete', 'source', 'owner']) {
     test('a pending file edit stops after a $change change', () async {
@@ -368,8 +376,9 @@ void main() {
       if (change == 'delete') {
         expect(container.read(profilesProvider), isEmpty);
         expect(
-          await File(await appPath.getProfilePath(profile.id.toString()))
-              .exists(),
+          await File(
+            await appPath.getProfilePath(profile.id.toString()),
+          ).exists(),
           isFalse,
         );
       } else {
@@ -390,9 +399,14 @@ void main() {
           bytes: Uint8List.fromList('edited\n# /old\n'.codeUnits),
         );
     await validation.entered;
-    container.read(profilesProvider.notifier).put(
-      profile.copyWith(label: 'later rename', selectedMap: {'group': 'node'}),
-    );
+    container
+        .read(profilesProvider.notifier)
+        .put(
+          profile.copyWith(
+            label: 'later rename',
+            selectedMap: {'group': 'node'},
+          ),
+        );
     validation.result.complete(null);
 
     expect(await pending, isTrue);
@@ -420,21 +434,24 @@ void main() {
     verifyNever(() => core.validateConfig(any()));
   });
 
-  test('rename uses current metadata and cannot recreate a deleted profile', () async {
-    final profile = await seed();
-    final action = container.read(profilesActionProvider.notifier);
-    container
-        .read(profilesProvider.notifier)
-        .put(profile.copyWith(url: url('/new')));
-    action.renameProfile(profile.id, 'new label');
-    final latest = container.read(profilesProvider).single;
-    expect(latest.url, url('/new'));
-    expect(latest.label, 'new label');
+  test(
+    'rename uses current metadata and cannot recreate a deleted profile',
+    () async {
+      final profile = await seed();
+      final action = container.read(profilesActionProvider.notifier);
+      container
+          .read(profilesProvider.notifier)
+          .put(profile.copyWith(url: url('/new')));
+      action.renameProfile(profile.id, 'new label');
+      final latest = container.read(profilesProvider).single;
+      expect(latest.url, url('/new'));
+      expect(latest.label, 'new label');
 
-    await action.deleteProfile(profile.id);
-    action.renameProfile(profile.id, 'late rename');
-    expect(container.read(profilesProvider), isEmpty);
-  });
+      await action.deleteProfile(profile.id);
+      action.renameProfile(profile.id, 'late rename');
+      expect(container.read(profilesProvider), isEmpty);
+    },
+  );
 
   test('the first update can create a new profile', () async {
     final profile = Profile.normal(label: 'new', url: url('/new'));

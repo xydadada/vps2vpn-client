@@ -88,11 +88,15 @@ func handleValidateConfig(params PathParams) *string {
 }
 
 func handleDecryptConfig(params DecryptConfigParams) (string, error) {
-	buf, err := os.ReadFile(params.Path)
-	if err != nil {
-		return "", err
+	// The app reads the file using its own permissions. Core may be elevated,
+	// so this method must never turn a caller-supplied path into a file read.
+	if params.Path != "" || params.Data == nil {
+		return "", &MethodError{
+			Code:    "invalid_arguments",
+			Message: "config.decrypt requires data; path-based requests are not supported",
+		}
 	}
-	buf, err = age.DecryptBytes(buf, params.AgeSecretKey)
+	buf, err := age.DecryptBytes(params.Data, params.AgeSecretKey)
 	if err != nil {
 		return "", err
 	}

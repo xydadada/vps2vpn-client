@@ -115,7 +115,8 @@ extension SubscriptionInfoExt on SubscriptionInfo {
 
   double? get usage => total > 0 ? (used / total).clamp(0.0, 1.0) : null;
 
-  DateTime? get expireDate => expire > 0 ? dateTimeFromUnixSeconds(expire) : null;
+  DateTime? get expireDate =>
+      expire > 0 ? dateTimeFromUnixSeconds(expire) : null;
 }
 
 @freezed
@@ -302,10 +303,8 @@ extension ProfileExtension on Profile {
       }
       await _withProfileFile(
         path,
-        (target) => tempFile.renameReplacing(
-          target.path,
-          beforeAttempt: intent.check,
-        ),
+        (target) =>
+            tempFile.renameReplacing(target.path, beforeAttempt: intent.check),
       );
       return copyWith(lastUpdateDate: DateTime.now());
     } finally {

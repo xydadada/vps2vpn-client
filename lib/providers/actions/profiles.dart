@@ -274,8 +274,7 @@ class ProfilesAction extends _$ProfilesAction {
     _updateRequests[original.id] = request;
     cancelProfileWrite(original.id);
     bool current() =>
-        sourceIsCurrent() &&
-        identical(_updateRequests[original.id], request);
+        sourceIsCurrent() && identical(_updateRequests[original.id], request);
     Profile? refresh;
     try {
       if (bytes == null) {
@@ -290,7 +289,9 @@ class ProfilesAction extends _$ProfilesAction {
         );
         if (!current()) return false;
         final latest = ref.read(profilesProvider).getProfile(original.id)!;
-        putProfile(merge(latest).copyWith(lastUpdateDate: saved.lastUpdateDate));
+        putProfile(
+          merge(latest).copyWith(lastUpdateDate: saved.lastUpdateDate),
+        );
         return true;
       }
     } on ProfileUpdateSuperseded {
@@ -303,7 +304,7 @@ class ProfilesAction extends _$ProfilesAction {
         _updateRequests.remove(original.id);
       }
     }
-    await updateProfile(refresh!);
+    await updateProfile(refresh);
     return true;
   }
 

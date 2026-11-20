@@ -61,9 +61,9 @@ void main() {
       }
       expect(const SubscriptionInfo(expire: 0).expireDate, isNull);
       expect(
-        const SubscriptionInfo(expire: 1893456000)
-            .expireDate!
-            .millisecondsSinceEpoch,
+        const SubscriptionInfo(
+          expire: 1893456000,
+        ).expireDate!.millisecondsSinceEpoch,
         1893456000000,
       );
     });
