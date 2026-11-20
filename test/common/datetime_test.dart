@@ -5,6 +5,32 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers/test_app.dart';
 
 void main() {
+  group('dateTimeFromUnixSeconds', () {
+    test('rejects non-finite and out-of-range seconds before multiplying', () {
+      for (final value in <num?>[
+        null,
+        double.nan,
+        double.infinity,
+        double.negativeInfinity,
+        8640000000001,
+        -8640000000001,
+        0x7fffffffffffffff,
+      ]) {
+        expect(dateTimeFromUnixSeconds(value), isNull);
+      }
+    });
+
+    test('keeps valid seconds and both DateTime range endpoints', () {
+      for (final value in [0, 1, 1893456000, 8640000000000, -8640000000000]) {
+        expect(
+          dateTimeFromUnixSeconds(value)!.millisecondsSinceEpoch,
+          value * 1000,
+        );
+      }
+      expect(dateTimeFromUnixSeconds(1.9)!.millisecondsSinceEpoch, 1000);
+    });
+  });
+
   group('DateTimeExtension', () {
     test('detects dates before now', () {
       expect(

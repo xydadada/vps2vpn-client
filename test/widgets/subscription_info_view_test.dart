@@ -8,6 +8,36 @@ import '../helpers/test_app.dart';
 import '../helpers/host_scaffold.dart';
 
 void main() {
+  for (final detail in [false, true]) {
+    testWidgets('invalid persisted expiry stays unknown (detail: $detail)', (
+      tester,
+    ) async {
+      const info = SubscriptionInfo(
+        upload: 9223372036854775807,
+        download: 1,
+        total: 100,
+        expire: 8640000000001,
+      );
+      await tester.pumpWidget(
+        HostApp(
+          builder: (context, child) => wrapAppScopes(context, child!),
+          home: HostScaffold(
+            body: SizedBox(
+              width: 600,
+              child: detail
+                  ? const SubscriptionInfoDetailView(subscriptionInfo: info)
+                  : const SubscriptionInfoView(subscriptionInfo: info),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text(currentAppLocalizations.unknown), findsOneWidget);
+      expect(find.text(currentAppLocalizations.infiniteTime), findsNothing);
+      expect(find.textContaining('-'), findsNothing);
+    });
+  }
+
   testWidgets('hides expiry when both values do not fit', (tester) async {
     const trafficLabel = '1KB / 1GB';
 

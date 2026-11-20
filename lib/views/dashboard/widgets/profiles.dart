@@ -24,18 +24,11 @@ _Usage? _usageOf(Profile? profile) {
   if (info == null || info.total <= 0) {
     return null;
   }
-  final used = info.upload + info.download;
-  return (
-    used: used,
-    total: info.total,
-    share: (used / info.total).clamp(0.0, 1.0).toDouble(),
-  );
+  final used = info.used;
+  return (used: used, total: info.total, share: info.usage!);
 }
 
-DateTime? _expiryOf(Profile? profile) {
-  final expire = profile?.subscriptionInfo?.expire ?? 0;
-  return expire > 0 ? DateTime.fromMillisecondsSinceEpoch(expire * 1000) : null;
-}
+DateTime? _expiryOf(Profile? profile) => profile?.subscriptionInfo?.expireDate;
 
 int _daysLeft(DateTime expiry) =>
     math.max(0, expiry.difference(DateTime.now()).inDays);
@@ -91,6 +84,9 @@ class ProfilesCard extends ConsumerWidget {
         : AppTextStyle.callout;
     final endText = switch ((profile, expiry)) {
       (_, final expiry?) => appLocalizations.profileDaysLeft(_daysLeft(expiry)),
+      (final profile?, null)
+          when (profile.subscriptionInfo?.expire ?? 0) != 0 =>
+        appLocalizations.unknown,
       (final profile?, null) => _sourceOf(context, profile.type),
       _ => null,
     };

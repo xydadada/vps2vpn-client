@@ -777,17 +777,19 @@ class _Stats extends ConsumerWidget {
     String? left;
     String? expire;
     if (sub != null && sub.total > 0) {
-      final remain = math.max(0, sub.total - sub.upload - sub.download);
-      left = remain.traffic.show;
+      left = sub.remaining.traffic.show;
     }
-    if (sub != null && sub.expire > 0) {
-      final remaining = DateTime.fromMillisecondsSinceEpoch(
-        sub.expire * 1000,
-      ).difference(DateTime.now());
-      final days = remaining.inDays;
-      expire = !remaining.isNegative
-          ? tr(context, '还剩 $days 天', '$days days left')
-          : tr(context, '已到期', 'Expired');
+    if (sub != null && sub.expire != 0) {
+      final date = sub.expireDate;
+      if (date == null) {
+        expire = tr(context, '到期时间未知', 'Expiry unknown');
+      } else {
+        final remaining = date.difference(DateTime.now());
+        final days = remaining.inDays;
+        expire = !remaining.isNegative
+            ? tr(context, '还剩 $days 天', '$days days left')
+            : tr(context, '已到期', 'Expired');
+      }
     }
     final p = VpsPalette.of(context);
     final groups = ref.watch(currentGroupsStateProvider).value;

@@ -77,6 +77,24 @@ void main() {
     expect(find.text('Expires in 0 days'), findsNothing);
   });
 
+  testWidgets('invalid quota and expiry are shown as unknown', (tester) async {
+    await _pump(
+      tester,
+      const VpsAccountCard(),
+      VpsMemberResult(
+        member: VpsMember.fromJson({
+          'name': 'Ann',
+          'quota_eff': 1e300,
+          'expire_at': 8640000000001,
+        }),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('quota unknown'), findsOneWidget);
+    expect(find.text('Expiry unknown'), findsOneWidget);
+    expect(find.textContaining('unlimited'), findsNothing);
+  });
+
   testWidgets('says why the account is off', (tester) async {
     await _pump(
       tester,

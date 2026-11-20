@@ -181,6 +181,26 @@ void main() {
     expect(find.textContaining('30 days left'), findsOneWidget);
   });
 
+  testWidgets('invalid expiry and huge usage do not break the card', (
+    tester,
+  ) async {
+    setUpProfiles([
+      _profile(
+        1,
+        info: const SubscriptionInfo(
+          upload: 9223372036854775807,
+          download: 1,
+          total: 100,
+          expire: 8640000000001,
+        ),
+      ),
+    ]);
+    await pumpDesktopCard(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text(currentAppLocalizations.unknown), findsOneWidget);
+    expect(find.textContaining('100%', findRichText: true), findsOneWidget);
+  });
+
   testWidgets('the desktop card puts the days left beside its update time', (
     tester,
   ) async {

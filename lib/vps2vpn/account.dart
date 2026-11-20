@@ -138,19 +138,27 @@ class VpsAccountCard extends ConsumerWidget {
     }
     final m = result.member;
     if (m == null) return const SizedBox.shrink();
-    final quota = m.quotaGb > 0 ? (m.quotaGb * 1024 * 1024 * 1024).round() : 0;
-    final usage = quota > 0
-        ? tr(
-            context,
-            '已用 ${m.used.traffic.show} / ${quota.traffic.show}',
-            'Used ${m.used.traffic.show} of ${quota.traffic.show}',
-          )
-        : tr(
-            context,
-            '已用 ${m.used.traffic.show} · 不限量',
-            'Used ${m.used.traffic.show} · unlimited',
-          );
-    String? expiry;
+    final quota = m.quotaBytes;
+    final usage = switch (quota) {
+      final q? when q > 0 => tr(
+        context,
+        '已用 ${m.used.traffic.show} / ${q.traffic.show}',
+        'Used ${m.used.traffic.show} of ${q.traffic.show}',
+      ),
+      0 => tr(
+        context,
+        '已用 ${m.used.traffic.show} · 不限量',
+        'Used ${m.used.traffic.show} · unlimited',
+      ),
+      _ => tr(
+        context,
+        '已用 ${m.used.traffic.show} · 配额未知',
+        'Used ${m.used.traffic.show} · quota unknown',
+      ),
+    };
+    String? expiry = m.expiryUnknown
+        ? tr(context, '到期时间未知', 'Expiry unknown')
+        : null;
     if (m.expireAt != null) {
       final remaining = m.expireAt!.difference(DateTime.now());
       final days = remaining.inDays;
@@ -175,7 +183,9 @@ class VpsAccountCard extends ConsumerWidget {
       title: m.name.isEmpty ? tr(context, '我的账户', 'My account') : m.name,
       status: off ? reason : tr(context, '正常', 'Active'),
       lines: [usage, ?expiry],
-      progress: quota > 0 ? (m.used / quota).clamp(0.0, 1.0) : null,
+      progress: quota != null && quota > 0
+          ? (m.used / quota).clamp(0.0, 1.0)
+          : null,
     );
   }
 

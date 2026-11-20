@@ -10,6 +10,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/datetime.dart';
+import 'package:fl_clash/common/num.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
@@ -64,9 +66,7 @@ class VpsAiStatus {
     return VpsAiStatus(
       summary: '${json['summary'] ?? ''}',
       place: json['place'] is String ? json['place'] as String : null,
-      at: at is num
-          ? DateTime.fromMillisecondsSinceEpoch(at.toInt() * 1000)
-          : null,
+      at: dateTimeFromUnixSeconds(at is num ? at : null),
       sites: sites is Map
           ? {for (final e in sites.entries) '${e.key}': '${e.value}'}
           : const {},
@@ -156,6 +156,7 @@ class VpsMember {
     this.usedDown = 0,
     this.quotaGb = 0,
     this.expireAt,
+    this.expiryUnknown = false,
     this.ai,
     this.client,
   });
@@ -168,18 +169,31 @@ class VpsMember {
   final int usedUp;
   final int usedDown;
 
-  /// What applies after sharing; 0 = unlimited.
-  final double quotaGb;
+  /// What applies after sharing; 0 = unlimited, null = unknown.
+  final double? quotaGb;
   final DateTime? expireAt;
+  final bool expiryUnknown;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
-  int get used => usedUp + usedDown;
+  int get used => addTrafficBytes(usedUp, usedDown);
 
-  static int _int(Object? v) => v is num ? v.toInt() : 0;
+  int? get quotaBytes {
+    final quota = quotaGb;
+    if (quota == null || !quota.isFinite || quota < 0) return null;
+    if (quota == 0) return 0;
+    final bytes = quota * 1024 * 1024 * 1024;
+    if (!bytes.isFinite || bytes > maxCounterValue) return null;
+    return bytes.round().clamp(1, maxCounterValue).toInt();
+  }
+
+  static int _int(Object? v) => nonNegativeInt(v) ?? 0;
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
-    final expire = _int(json['expire_at']);
+    final expire = json['expire_at'];
+    final expireAt = dateTimeFromUnixSeconds(
+      expire is num && expire > 0 ? expire : null,
+    );
     final quota = json['quota_eff'] ?? json['quota_gb'];
     return VpsMember(
       name: '${json['name'] ?? ''}',
@@ -190,10 +204,11 @@ class VpsMember {
       },
       usedUp: _int(json['used_up']),
       usedDown: _int(json['used_down']),
-      quotaGb: quota is num ? quota.toDouble() : 0,
-      expireAt: expire > 0
-          ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
+      quotaGb: quota is num && quota.isFinite && quota >= 0
+          ? quota.toDouble()
           : null,
+      expireAt: expireAt,
+      expiryUnknown: expire != null && expire != 0 && expireAt == null,
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
     );

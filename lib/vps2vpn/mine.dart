@@ -1,8 +1,6 @@
 // vps2vpn "Me": your subscriptions, look and language, and the door to
 // advanced mode.
 
-import 'dart:math' as math;
-
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -592,17 +590,19 @@ class _ProfileCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
     final sub = profile.subscriptionInfo;
-    final used = sub == null ? 0 : sub.upload + sub.download;
+    final used = sub?.used ?? 0;
     final total = sub?.total ?? 0;
-    final ratio = total > 0 ? math.min(1.0, used / total) : 0.0;
+    final ratio = sub?.usage ?? 0.0;
     String? expire;
-    if (sub != null && sub.expire > 0) {
-      final d = DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000);
-      expire = tr(
-        context,
-        '${d.year}-${_two(d.month)}-${_two(d.day)} 到期',
-        'Expires ${d.year}-${_two(d.month)}-${_two(d.day)}',
-      );
+    if (sub != null && sub.expire != 0) {
+      final d = sub.expireDate;
+      expire = d == null
+          ? tr(context, '到期时间未知', 'Expiry unknown')
+          : tr(
+              context,
+              '${d.year}-${_two(d.month)}-${_two(d.day)} 到期',
+              'Expires ${d.year}-${_two(d.month)}-${_two(d.day)}',
+            );
     }
     final updated = profile.lastUpdateDate;
     return VpsCard(

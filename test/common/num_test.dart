@@ -2,6 +2,22 @@ import 'package:fl_clash/common/num.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('counts reject invalid numbers and bound finite conversions', () {
+    for (final value in [null, '1', -1, double.nan, double.infinity]) {
+      expect(nonNegativeInt(value), isNull);
+    }
+    expect(nonNegativeInt(0), 0);
+    expect(nonNegativeInt(1.9), 1);
+    expect(nonNegativeInt(1e300), maxCounterValue);
+  });
+
+  test('traffic sums saturate instead of wrapping negative', () {
+    expect(addTrafficBytes(maxCounterValue, 1), maxCounterValue);
+    expect(addTrafficBytes(maxCounterValue, maxCounterValue), maxCounterValue);
+    expect(addTrafficBytes(-1, 20), 20);
+    expect(addTrafficBytes(10, 20), 30);
+  });
+
   group('num.fixed', () {
     test('removes trailing zeros', () {
       expect(1.50.fixed(), '1.5');

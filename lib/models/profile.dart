@@ -87,9 +87,13 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
     for (final field in info.split(';')) {
       final separator = field.indexOf('=');
       if (separator == -1) continue;
-      final value = _parseCount(field.substring(separator + 1).trim());
-      if (value != null) {
-        map[field.substring(0, separator).trim().toLowerCase()] = value;
+      final key = field.substring(0, separator).trim().toLowerCase();
+      final rawValue = field.substring(separator + 1).trim();
+      final value = _parseCount(rawValue);
+      if (key == 'expire') {
+        map[key] = value == 0 && num.tryParse(rawValue) != 0 ? -1 : value ?? -1;
+      } else if (value != null) {
+        map[key] = value;
       }
     }
     return SubscriptionInfo(
@@ -100,20 +104,18 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
     );
   }
 
-  static int? _parseCount(String value) {
-    final count = int.tryParse(value);
-    if (count != null) return count;
-    final decimal = double.tryParse(value);
-    return decimal != null && decimal.isFinite ? decimal.truncate() : null;
-  }
+  static int? _parseCount(String value) =>
+      nonNegativeInt(int.tryParse(value) ?? double.tryParse(value));
 }
 
 extension SubscriptionInfoExt on SubscriptionInfo {
-  double? get usage =>
-      total > 0 ? ((upload + download) / total).clamp(0.0, 1.0) : null;
+  int get used => addTrafficBytes(upload, download);
 
-  DateTime? get expireDate =>
-      expire > 0 ? DateTime.fromMillisecondsSinceEpoch(expire * 1000) : null;
+  int get remaining => total > used ? total - used : 0;
+
+  double? get usage => total > 0 ? (used / total).clamp(0.0, 1.0) : null;
+
+  DateTime? get expireDate => expire > 0 ? dateTimeFromUnixSeconds(expire) : null;
 }
 
 @freezed

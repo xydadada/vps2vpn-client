@@ -2,6 +2,18 @@ import 'package:flutter/widgets.dart';
 
 import 'context.dart';
 
+/// Checks the DateTime range before conversion can overflow an integer.
+DateTime? dateTimeFromUnixSeconds(num? seconds) {
+  const limit = 8640000000000;
+  if (seconds == null ||
+      !seconds.isFinite ||
+      seconds < -limit ||
+      seconds > limit) {
+    return null;
+  }
+  return DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000);
+}
+
 extension DateTimeExtension on DateTime {
   bool get isBeforeNow {
     return isBefore(DateTime.now());

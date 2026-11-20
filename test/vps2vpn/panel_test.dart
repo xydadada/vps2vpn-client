@@ -69,6 +69,39 @@ void main() {
     expect(VpsMember.fromJson({'expire_at': 0}).expireAt, isNull);
   });
 
+  test('optional panel numbers cannot break account decoding', () {
+    for (final value in [double.nan, double.infinity, 8640000000001]) {
+      final member = VpsMember.fromJson({
+        'name': 'Ann',
+        'used_up': double.infinity,
+        'used_down': -10,
+        'expire_at': value,
+        'ai': {'summary': 'healthy', 'at': value},
+      });
+      expect(member.name, 'Ann');
+      expect(member.used, 0);
+      expect(member.expireAt, isNull);
+      expect(member.expiryUnknown, isTrue);
+      expect(member.ai!.summary, 'healthy');
+      expect(member.ai!.at, isNull);
+    }
+  });
+
+  test('only a valid zero quota means unlimited', () {
+    for (final quota in [null, 'bad', -1, double.nan, double.infinity, 1e300]) {
+      expect(VpsMember.fromJson({'quota_eff': quota}).quotaBytes, isNull);
+    }
+    expect(VpsMember.fromJson({'quota_eff': 0}).quotaBytes, 0);
+    expect(VpsMember.fromJson({'quota_eff': 1.5}).quotaBytes, 1610612736);
+    expect(
+      VpsMember.fromJson({
+        'used_up': 9223372036854775807,
+        'used_down': 1,
+      }).used,
+      9223372036854775807,
+    );
+  });
+
   test('a published client is offered only when it is newer', () {
     final r = VpsClientRelease.fromJson({
       'version': 'v1.4.0',
@@ -266,16 +299,18 @@ void main() {
     late HttpServer server;
     final posts = <(String?, Object?)>[];
     var meStatus = HttpStatus.ok;
+    var meBody = <String, Object?>{};
 
     setUp(() async {
       posts.clear();
       meStatus = HttpStatus.ok;
+      meBody = {'name': 'Ann', 'enabled': true};
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((req) async {
         final path = req.uri.path;
         if (path == '/s/$_tok/api/me' && req.method == 'GET') {
           req.response.statusCode = meStatus;
-          req.response.write(jsonEncode({'name': 'Ann', 'enabled': true}));
+          req.response.write(jsonEncode(meBody));
         } else if (path == '/s/$_tok/api/report' &&
             req.method == 'POST' &&
             req.contentLength < 0) {
@@ -302,6 +337,22 @@ void main() {
       final r = await fetchMember(base());
       expect(r!.member!.name, 'Ann');
       expect(r.linkChanged, isFalse);
+    });
+
+    test('oversized optional metadata keeps the account available', () async {
+      meBody = {
+        'name': 'Ann',
+        'enabled': false,
+        'quota_eff': 1e300,
+        'expire_at': 8640000000001,
+        'ai': {'summary': 'healthy', 'at': 1e300},
+      };
+      final member = (await fetchMember(base()))!.member!;
+      expect(member.name, 'Ann');
+      expect(member.enabled, isFalse);
+      expect(member.quotaBytes, isNull);
+      expect(member.expiryUnknown, isTrue);
+      expect(member.ai!.summary, 'healthy');
     });
 
     test('a 404 means the link was replaced', () async {
