@@ -843,9 +843,9 @@ func TestApplyConfigKeepsTheWorkingProxyGraphOnRejectedUpdate(t *testing.T) {
 	}
 
 	err := applyConfig(&SetupParams{Options: CoreOptions{
-		SkipCertVerify: true,
-		SmartLines: true,
-		TestURL: "https://rejected-profile.invalid/probe",
+		SkipCertVerify:   true,
+		SmartLines:       true,
+		TestURL:          "https://rejected-profile.invalid/probe",
 		DelayTestTimeout: 15000,
 	}})
 
