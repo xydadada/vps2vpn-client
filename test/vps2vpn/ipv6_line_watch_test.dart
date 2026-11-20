@@ -20,6 +20,7 @@ void main() {
     expect(vpsLineReportHost({'server': '192.0.2.8'}), '192.0.2.8');
     expect(vpsLineReportHost({'server': 'proxy.example:443'}), isNull);
     expect(vpsLineReportHost({'server': '[2001:db8::1]:443'}), isNull);
+    expect(vpsLineReportHost({'server': 'fe80::1%lo0'}), isNull);
     expect(vpsLineReportHost({'server': ''}), isNull);
     expect(vpsLineReportHost({'server': 42}), isNull);
   });
