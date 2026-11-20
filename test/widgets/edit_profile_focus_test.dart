@@ -162,7 +162,11 @@ void main() {
   testWidgets(
     'the profile file row shows its size and update time without chips',
     (tester) async {
-      await pumpEditProfile(tester);
+      final profile = _urlProfile();
+      // A real zero-byte profile has an mtime; a missing file does not.
+      await File(await appPath.getProfilePath(profile.id.toString()))
+          .create(recursive: true);
+      await pumpEditProfile(tester, profile: profile);
       final row = find.widgetWithText(
         DecorationListItem,
         currentAppLocalizations.profile,
