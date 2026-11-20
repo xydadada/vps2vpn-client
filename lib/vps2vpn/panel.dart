@@ -547,11 +547,11 @@ String? vpsLineReportHost(Map<String, dynamic> def) {
   final raw = def['server'];
   if (raw is! String) return null;
   final host = _normHost(raw);
-  if (host.isEmpty) return null;
+  if (host.isEmpty || host.contains('%')) return null;
   if (!host.contains(':')) return host;
   final ip = InternetAddress.tryParse(host);
   if (ip == null || ip.type != InternetAddressType.IPv6) return null;
-  return ip.address;
+  return InternetAddress.fromRawAddress(ip.rawAddress).address;
 }
 
 /// The signed-in member for the current subscription, or null when it is
