@@ -62,6 +62,9 @@ int subscriptionExpiryOrUnknown(Object? value) {
 extension SubscriptionInfoExt on SubscriptionInfo {
   int get used => addTrafficBytes(upload, download);
 
+  /// Keep display precision without overflowing the bounded integer total.
+  double get usedForDisplay => upload.toDouble() + download.toDouble();
+
   int get remaining => total > used ? total - used : 0;
 
   double? get usage => total > 0 ? (used / total).clamp(0.0, 1.0) : null;
