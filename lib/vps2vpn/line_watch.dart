@@ -11,17 +11,24 @@ class VpsLineReport {
 }
 
 class VpsLineHealth {
-  VpsLineHealth({this.threshold = 3});
+  VpsLineHealth({
+    this.threshold = 3,
+    this.refreshInterval = const Duration(hours: 6),
+  }) : assert(threshold > 0),
+       assert(refreshInterval > Duration.zero);
 
   final int threshold;
+  final Duration refreshInterval;
   final _fails = <String, int>{};
   final _down = <String>{};
   final _pending = <String, VpsLineReport>{};
+  final _refreshAt = <String, DateTime>{};
 
   bool? record(String key, bool ok) {
     bool? change;
     if (ok) {
       _fails.remove(key);
+      _refreshAt.remove(key);
       if (_down.remove(key)) change = true;
     } else {
       final n = (_fails[key] ?? 0) + 1;
@@ -33,7 +40,14 @@ class VpsLineHealth {
   }
 
   VpsLineReport? pending(String key, DateTime now) {
-    final report = _pending[key];
+    var report = _pending[key];
+    final refreshAt = _refreshAt[key];
+    if (report == null &&
+        _down.contains(key) &&
+        refreshAt != null &&
+        !now.isBefore(refreshAt)) {
+      report = _pending[key] = VpsLineReport(key, false);
+    }
     final retryAt = report?.retryAt;
     return retryAt == null || !now.isBefore(retryAt) ? report : null;
   }
@@ -42,6 +56,9 @@ class VpsLineHealth {
     if (!identical(_pending[report.key], report)) return;
     if (delivered) {
       _pending.remove(report.key);
+      if (!report.ok) {
+        _refreshAt[report.key] = now.add(refreshInterval);
+      }
       return;
     }
     const minutes = [4, 8, 16, 30];
@@ -53,6 +70,7 @@ class VpsLineHealth {
     _fails.removeWhere((key, _) => !keys.contains(key));
     _down.removeWhere((key) => !keys.contains(key));
     _pending.removeWhere((key, _) => !keys.contains(key));
+    _refreshAt.removeWhere((key, _) => !keys.contains(key));
   }
 }
 

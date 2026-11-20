@@ -25,7 +25,7 @@ class ManifestEntry {
   });
 
   factory ManifestEntry.fromJson(Map<String, dynamic> json) {
-    return ManifestEntry(
+    final entry = ManifestEntry(
       name: json['name'] as String,
       sha256: json['sha256'] as String,
       size: json['size'] as int,
@@ -40,6 +40,8 @@ class ManifestEntry {
       },
       commit: json['commit'] as String,
     );
+    _validateEntry(entry);
+    return entry;
   }
 
   final String name;
@@ -65,6 +67,19 @@ class ManifestEntry {
     'form': form?.name,
     'commit': commit,
   };
+}
+
+void _validateEntry(ManifestEntry entry) {
+  final name = entry.name.toLowerCase();
+  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._+-]*$').hasMatch(entry.name) ||
+      name.endsWith('.') ||
+      name == manifestName ||
+      name == releaseChecksumsName(entry.line, entry.version).toLowerCase()) {
+    throw PackageError('invalid artifact filename: ${entry.name}');
+  }
+  if (entry.size < 0 || !RegExp(r'^[0-9a-f]{64}$').hasMatch(entry.sha256)) {
+    throw PackageError('invalid integrity metadata for ${entry.name}');
+  }
 }
 
 Future<ManifestEntry> describeArtifact(
@@ -94,6 +109,13 @@ String checksumsText(List<ManifestEntry> entries) {
 }
 
 String writeManifest(String directory, List<ManifestEntry> entries) {
+  final names = <String>{};
+  for (final entry in entries) {
+    _validateEntry(entry);
+    if (!names.add(entry.name.toLowerCase())) {
+      throw PackageError('${entry.name} appears more than once');
+    }
+  }
   final lines = {for (final entry in entries) (entry.line, entry.version)};
   if (lines.length != 1) {
     throw PackageError(
@@ -139,12 +161,12 @@ Future<String> mergeManifests(List<String> inputs, String output) async {
           entry.name.contains('\\')) {
         throw PackageError('Invalid artifact name in manifest: ${entry.name}');
       }
-      if (!names.add(entry.name)) {
+      if (!names.add(entry.name.toLowerCase())) {
         throw PackageError('${entry.name} appears in more than one manifest');
       }
       final source = File(p.join(input, entry.name));
       final digest = (await sha256.bind(source.openRead()).first).toString();
-      if (digest != entry.sha256) {
+      if (digest != entry.sha256 || source.lengthSync() != entry.size) {
         throw PackageError('${source.path} does not match its manifest');
       }
       if (!p.equals(input, output)) {

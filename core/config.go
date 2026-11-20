@@ -149,7 +149,7 @@ func handleValidateConfig(params PathParams) *string {
 func handleDecryptConfig(params DecryptConfigParams) (string, error) {
 	if params.Path != "" || params.Data == nil {
 		return "", &MethodError{
-			Code: "invalid_arguments",
+			Code:    "invalid_arguments",
 			Message: "config.decrypt requires data; paths are not supported",
 		}
 	}

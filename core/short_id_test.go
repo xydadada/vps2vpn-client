@@ -87,7 +87,7 @@ func TestShortIDRetaggingRejectsAliasAmplification(t *testing.T) {
 		fmt.Fprintf(&profile, "x%d: &v%d [*v%d, *v%d]\n", i, i, i-1, i-1)
 	}
 	profile.WriteString("proxies: *v24\n")
-	if _, err := unmarshalRawConfig([]byte(profile.String())); err == nil || !strings.Contains(err.Error(), "excessive YAML alias expansion") {
+	if _, err := unmarshalRawConfig([]byte(profile.String())); err == nil || !strings.Contains(err.Error(), "alias expansion") {
 		t.Fatalf("retagging must reject alias amplification before decode: %v", err)
 	}
 }

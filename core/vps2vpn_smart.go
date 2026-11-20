@@ -421,19 +421,16 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 		if strings.ToLower(fmt.Sprint(g["type"])) != "select" {
 			continue
 		}
-		var members []any
-		switch values := g["proxies"].(type) {
+		switch members := g["proxies"].(type) {
 		case nil:
+			g["proxies"] = []string{vpsSmartGroup}
 		case []any:
-			members = values
+			g["proxies"] = append([]any{vpsSmartGroup}, members...)
 		case []string:
-			for _, name := range values {
-				members = append(members, name)
-			}
+			g["proxies"] = append([]string{vpsSmartGroup}, members...)
 		default:
 			continue
 		}
-		g["proxies"] = append([]any{vpsSmartGroup}, members...)
 		result.selectIndex = i
 		break
 	}
