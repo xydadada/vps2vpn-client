@@ -62,6 +62,22 @@ void main() {
     expect(find.text('Expires in 12 days'), findsOneWidget);
   });
 
+  testWidgets('an expiry one minute ago is already expired', (tester) async {
+    await _pump(
+      tester,
+      const VpsAccountCard(),
+      VpsMemberResult(
+        member: VpsMember(
+          name: 'Ann',
+          enabled: true,
+          expireAt: DateTime.now().subtract(const Duration(minutes: 1)),
+        ),
+      ),
+    );
+    expect(find.text('Expired'), findsOneWidget);
+    expect(find.text('Expires in 0 days'), findsNothing);
+  });
+
   testWidgets('says why the account is off', (tester) async {
     await _pump(
       tester,

@@ -14,6 +14,7 @@ import 'dart:io';
 
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/proxy.dart';
+import 'package:fl_clash/models/models.dart' show ProxyState;
 import 'package:fl_clash/providers/providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -69,7 +70,7 @@ List<VpsRival> parseRivals(String tasklistCsv) {
     final image = cells[0].toLowerCase();
     final name = vpsRivalImages[image];
     final pid = int.tryParse(cells[1]);
-    if (name == null || pid == null) continue;
+    if (name == null || pid == null || pid <= 0) continue;
     rivals.add(VpsRival(image, pid, name));
   }
   return rivals;
@@ -92,11 +93,9 @@ class VpsSystemProxy {
 
   /// Points at our own mixed port on this machine.
   bool isOurs(int port) {
-    if (pac != null && pac!.isNotEmpty) {
-      return pac!.contains(':$port');
-    }
-    final s = server ?? '';
-    return s.contains('127.0.0.1:$port') || s.contains('localhost:$port');
+    if (!enabled || (pac != null && pac!.isNotEmpty)) return false;
+    final s = (server ?? '').trim().toLowerCase();
+    return s == '127.0.0.1:$port' || s == 'localhost:$port';
   }
 }
 
@@ -127,7 +126,7 @@ Future<ProcessResult> _run(String executable, List<String> args) =>
 
 /// Other proxy apps running now. Empty off Windows or when tasklist fails.
 Future<List<VpsRival>> scanRivals({VpsRun run = _run}) async {
-  if (!Platform.isWindows) return const [];
+  if (!Platform.isWindows && identical(run, _run)) return const [];
   try {
     final r = await run('tasklist', ['/FO', 'CSV', '/NH']);
     if (r.exitCode != 0) return const [];
@@ -141,14 +140,30 @@ Future<List<VpsRival>> scanRivals({VpsRun run = _run}) async {
 Future<List<String>> quitRivals(
   List<VpsRival> rivals, {
   VpsRun run = _run,
+  bool Function()? isCurrent,
 }) async {
   if (rivals.isEmpty) return const [];
-  if (_underTest && identical(run, _run)) return rivalNames(rivals);
-  for (final image in {for (final r in rivals) r.image}) {
+  if ((safeModeBuild || _underTest) && identical(run, _run)) {
+    return rivalNames(rivals);
+  }
+  final seen = <int>{};
+  for (final rival in rivals) {
+    if (isCurrent?.call() == false) return rivalNames(rivals);
+    if (rival.pid <= 0 ||
+        rival.pid == pid ||
+        !vpsRivalImages.containsKey(rival.image) ||
+        !seen.add(rival.pid)) {
+      continue;
+    }
     try {
-      // /T takes the app's own core with it; /F because tray apps ignore a
-      // polite close (they hide to the tray instead).
-      await run('taskkill', ['/F', '/T', '/IM', image]);
+      await run('taskkill', [
+        '/F',
+        '/T',
+        '/PID',
+        '${rival.pid}',
+        '/FI',
+        'IMAGENAME eq ${rival.image}',
+      ]);
     } catch (_) {}
   }
   // Give Windows a moment to release their ports and TUN adapters.
@@ -196,7 +211,7 @@ Future<int> pickPort(
   for (var p = 17890; p < 17990; p++) {
     if (p != preferred && await free(p)) return p;
   }
-  return preferred;
+  throw const SocketException('No free local proxy port is available');
 }
 
 /// What the last takeover found and did, for the overview notice.
@@ -248,21 +263,31 @@ final bool _underTest = Platform.environment.containsKey('FLUTTER_TEST');
 
 /// Runs before every connect. Safe mode, and takeover switched off, only
 /// report what they see; nothing is closed or changed.
-Future<void> vpsBeforeConnect(Ref ref) async {
+Future<void> vpsBeforeConnect(Ref ref, {bool Function()? isCurrent}) async {
   if (!Platform.isWindows || _underTest) return;
-  final act = !safeModeBuild && ref.read(appSettingProvider).takeover;
+  final safe = ref.read(safeModeProvider);
+  final act = !safe && ref.read(appSettingProvider).takeover;
+  bool current() =>
+      ref.mounted &&
+      (isCurrent?.call() ?? ref.read(isStartProvider)) &&
+      (!act ||
+          (!ref.read(safeModeProvider) &&
+              ref.read(appSettingProvider).takeover));
   final rivals = await scanRivals();
+  if (!current()) return;
   final names = rivalNames(rivals);
   var still = const <String>[];
   if (act && rivals.isNotEmpty) {
-    still = await quitRivals(rivals);
+    still = await quitRivals(rivals, isCurrent: current);
+    if (!current()) return;
   }
   int? from;
   int? to;
   var cleared = false;
-  if (!safeModeBuild) {
+  if (act) {
     final port = ref.read(patchClashConfigProvider).mixedPort;
     final next = await pickPort(port);
+    if (!current()) return;
     if (next != port) {
       from = port;
       to = next;
@@ -272,8 +297,9 @@ Future<void> vpsBeforeConnect(Ref ref) async {
     }
     // TUN mode sets no system proxy, so one left by a closed app would send
     // every browser to a dead port.
-    if (act && !ref.read(networkSettingProvider).systemProxy) {
+    if (!ref.read(networkSettingProvider).systemProxy) {
       final proxy = await readSystemProxy();
+      if (!current()) return;
       if (proxy != null && proxy.active) {
         cleared = await rust_api.stopSystemProxy();
       }
@@ -286,7 +312,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
     portFrom: from,
     portTo: to,
     clearedProxy: cleared,
-    dryRun: safeModeBuild,
+    dryRun: safe,
   );
   _startGuard(ref);
 }
@@ -311,17 +337,54 @@ Future<void> vpsScanOnly() async {
 /// app takes it.
 void _startGuard(Ref ref) {
   _guard?.cancel();
-  if (safeModeBuild) return;
-  _guard = Timer.periodic(const Duration(seconds: 20), (timer) async {
-    final state = ref.read(proxyStateProvider);
-    if (!state.isStart) {
+  if (ref.read(safeModeProvider) || _underTest) return;
+  var busy = false;
+  late final Timer guard;
+  ProxyState? current() =>
+      ref.mounted &&
+          identical(_guard, guard) &&
+          !ref.read(safeModeProvider) &&
+          ref.read(appSettingProvider).takeover
+      ? ref.read(proxyStateProvider)
+      : null;
+  guard = Timer.periodic(const Duration(seconds: 20), (timer) async {
+    if (current()?.isStart != true) {
       timer.cancel();
       return;
     }
-    if (!state.systemProxy) return;
-    final proxy = await readSystemProxy();
-    if (proxy != null && !proxy.isOurs(state.port)) {
-      await systemProxyQueue?.apply(state);
+    if (busy) return;
+    busy = true;
+    try {
+      await vpsRestoreSystemProxy(
+        current: current,
+        apply: (state) async {
+          await systemProxyQueue?.apply(state);
+        },
+      );
+    } catch (error) {
+      if (kDebugMode) debugPrint('vps2vpn proxy guard: $error');
+    } finally {
+      busy = false;
     }
   });
+  _guard = guard;
+  ref.onDispose(guard.cancel);
+}
+
+@visibleForTesting
+Future<void> vpsRestoreSystemProxy({
+  required ProxyState? Function() current,
+  required Future<void> Function(ProxyState) apply,
+  Future<VpsSystemProxy?> Function() inspect = readSystemProxy,
+}) async {
+  final state = current();
+  if (state == null ||
+      !state.isStart ||
+      !state.systemProxy ||
+      state.pacScript != null) {
+    return;
+  }
+  final proxy = await inspect();
+  if (current() != state) return;
+  if (proxy != null && !proxy.isOurs(state.port)) await apply(state);
 }

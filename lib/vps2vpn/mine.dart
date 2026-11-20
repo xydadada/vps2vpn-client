@@ -24,37 +24,47 @@ class VpsMePage extends ConsumerStatefulWidget {
 
 class _VpsMePageState extends ConsumerState<VpsMePage> {
   String? _note;
+  bool _importing = false;
 
   Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    // A plain URL, a share link, or a clash://install-config?url=… wrapper
-    // (what many panels hand out) all come down to one subscription link.
-    final link = profileUrlFromQrCodes([data?.text]);
-    if (link == null) {
-      setState(
-        () => _note = tr(
-          context,
-          '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
-          'No subscription link on the clipboard. Copy it from the deploy tool first.',
-        ),
+    if (_importing) return;
+    _importing = true;
+    try {
+      final data = await globalState.safeRun(
+        () => Clipboard.getData(Clipboard.kTextPlain),
       );
-      return;
-    }
-    setState(() => _note = null);
-    final before = ref.read(profilesProvider).length;
-    await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
-    if (!mounted) return;
-    if (ref.read(profilesProvider).length > before) {
-      // Added: the next step is connecting, which lives on Home.
-      vpsTab.value = vpsTabHome;
-    } else {
-      setState(
-        () => _note = tr(
-          context,
-          '导入失败：请确认链接完整且服务器在线后重试。',
-          'Not added. Check the link is complete and the server is running.',
-        ),
-      );
+      if (!mounted) return;
+      // A plain URL, a share link, or a clash://install-config?url=… wrapper
+      // (what many panels hand out) all come down to one subscription link.
+      final link = profileUrlFromQrCodes([data?.text]);
+      if (link == null) {
+        setState(
+          () => _note = tr(
+            context,
+            '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
+            'No subscription link on the clipboard. Copy it from the deploy tool first.',
+          ),
+        );
+        return;
+      }
+      setState(() => _note = null);
+      final before = ref.read(profilesProvider).length;
+      await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
+      if (!mounted) return;
+      if (ref.read(profilesProvider).length > before) {
+        // Added: the next step is connecting, which lives on Home.
+        vpsTab.value = vpsTabHome;
+      } else {
+        setState(
+          () => _note = tr(
+            context,
+            '导入失败：请确认链接完整且服务器在线后重试。',
+            'Not added. Check the link is complete and the server is running.',
+          ),
+        );
+      }
+    } finally {
+      _importing = false;
     }
   }
 
@@ -88,9 +98,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
           trailing: profiles.isEmpty
               ? null
               : VpsPressable(
-                  onTap: () => ref
-                      .read(profilesActionProvider.notifier)
-                      .updateProfiles(),
+                  onTap: () => globalState.safeRun(
+                    () => ref
+                        .read(profilesActionProvider.notifier)
+                        .updateProfiles(),
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -119,9 +131,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               selected: profile.id == currentId,
               onTap: () => ref.read(currentProfileIdProvider.notifier).value =
                   profile.id,
-              onUpdate: () => ref
-                  .read(profilesActionProvider.notifier)
-                  .updateProfile(profile, showLoading: true),
+              onUpdate: () => globalState.safeRun(
+                () => ref
+                    .read(profilesActionProvider.notifier)
+                    .updateProfile(profile, showLoading: true),
+              ),
             ),
           ),
         VpsCard(

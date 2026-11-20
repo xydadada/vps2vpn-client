@@ -1,5 +1,7 @@
 // vps2vpn "Servers": pick the line you use, see how fast each one answers.
 
+import 'dart:convert';
+
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -43,11 +45,29 @@ class VpsServersPage extends ConsumerStatefulWidget {
 /// again does not fire another round of probes.
 final _autoTested = <String>{};
 
+String _autoTestKey(WidgetRef ref, Group group) => jsonEncode([
+  ref.read(currentProfileIdProvider),
+  group.name,
+  group.testUrl,
+  [for (final proxy in group.all) proxy.name],
+]);
+
+bool _claimAutoTest(String key) {
+  if (_autoTested.contains(key)) return false;
+  if (_autoTested.length >= 128) _autoTested.remove(_autoTested.first);
+  return _autoTested.add(key);
+}
+
 /// Speed-tests [group] once per app session, after the current frame.
 void vpsAutoTestOnce(WidgetRef ref, Group group) {
   if (group.name.isEmpty || group.all.isEmpty) return;
-  if (!_autoTested.add(group.name)) return;
+  final key = _autoTestKey(ref, group);
+  if (!_claimAutoTest(key)) return;
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!ref.context.mounted || key != _autoTestKey(ref, group)) {
+      _autoTested.remove(key);
+      return;
+    }
     ref
         .read(proxiesActionProvider.notifier)
         .delayTest(group.all, group.testUrl);
@@ -73,9 +93,14 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
 
   void _autoTest(Group group) {
     if (group.name.isEmpty || group.all.isEmpty) return;
-    if (!_autoTested.add(group.name)) return;
+    final key = _autoTestKey(ref, group);
+    if (!_claimAutoTest(key)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _test(group);
+      if (!mounted || _testing || key != _autoTestKey(ref, group)) {
+        _autoTested.remove(key);
+        return;
+      }
+      _test(group);
     });
   }
 

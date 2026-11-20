@@ -42,8 +42,14 @@ void main() {
         ),
       );
 
-      final savedFile = await profile.file;
-      expect(await savedFile.length(), 0);
+      final savedFile = File(
+        await appPath.getProfilePath(profile.id.toString()),
+      );
+      expect(await savedFile.exists(), isFalse);
+      expect(
+        Directory(await appPath.profilesPath).listSync().whereType<Directory>(),
+        isEmpty,
+      );
     });
 
     test('copies validated bytes and stamps the update time', () async {
@@ -58,6 +64,49 @@ void main() {
       expect(saved.lastUpdateDate, isNotNull);
       final savedFile = await profile.file;
       expect(await savedFile.readAsString(), 'proxies: []');
+    });
+
+    test('cleans staging and preserves the old config on failure', () async {
+      final profile = Profile.normal(label: 'existing');
+      final savedFile = await profile.file;
+      await savedFile.writeAsString('proxies: []');
+      String? validationPath;
+
+      await expectLater(
+        profile.saveFile(
+          Uint8List.fromList(utf8.encode('password: secret')),
+          validate: (path, _) async {
+            validationPath = path;
+            throw StateError('validator disconnected');
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(await savedFile.readAsString(), 'proxies: []');
+      expect(await File(validationPath!).exists(), isFalse);
+      expect(await File(validationPath!).parent.exists(), isFalse);
+    });
+
+    test('validates a sibling before replacing the complete config', () async {
+      final profile = Profile.normal(label: 'existing');
+      final savedFile = await profile.file;
+      await savedFile.writeAsString('old config');
+      String? validationPath;
+
+      await profile.saveFile(
+        Uint8List.fromList(utf8.encode('new config')),
+        validate: (path, _) async {
+          validationPath = path;
+          expect(File(path).parent.parent.path, savedFile.parent.path);
+          expect(await File(path).readAsString(), 'new config');
+          expect(await savedFile.readAsString(), 'old config');
+          return null;
+        },
+      );
+
+      expect(await savedFile.readAsString(), 'new config');
+      expect(await File(validationPath!).parent.exists(), isFalse);
     });
 
     test('validates with the profile age key', () async {

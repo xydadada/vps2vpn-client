@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:fl_clash/models/models.dart' show ProxyState;
 import 'package:fl_clash/vps2vpn/takeover.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,6 +54,36 @@ void main() {
         '    ProxyServer    REG_SZ    127.0.0.1:7890\r\n',
       );
       expect(p.active, isFalse);
+      expect(p.isOurs(7890), isFalse);
+    });
+
+    test('ownership requires an exact local endpoint and no PAC override', () {
+      expect(
+        const VpsSystemProxy(
+          enabled: true,
+          server: 'LOCALHOST:7890',
+        ).isOurs(7890),
+        isTrue,
+      );
+      for (final server in [
+        '127.0.0.1:78901',
+        'notlocalhost:7890',
+        'http=127.0.0.1:7890;https=other:7890',
+      ]) {
+        expect(
+          VpsSystemProxy(enabled: true, server: server).isOurs(7890),
+          isFalse,
+          reason: server,
+        );
+      }
+      expect(
+        const VpsSystemProxy(
+          enabled: true,
+          server: '127.0.0.1:7890',
+          pac: 'http://other:7890/pac',
+        ).isOurs(7890),
+        isFalse,
+      );
     });
 
     test('a PAC script counts as an active proxy', () {
@@ -77,6 +109,13 @@ void main() {
       );
     });
 
+    test('rejects an exhausted fallback port range', () async {
+      await expectLater(
+        pickPort(7890, isFree: (_) async => false),
+        throwsA(isA<SocketException>()),
+      );
+    });
+
     test('a real taken port is reported as taken', () async {
       final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(server.close);
@@ -90,26 +129,128 @@ void main() {
     expect(await quitRivals(const [fake]), ['Probe']);
   });
 
-  test('quitting ends each image once and reports what is left', () async {
+  test('quitting targets observed PIDs and checks their images', () async {
+    final first = pid + 1001;
+    final second = pid + 1002;
     final calls = <List<String>>[];
-    var scans = 0;
     Future<ProcessResult> run(String exe, List<String> args) async {
       calls.add([exe, ...args]);
-      if (exe == 'tasklist') {
-        scans++;
-        // After taskkill only an elevated FlClash core survives.
-        return _ok('"FlClashCore.exe","4188","Services","0","9 K"\r\n');
-      }
-      return _ok('');
+      return _ok(
+        exe == 'tasklist'
+            ? '"FlClashCore.exe","$second","Services","0","9 K"\r\n'
+            : '',
+      );
     }
 
-    if (!Platform.isWindows) return;
-    final left = await quitRivals(parseRivals(tasklist), run: run);
-    expect(
-      calls.where((c) => c.first == 'taskkill').map((c) => c.last).toList(),
-      ['flclash.exe', 'flclashcore.exe', 'verge-mihomo.exe'],
-    );
-    expect(scans, 1);
+    final left = await quitRivals([
+      VpsRival('flclash.exe', first, 'FlClash'),
+      VpsRival('flclashcore.exe', second, 'FlClash'),
+      VpsRival('flclashcore.exe', second, 'FlClash'),
+      VpsRival('flclash.exe', pid, 'FlClash'),
+      const VpsRival('flclash.exe', 0, 'FlClash'),
+      VpsRival('unrelated.exe', first + 5, 'Other'),
+    ], run: run);
+    expect(calls, [
+      [
+        'taskkill',
+        '/F',
+        '/T',
+        '/PID',
+        '$first',
+        '/FI',
+        'IMAGENAME eq flclash.exe',
+      ],
+      [
+        'taskkill',
+        '/F',
+        '/T',
+        '/PID',
+        '$second',
+        '/FI',
+        'IMAGENAME eq flclashcore.exe',
+      ],
+      ['tasklist', '/FO', 'CSV', '/NH'],
+    ]);
     expect(left, ['FlClash']);
+  });
+
+  test('a cancelled takeover stops issuing process kills', () async {
+    var current = true;
+    var calls = 0;
+    await quitRivals(
+      [
+        VpsRival('flclash.exe', pid + 1001, 'FlClash'),
+        VpsRival('flclashcore.exe', pid + 1002, 'FlClash'),
+      ],
+      isCurrent: () => current,
+      run: (exe, args) async {
+        if (exe == 'taskkill') calls++;
+        current = false;
+        return _ok('');
+      },
+    );
+    expect(calls, 1);
+  });
+
+  group('proxy guard intent', () {
+    const running = ProxyState(
+      isStart: true,
+      systemProxy: true,
+      bassDomain: [],
+      port: 7890,
+    );
+
+    test('does not restore a proxy after a stop during inspection', () async {
+      ProxyState? state = running;
+      final inspection = Completer<VpsSystemProxy?>();
+      final applied = <ProxyState>[];
+      final pending = vpsRestoreSystemProxy(
+        current: () => state,
+        inspect: () => inspection.future,
+        apply: (value) async => applied.add(value),
+      );
+      state = running.copyWith(isStart: false);
+      inspection.complete(const VpsSystemProxy(enabled: false));
+      await pending;
+      expect(applied, isEmpty);
+    });
+
+    test('takeover disabled and PAC mode skip manual restoration', () async {
+      var inspected = false;
+      Future<VpsSystemProxy?> inspect() async {
+        inspected = true;
+        return const VpsSystemProxy(enabled: false);
+      }
+      Future<void> apply(ProxyState state) async {
+        fail('must not restore a manual proxy');
+      }
+
+      await vpsRestoreSystemProxy(
+        current: () => null,
+        inspect: inspect,
+        apply: apply,
+      );
+      await vpsRestoreSystemProxy(
+        current: () => running.copyWith(
+          pacScript: 'function FindProxyForURL() {}',
+        ),
+        inspect: inspect,
+        apply: apply,
+      );
+      expect(inspected, isFalse);
+    });
+
+    test('restores a disabled proxy with a matching stale address', () async {
+      final applied = <ProxyState>[];
+      await vpsRestoreSystemProxy(
+        current: () => running,
+        inspect: () async => const VpsSystemProxy(
+          enabled: false,
+          server: '127.0.0.1:7890',
+        ),
+        apply: (value) async => applied.add(value),
+      );
+      expect(applied, [running]);
+    });
   });
 }

@@ -152,8 +152,9 @@ class VpsAccountCard extends ConsumerWidget {
           );
     String? expiry;
     if (m.expireAt != null) {
-      final days = m.expireAt!.difference(DateTime.now()).inDays;
-      expiry = days >= 0
+      final remaining = m.expireAt!.difference(DateTime.now());
+      final days = remaining.inDays;
+      expiry = !remaining.isNegative
           ? tr(context, '还剩 $days 天到期', 'Expires in $days days')
           : tr(context, '已到期', 'Expired');
     }

@@ -47,14 +47,14 @@ extension FileExt on File {
     try {
       await temp.parent.create(recursive: true);
       await temp.writeAsString(content, flush: true);
-      await temp._renameRetryingWhileHeldOpen(path);
+      await temp.renameReplacing(path);
     } catch (_) {
       await temp.delete().then((_) {}, onError: (_) {});
       rethrow;
     }
   }
 
-  Future<void> _renameRetryingWhileHeldOpen(String target) async {
+  Future<void> renameReplacing(String target) async {
     for (var attempt = 1; ; attempt++) {
       try {
         await rename(target);

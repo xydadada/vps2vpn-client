@@ -781,10 +781,11 @@ class _Stats extends ConsumerWidget {
       left = remain.traffic.show;
     }
     if (sub != null && sub.expire > 0) {
-      final days = DateTime.fromMillisecondsSinceEpoch(
+      final remaining = DateTime.fromMillisecondsSinceEpoch(
         sub.expire * 1000,
-      ).difference(DateTime.now()).inDays;
-      expire = days >= 0
+      ).difference(DateTime.now());
+      final days = remaining.inDays;
+      expire = !remaining.isNegative
           ? tr(context, '还剩 $days 天', '$days days left')
           : tr(context, '已到期', 'Expired');
     }

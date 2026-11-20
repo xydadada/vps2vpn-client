@@ -7,9 +7,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:fl_clash/common/constant.dart';
-import 'package:fl_clash/core/controller.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
@@ -21,10 +21,15 @@ final _token = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
 /// `<sub>/api/` for a vps2vpn subscription link, else null.
 Uri? vpsApiBase(String subUrl) {
   final uri = Uri.tryParse(subUrl.trim());
-  if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+  if (uri == null ||
+      !(uri.isScheme('http') || uri.isScheme('https')) ||
+      !uri.hasAuthority ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty) {
     return null;
   }
-  final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+  final segs = uri.pathSegments.toList();
+  if (segs.isNotEmpty && segs.last.isEmpty) segs.removeLast();
   if (segs.length != 2 || segs[0] != 's' || !_token.hasMatch(segs[1])) {
     return null;
   }
@@ -89,7 +94,13 @@ class VpsClientRelease {
 
   static Uri? _web(Object? v) {
     final u = Uri.tryParse('${v ?? ''}');
-    return u != null && (u.isScheme('http') || u.isScheme('https')) ? u : null;
+    return u != null &&
+            (u.isScheme('http') || u.isScheme('https')) &&
+            u.hasAuthority &&
+            u.host.isNotEmpty &&
+            u.userInfo.isEmpty
+        ? u
+        : null;
   }
 
   static VpsClientRelease? fromJson(Object? json) {
@@ -198,40 +209,77 @@ class VpsMemberResult {
   final bool linkChanged;
 }
 
-HttpClient _client({int? proxyPort}) {
+HttpClient _client({int? proxyPort, AuthenticationProps? authentication}) {
   final c = HttpClient()
     ..connectionTimeout = const Duration(seconds: 6)
     ..idleTimeout = const Duration(seconds: 2);
   c.findProxy = (_) =>
       proxyPort == null ? 'DIRECT' : 'PROXY 127.0.0.1:$proxyPort';
+  var authenticated = false;
+  c.authenticateProxy = (host, port, scheme, realm) async {
+    final auth = authentication;
+    if (authenticated ||
+        host != '127.0.0.1' ||
+        port != proxyPort ||
+        scheme.toLowerCase() != 'basic' ||
+        auth == null ||
+        !auth.enable ||
+        auth.username.isEmpty) {
+      return false;
+    }
+    authenticated = true;
+    c.addProxyCredentials(
+      host,
+      port,
+      realm ?? '',
+      HttpClientBasicCredentials(auth.username, auth.password),
+    );
+    return true;
+  };
   return c;
+}
+
+const _maxPanelBody = 1 << 20;
+
+Future<String> _readPanelBody(HttpClientResponse response) async {
+  if (response.contentLength > _maxPanelBody) {
+    throw const FormatException('Panel response is too large');
+  }
+  final bytes = BytesBuilder(copy: false);
+  await for (final chunk in response) {
+    if (bytes.length + chunk.length > _maxPanelBody) {
+      throw const FormatException('Panel response is too large');
+    }
+    bytes.add(chunk);
+  }
+  return utf8.decode(bytes.takeBytes());
 }
 
 Future<(int, String)> _send(
   Uri url, {
   Map<String, Object?>? body,
   int? proxyPort,
+  AuthenticationProps? authentication,
 }) async {
-  final client = _client(proxyPort: proxyPort);
+  final client = _client(proxyPort: proxyPort, authentication: authentication);
   try {
-    final req = body == null
-        ? await client.getUrl(url)
-        : await client.postUrl(url);
-    if (body != null) {
-      // A fixed length, not chunked: the panel's server cannot read chunks.
-      final bytes = utf8.encode(jsonEncode(body));
-      req.headers
-        ..set('X-V2V', '1')
-        ..contentType = ContentType.json
-        ..contentLength = bytes.length;
-      req.add(bytes);
-    }
-    final res = await req.close().timeout(const Duration(seconds: 10));
-    final text = await res
-        .transform(utf8.decoder)
-        .join()
-        .timeout(const Duration(seconds: 10));
-    return (res.statusCode, text);
+    return await (() async {
+      final req = body == null
+          ? await client.getUrl(url)
+          : await client.postUrl(url);
+      req.followRedirects = false;
+      if (body != null) {
+        // A fixed length, not chunked: the panel's server cannot read chunks.
+        final bytes = utf8.encode(jsonEncode(body));
+        req.headers
+          ..set('X-V2V', '1')
+          ..contentType = ContentType.json
+          ..contentLength = bytes.length;
+        req.add(bytes);
+      }
+      final res = await req.close();
+      return (res.statusCode, await _readPanelBody(res));
+    })().timeout(const Duration(seconds: 15));
   } finally {
     client.close(force: true);
   }
@@ -239,10 +287,18 @@ Future<(int, String)> _send(
 
 /// Direct first, like the subscription fetch; through our own proxy when
 /// direct fails and [proxyPort] is given.
-Future<VpsMemberResult?> fetchMember(Uri base, {int? proxyPort}) async {
+Future<VpsMemberResult?> fetchMember(
+  Uri base, {
+  int? proxyPort,
+  AuthenticationProps? authentication,
+}) async {
   for (final port in [null, ?proxyPort]) {
     try {
-      final (code, text) = await _send(base.resolve('me'), proxyPort: port);
+      final (code, text) = await _send(
+        base.resolve('me'),
+        proxyPort: port,
+        authentication: authentication,
+      );
       if (code == HttpStatus.notFound) {
         return const VpsMemberResult(linkChanged: true);
       }
@@ -291,17 +347,35 @@ class VpsLineHealth {
   final int threshold;
   final _fails = <String, int>{};
   final _down = <String>{};
+  final _reportedDown = <String>{};
+  final _pending = <String>{};
 
   /// false = report down, true = report up, null = nothing to say.
   bool? record(String key, bool ok) {
     if (ok) {
       _fails.remove(key);
-      return _down.remove(key) ? true : null;
+      _down.remove(key);
+    } else {
+      final next = (_fails[key] ?? 0) + 1;
+      final n = next > threshold ? threshold : next;
+      _fails[key] = n;
+      if (n >= threshold) _down.add(key);
     }
-    final n = (_fails[key] ?? 0) + 1;
-    _fails[key] = n;
-    if (n >= threshold && _down.add(key)) return false;
+    final down = _down.contains(key);
+    if (down != _reportedDown.contains(key) || _pending.contains(key)) {
+      _pending.add(key);
+      return !down;
+    }
     return null;
+  }
+
+  void acknowledge(String key, bool ok) {
+    _pending.remove(key);
+    if (ok) {
+      _reportedDown.remove(key);
+    } else {
+      _reportedDown.add(key);
+    }
   }
 }
 
@@ -313,59 +387,108 @@ final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
   final url = ref.watch(currentProfileProvider.select((p) => p?.url ?? ''));
   final base = vpsApiBase(url);
   if (base == null) return null;
-  final on = ref.watch(isStartProvider);
-  final port = on ? ref.read(patchClashConfigProvider).mixedPort : null;
-  final keep = ref.keepAlive();
-  // Refresh now and then while someone looks.
-  final timer = Timer(const Duration(minutes: 5), keep.close);
+  final on = ref.watch(isStartProvider) && !ref.watch(suspendProvider);
+  final port = on
+      ? ref.watch(patchClashConfigProvider.select((s) => s.mixedPort))
+      : null;
+  final authentication = ref.watch(
+    networkSettingProvider.select((s) => s.authentication),
+  );
+  final timer = Timer(const Duration(minutes: 5), ref.invalidateSelf);
   ref.onDispose(timer.cancel);
-  return fetchMember(base, proxyPort: port);
+  return fetchMember(base, proxyPort: port, authentication: authentication);
 });
 
 Timer? _watch;
-final _health = VpsLineHealth();
+
+void vpsStopLineWatch() {
+  _watch?.cancel();
+  _watch = null;
+}
 
 /// While connected, quietly tests each line of the smart group and tells the
 /// panel when one keeps failing (and when it is back), so the owner can move
 /// it to a new port. Never in safe mode or tests.
 void vpsStartLineWatch(Ref ref) {
-  _watch?.cancel();
-  if (safeModeBuild || Platform.environment.containsKey('FLUTTER_TEST')) {
+  vpsStopLineWatch();
+  if (ref.read(safeModeProvider) ||
+      Platform.environment.containsKey('FLUTTER_TEST')) {
     return;
   }
-  _watch = Timer.periodic(const Duration(minutes: 4), (timer) async {
-    if (!ref.read(isStartProvider)) {
+  var health = VpsLineHealth();
+  Uri? lastBase;
+  var busy = false;
+  final watch = Timer.periodic(const Duration(minutes: 4), (timer) async {
+    if (!ref.mounted ||
+        ref.read(safeModeProvider) ||
+        !ref.read(isStartProvider)) {
       timer.cancel();
       return;
     }
+    if (busy || ref.read(suspendProvider)) return;
     final base = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
     if (base == null) return;
-    await _checkLines(ref, base);
+    if (base != lastBase) {
+      health = VpsLineHealth();
+      lastBase = base;
+    }
+    bool current() =>
+        ref.mounted &&
+        timer.isActive &&
+        identical(_watch, timer) &&
+        !ref.read(safeModeProvider) &&
+        ref.read(isStartProvider) &&
+        !ref.read(suspendProvider) &&
+        vpsApiBase(ref.read(currentProfileProvider)?.url ?? '') == base;
+    busy = true;
+    try {
+      await _checkLines(ref, base, health, current);
+    } finally {
+      busy = false;
+    }
   });
+  _watch = watch;
+  ref.onDispose(watch.cancel);
 }
 
-Future<void> _checkLines(Ref ref, Uri base) async {
+Future<void> _checkLines(
+  Ref ref,
+  Uri base,
+  VpsLineHealth health,
+  bool Function() current,
+) async {
+  final core = ref.read(coreHandlerProvider);
   final groups = ref.read(groupsProvider);
   final smart = groups.where((g) => g.name == vpsSmartGroupName).firstOrNull;
   if (smart == null) return;
   for (final proxy in smart.all) {
+    if (!current()) return;
     try {
-      final def = await coreController.getProxyDefinition(proxy.name);
+      final def = await core.getProxyDefinition(proxy.name);
+      if (!current()) return;
       if (def == null) continue;
       final kind = vpsLineKind(def);
       final host = '${def['server'] ?? ''}';
       if (kind == null || host.isEmpty) continue;
-      final delay = await coreController.testDelay(
+      final delay = await core.testDelay(
         TestDelayParams(
           proxyName: proxy.name,
           testUrl: smart.testUrl ?? defaultTestUrl,
           timeout: 5000,
         ),
       );
+      if (!current()) return;
       final ok = (delay.value ?? -1) > 0;
-      final change = _health.record('$kind@$host', ok);
+      final key = '$kind@$host:${def['port']}';
+      final change = health.record(key, ok);
       if (change != null) {
-        await reportLine(base, line: kind, ok: change, host: host);
+        final reported = await reportLine(
+          base,
+          line: kind,
+          ok: change,
+          host: host,
+        );
+        if (current() && reported) health.acknowledge(key, change);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('vps2vpn line watch: $e');

@@ -202,15 +202,20 @@ extension ProfileExtension on Profile {
     Uint8List bytes, {
     required ValidateConfig validate,
   }) async {
-    final path = await appPath.tempFilePath;
-    final tempFile = File(path);
-    await tempFile.safeWriteAsBytes(bytes);
-    if (await validate(path, ageSecretKey) case final issue?) {
-      throw MessageException(issue);
+    final directory = Directory(await appPath.profilesPath);
+    await directory.create(recursive: true);
+    final staging = await directory.createTemp('.import-');
+    try {
+      final tempFile = File('${staging.path}/profile.yaml');
+      await tempFile.writeAsBytes(bytes, flush: true);
+      if (await validate(tempFile.path, ageSecretKey) case final issue?) {
+        throw MessageException(issue);
+      }
+      final target = await _getFile(false);
+      await tempFile.renameReplacing(target.path);
+      return copyWith(lastUpdateDate: DateTime.now());
+    } finally {
+      await staging.safeDelete(recursive: true);
     }
-    final mFile = await file;
-    await tempFile.copy(mFile.path);
-    await tempFile.safeDelete();
-    return copyWith(lastUpdateDate: DateTime.now());
   }
 }

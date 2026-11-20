@@ -97,6 +97,7 @@ class SetupAction extends _$SetupAction {
   void _setLocalRunning(bool running) {
     _stopRuntimeTicker();
     if (!running) {
+      vpsStopLineWatch();
       _startTime = null;
       debouncer.cancel(FunctionTag.applyProfile);
       _pendingForceApply = false;
@@ -208,9 +209,13 @@ class SetupAction extends _$SetupAction {
     // vps2vpn: close other proxy apps, move off a taken port, clear a stale
     // system proxy. A resume after a core restart is our own run continuing.
     if (!request.resume) {
-      await globalState.safeRun(() => vpsBeforeConnect(ref), silence: true);
-      vpsStartLineWatch(ref);
+      await globalState.safeRun(
+        () => vpsBeforeConnect(ref, isCurrent: () => _isCurrent(request)),
+        silence: true,
+      );
+      if (!ref.mounted || !_isCurrent(request)) return true;
     }
+    vpsStartLineWatch(ref);
     if (request.initialize) {
       var applied = false;
       try {
