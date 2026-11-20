@@ -322,24 +322,29 @@ void main() {
       expect(accepted, 1);
     });
 
-    test('HTTPS-required response is terminal, not retried via proxy', () async {
-      meStatus = HttpStatus.upgradeRequired;
-      meBody = jsonEncode({'service': 'vps2vpn', 'error': 'https_required'});
-      final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() => proxy.close(force: true));
-      var retries = 0;
-      proxy.listen((request) async {
-        retries++;
-        request.response.write(jsonEncode({'name': 'Proxy', 'enabled': true}));
-        await request.response.close();
-      });
-      final result = await _localSocket(
-        () => fetchMember(base(), proxyPort: proxy.port),
-      );
-      expect(result?.problem, VpsPanelProblem.httpsRequired);
-      expect(result?.member, isNull);
-      expect(retries, 0);
-    });
+    test(
+      'HTTPS-required response is terminal, not retried via proxy',
+      () async {
+        meStatus = HttpStatus.upgradeRequired;
+        meBody = jsonEncode({'service': 'vps2vpn', 'error': 'https_required'});
+        final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(() => proxy.close(force: true));
+        var retries = 0;
+        proxy.listen((request) async {
+          retries++;
+          request.response.write(
+            jsonEncode({'name': 'Proxy', 'enabled': true}),
+          );
+          await request.response.close();
+        });
+        final result = await _localSocket(
+          () => fetchMember(base(), proxyPort: proxy.port),
+        );
+        expect(result?.problem, VpsPanelProblem.httpsRequired);
+        expect(result?.member, isNull);
+        expect(retries, 0);
+      },
+    );
 
     test('a plain HTTP 404 is not trusted as a rotated link', () async {
       meStatus = HttpStatus.notFound;
