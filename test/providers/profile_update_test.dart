@@ -21,8 +21,12 @@ import '../helpers/test_profiles.dart';
 class _MockCore extends Mock implements CoreHandlerInterface {}
 
 class _NoopSetup extends SetupAction {
+  int applies = 0;
+
   @override
-  void applyProfileDebounce({bool silence = false, bool force = false}) {}
+  void applyProfileDebounce({bool silence = false, bool force = false}) {
+    applies++;
+  }
 }
 
 class _NoopClashProviders extends ClashProvidersAction {
@@ -93,6 +97,7 @@ void main() {
   late Directory home;
   late ProviderContainer container;
   late _MockCore core;
+  late _NoopSetup setup;
   late _Downloads downloads;
   late HttpClientAdapter originalAdapter;
   late Profile profile;
@@ -103,6 +108,7 @@ void main() {
     home = await Directory.systemTemp.createTemp('profile_update_test');
     await useAppPaths(home);
     core = _MockCore();
+    setup = _NoopSetup();
     when(() => core.validateConfig(any())).thenAnswer((_) async => null);
     profile = Profile.normal(
       label: 'Original',
@@ -112,7 +118,7 @@ void main() {
       overrides: [
         profilesProvider.overrideWith(() => TestProfiles([profile])),
         coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
-        setupActionProvider.overrideWith(_NoopSetup.new),
+        setupActionProvider.overrideWith(() => setup),
         clashProvidersActionProvider.overrideWith(_NoopClashProviders.new),
       ],
     );
@@ -252,5 +258,161 @@ void main() {
 
     expect(container.read(profilesProvider).single, profile);
     expect(await savedFile.readAsString(), 'existing profile');
+  });
+
+  test('missing-file repair uses the same ownership as an explicit refresh', () async {
+    await savedFile.delete();
+    container.read(currentProfileIdProvider.notifier).value = profile.id;
+    final entered = Completer<void>();
+    final validation = Completer<String?>();
+    when(() => core.validateConfig(any())).thenAnswer((invocation) async {
+      final contents = await File(
+        invocation.positionalArguments.single as String,
+      ).readAsString();
+      if (contents == 'repair') {
+        entered.complete();
+        return validation.future;
+      }
+      return null;
+    });
+    final action = container.read(profilesActionProvider.notifier);
+    final repair = action.updateMissingProfile(profile);
+    (await downloads.next()).complete('repair');
+    await entered.future;
+    final refresh = action.updateProfile(profile);
+    (await downloads.next()).complete('newer refresh', download: 70);
+    await refresh;
+    validation.complete(null);
+    await repair;
+
+    expect(await savedFile.readAsString(), 'newer refresh');
+    expect(container.read(profilesProvider).single.subscriptionInfo?.download, 70);
+    expect(setup.applies, 1);
+  });
+
+  test('missing-file repair cannot resurrect a profile deleted during download', () async {
+    await savedFile.delete();
+    final pending = container
+        .read(profilesActionProvider.notifier)
+        .updateMissingProfile(profile);
+    final download = await downloads.next();
+    await container.read(profilesProvider.notifier).del(profile.id);
+    download.complete('obsolete');
+    await pending;
+
+    expect(container.read(profilesProvider), isEmpty);
+    expect(await savedFile.exists(), isFalse);
+    expect(setup.applies, 0);
+  });
+
+  test('successful missing-file repair does not schedule another setup', () async {
+    await savedFile.delete();
+    container.read(currentProfileIdProvider.notifier).value = profile.id;
+    final pending = container
+        .read(profilesActionProvider.notifier)
+        .updateMissingProfile(profile);
+    (await downloads.next()).complete('repaired');
+    await pending;
+
+    expect(await savedFile.readAsString(), 'repaired');
+    expect(container.read(profilesProvider).single.lastUpdateDate, isNotNull);
+    expect(setup.applies, 0);
+  });
+
+  test('saving local bytes supersedes a blocked refresh from the same URL', () async {
+    final entered = Completer<void>();
+    final validation = Completer<String?>();
+    when(() => core.validateConfig(any())).thenAnswer((invocation) async {
+      final contents = await File(
+        invocation.positionalArguments.single as String,
+      ).readAsString();
+      if (contents == 'remote') {
+        entered.complete();
+        return validation.future;
+      }
+      return null;
+    });
+    final action = container.read(profilesActionProvider.notifier);
+    final remote = action.updateProfile(profile);
+    (await downloads.next()).complete('remote', download: 70);
+    await entered.future;
+    final saved = await action.saveProfileFile(
+      profile.copyWith(label: 'Edited'),
+      Uint8List.fromList('local'.codeUnits),
+    );
+    validation.complete(null);
+    await remote;
+
+    expect(saved, isTrue);
+    expect(await savedFile.readAsString(), 'local');
+    expect(container.read(profilesProvider).single.label, 'Edited');
+    expect(container.read(profilesProvider).single.subscriptionInfo, isNull);
+  });
+
+  test('a superseded local validation cannot replace a newer refresh', () async {
+    final entered = Completer<void>();
+    final validation = Completer<String?>();
+    when(() => core.validateConfig(any())).thenAnswer((invocation) async {
+      final contents = await File(
+        invocation.positionalArguments.single as String,
+      ).readAsString();
+      if (contents == 'local') {
+        entered.complete();
+        return validation.future;
+      }
+      return null;
+    });
+    final action = container.read(profilesActionProvider.notifier);
+    final local = action.saveProfileFile(
+      profile.copyWith(label: 'Obsolete'),
+      Uint8List.fromList('local'.codeUnits),
+    );
+    await entered.future;
+    final remote = action.updateProfile(profile);
+    (await downloads.next()).complete('new remote', download: 80);
+    await remote;
+    validation.complete(null);
+
+    expect(await local, isFalse);
+    expect(await savedFile.readAsString(), 'new remote');
+    expect(container.read(profilesProvider).single.label, 'Original');
+    expect(container.read(profilesProvider).single.subscriptionInfo?.download, 80);
+  });
+
+  test('local saves preserve selections changed while validation was pending', () async {
+    final entered = Completer<void>();
+    final validation = Completer<String?>();
+    when(() => core.validateConfig(any())).thenAnswer((_) {
+      entered.complete();
+      return validation.future;
+    });
+    final pending = container
+        .read(profilesActionProvider.notifier)
+        .saveProfileFile(
+          profile.copyWith(label: 'Edited'),
+          Uint8List.fromList('local'.codeUnits),
+        );
+    await entered.future;
+    container.read(profilesProvider.notifier).put(
+      profile.copyWith(selectedMap: {'Group': 'New selection'}),
+    );
+    validation.complete(null);
+
+    expect(await pending, isTrue);
+    final latest = container.read(profilesProvider).single;
+    expect(latest.label, 'Edited');
+    expect(latest.selectedMap, {'Group': 'New selection'});
+  });
+
+  test('an editor put invalidates an older refresh even when the URL is unchanged', () async {
+    final action = container.read(profilesActionProvider.notifier);
+    final pending = action.updateProfile(profile);
+    final download = await downloads.next();
+    action.putProfile(profile.copyWith(label: 'Edited'));
+    download.complete('obsolete');
+    await pending;
+
+    expect(await savedFile.readAsString(), 'existing profile');
+    expect(container.read(profilesProvider).single.label, 'Edited');
   });
 }

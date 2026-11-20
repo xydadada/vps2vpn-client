@@ -80,6 +80,7 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   void putProfile(Profile profile) {
+    _updates.remove(profile.id);
     ref.read(profilesProvider.notifier).put(profile);
     if (ref.read(currentProfileIdProvider) != null) return;
     ref.read(currentProfileIdProvider.notifier).value = profile.id;
@@ -155,23 +156,81 @@ class ProfilesAction extends _$ProfilesAction {
     }
   }
 
+  ({bool Function() isCurrent, VoidCallback release}) _claimProfileWrite(
+    Profile source,
+  ) {
+    final token = Object();
+    _updates[source.id] = token;
+    return (
+      isCurrent: () {
+        if (!ref.mounted || !identical(_updates[source.id], token)) return false;
+        final latest = ref.read(profilesProvider).getProfile(source.id);
+        return latest != null &&
+            latest.type == source.type &&
+            latest.url == source.url &&
+            latest.ageSecretKey == source.ageSecretKey;
+      },
+      release: () {
+        if (identical(_updates[source.id], token)) _updates.remove(source.id);
+      },
+    );
+  }
+
+  /// The editor and remote refreshes share ownership of the saved bytes.
+  Future<bool> saveProfileFile(Profile profile, Uint8List bytes) async {
+    final current = ref.read(profilesProvider).getProfile(profile.id);
+    if (current == null) return false;
+    final claim = _claimProfileWrite(current);
+    try {
+      final saved = await profile.saveFile(
+        bytes,
+        validate: (path, key) => _core.validateProfile(path, key),
+        shouldCommit: claim.isCurrent,
+      );
+      if (!claim.isCurrent()) return false;
+      final latest = ref.read(profilesProvider).getProfile(profile.id)!;
+      ref.read(profilesProvider.notifier).put(
+        latest.copyWith(
+          label: profile.label,
+          url: profile.url,
+          ageSecretKey: profile.ageSecretKey,
+          autoUpdate: profile.autoUpdate,
+          autoUpdateDuration: profile.autoUpdateDuration,
+          lastUpdateDate: saved.lastUpdateDate,
+        ),
+      );
+      return true;
+    } catch (_) {
+      if (claim.isCurrent()) rethrow;
+      return false;
+    } finally {
+      claim.release();
+    }
+  }
+
+  /// Setup repairs a missing subscription without scheduling another setup.
+  Future<void> updateMissingProfile(Profile profile) async {
+    if (profile.type != ProfileType.url) return;
+    final path = await appPath.getProfilePath(profile.id.toString());
+    if (await File(path).exists() || !ref.mounted) return;
+    await _updateProfile(profile, reapply: false);
+  }
+
   Future<void> updateProfile(
     Profile profile, {
     bool showLoading = false,
+  }) => _updateProfile(profile, showLoading: showLoading);
+
+  Future<void> _updateProfile(
+    Profile profile, {
+    bool showLoading = false,
+    bool reapply = true,
   }) async {
     final current = ref.read(profilesProvider).getProfile(profile.id);
     if (current == null || current.type != ProfileType.url) return;
     profile = current;
-    final token = Object();
-    _updates[profile.id] = token;
-    bool isCurrent() {
-      if (!ref.mounted || !identical(_updates[profile.id], token)) return false;
-      final latest = ref.read(profilesProvider).getProfile(profile.id);
-      return latest != null &&
-          latest.type == profile.type &&
-          latest.url == profile.url &&
-          latest.ageSecretKey == profile.ageSecretKey;
-    }
+    final claim = _claimProfileWrite(profile);
+    final isCurrent = claim.isCurrent;
     final operation = showLoading
         ? ref.read(updatingKeysProvider.notifier).start(profile.updatingKey)
         : null;
@@ -188,6 +247,7 @@ class ProfilesAction extends _$ProfilesAction {
         lastUpdateDate: updated.lastUpdateDate,
       );
       ref.read(profilesProvider.notifier).put(newProfile);
+      if (!reapply) return;
       if (profile.id == ref.read(currentProfileIdProvider)) {
         ref
             .read(setupActionProvider.notifier)
@@ -208,7 +268,7 @@ class ProfilesAction extends _$ProfilesAction {
     } catch (_) {
       if (isCurrent()) rethrow;
     } finally {
-      if (identical(_updates[profile.id], token)) _updates.remove(profile.id);
+      claim.release();
       if (operation != null && ref.mounted) {
         ref
             .read(updatingKeysProvider.notifier)

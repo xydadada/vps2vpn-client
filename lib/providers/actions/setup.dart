@@ -795,15 +795,16 @@ class SetupAction extends _$SetupAction {
   }) async {
     var profile = ref.read(currentProfileProvider) ?? recoverMissingProfile();
     // A refresh failure is surfaced by safeRun; setup keeps the old profile.
-    final nextProfile = await globalState.safeRun(
-      () => profile?.checkAndUpdateAndCopy(
-        validate: (path, key) => _core.validateProfile(path, key),
-      ),
-    );
-    if (nextProfile != null) {
-      profile = nextProfile;
-      ref.read(profilesProvider.notifier).put(nextProfile);
+    if (profile != null) {
+      await globalState.safeRun(
+        () => ref
+            .read(profilesActionProvider.notifier)
+            .updateMissingProfile(profile!),
+      );
     }
+    if (!ref.mounted) return _SetupTaskResult.failed;
+    // A download can outlast a selection, edit, or deletion.
+    profile = ref.read(currentProfileProvider) ?? recoverMissingProfile();
     commonPrint.log('setup ===> ${profile?.realLabel}');
     final patchConfig = ref.read(patchClashConfigProvider);
     final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);

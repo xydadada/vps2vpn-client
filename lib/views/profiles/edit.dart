@@ -7,7 +7,6 @@ import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/pages/editor.dart';
 import 'package:fl_clash/providers/action.dart';
-import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/providers/database.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
@@ -151,17 +150,10 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
           profile = profile.copyWith(autoUpdate: false);
         }
       }
-      final savedProfile = await globalState.safeRun(
-        () => profile.saveFile(
-          _fileData!,
-          validate: (path, key) =>
-              ref.read(coreHandlerProvider).validateProfile(path, key),
-        ),
+      final saved = await globalState.safeRun(
+        () => profilesAction.saveProfileFile(profile, _fileData!),
       );
-      if (savedProfile == null) {
-        return;
-      }
-      profilesAction.putProfile(savedProfile);
+      if (saved != true) return;
     } else if (!hasUpdate) {
       profilesAction.putProfile(profile);
     } else {
