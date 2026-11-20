@@ -174,31 +174,41 @@ class Request {
     if (expected == null) {
       throw ReleaseNotVerifiedException(name);
     }
-    final path = join(directory, name);
+    // Never let an unverified response replace a previously downloaded
+    // installer. On Android, DownloadManager even deletes its destination
+    // before starting, so both transports must write to a private staging
+    // path first.
+    final destination = File(join(directory, name));
+    final staging = await Directory(directory).createTemp('.release-verify-');
+    final stagedPath = join(staging.path, name);
     final uri = releaseAssetUri(tag, name);
-    if (app case final android?) {
-      await android.downloadFile(
-        uri,
-        path,
-        title: name,
-        onReceiveProgress: onReceiveProgress ?? (_, _) {},
-        cancelToken: cancelToken ?? CancelToken(),
-      );
-    } else {
-      await releaseDio.downloadUri(
-        uri,
-        path,
-        onReceiveProgress: onReceiveProgress,
-        cancelToken: cancelToken,
-      );
+    try {
+      if (app case final android?) {
+        await android.downloadFile(
+          uri,
+          stagedPath,
+          title: name,
+          onReceiveProgress: onReceiveProgress ?? (_, _) {},
+          cancelToken: cancelToken ?? CancelToken(),
+        );
+      } else {
+        await releaseDio.downloadUri(
+          uri,
+          stagedPath,
+          onReceiveProgress: onReceiveProgress,
+          cancelToken: cancelToken,
+        );
+      }
+      if (await fileSha256(stagedPath) != expected) {
+        throw ReleaseNotVerifiedException(name);
+      }
+      // Publishing a verified file in one filesystem rename leaves the old
+      // installer untouched when fetching or hashing fails.
+      await File(stagedPath).rename(destination.path);
+      return destination.path;
+    } finally {
+      await staging.delete(recursive: true);
     }
-    if (await fileSha256(path) != expected) {
-      try {
-        await File(path).safeDelete();
-      } catch (_) {}
-      throw ReleaseNotVerifiedException(name);
-    }
-    return path;
   }
 }
 
