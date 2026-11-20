@@ -113,23 +113,33 @@ struct ErrorResponse {
     details: Option<ErrorDetails>,
 }
 
+#[derive(Debug)]
 struct ManagedCore {
     session_id: String,
     child: Child,
     #[cfg(windows)]
-    _job: CoreJob,
+    _job: Option<CoreJob>,
 }
 
 impl ManagedCore {
-    fn adopt(session_id: String, child: Child) -> Result<Self, Error> {
-        #[cfg(windows)]
-        let job = CoreJob::bind(&child)?;
-        Ok(Self {
+    fn adopt(session_id: String, child: Child) -> Result<Self, (Self, Error)> {
+        let core = Self {
             session_id,
             child,
             #[cfg(windows)]
-            _job: job,
-        })
+            _job: None,
+        };
+        #[cfg(windows)]
+        {
+            let mut core = core;
+            match CoreJob::bind(&core.child) {
+                Ok(job) => core._job = Some(job),
+                Err(error) => return Err((core, error)),
+            }
+            Ok(core)
+        }
+        #[cfg(not(windows))]
+        Ok(core)
     }
 
     fn terminate(&mut self) -> Result<(), Error> {
@@ -173,6 +183,7 @@ impl ManagedCore {
 /// Windows has no cgroup to take the Core down with a crashed Helper, so the
 /// Core lives in a job that the kernel kills when the Helper's handle closes.
 #[cfg(windows)]
+#[derive(Debug)]
 struct CoreJob(HANDLE);
 
 #[cfg(windows)]
@@ -502,8 +513,16 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
             }
             *managed = match ManagedCore::adopt(start_params.session_id.clone(), child) {
                 Ok(core) => Some(core),
-                Err(error) => {
+                Err((core, error)) => {
                     log_message(format!("Helper could not confine the Core: {error}"));
+                    *managed = Some(core);
+                    if let Err(stop_error) = release_managed_core(&mut managed) {
+                        return error_response(
+                            "coreStopFailed",
+                            format!("Core confinement failed: {error}; cleanup failed: {stop_error}"),
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        );
+                    }
                     return error_response(
                         "internalError",
                         format!("Core confinement failed: {error}"),

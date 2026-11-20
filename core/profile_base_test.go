@@ -412,3 +412,95 @@ func TestEncodeConfigMappingKeepsEveryKeyAfterAnOpenEndedScalar(t *testing.T) {
 		t.Errorf("decoded %d rules, want all %d in order", len(decoded.Rules), len(rules))
 	}
 }
+
+func TestLoadConfigWithBasePersistsSmartRouting(t *testing.T) {
+	vpsOn(t)
+	for name, profile := range map[string]string{
+		"literal":   baseProfile,
+		"inherited": "x-profile: &profile\n" +
+			"  " + strings.ReplaceAll(strings.TrimSuffix(baseProfile, "\n"), "\n", "\n  ") +
+			"\n<<: *profile\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := writeBaseProfile(t, profile)
+			base, err := handleGetProfileBase(PathParams{Path: path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(t.TempDir(), "config.yaml")
+			cfg, err := loadConfigWithBase(&SetupBase{
+				Path:    path,
+				Overlay: overlayOf(t, base, []string{"DOMAIN,added.test,DIRECT"}, nil),
+			}, configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := config.UnmarshalRawConfig(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reloaded, err := config.ParseRawConfig(raw)
+			if err != nil {
+				t.Fatalf("standalone reload: %v", err)
+			}
+			if !reflect.DeepEqual(ruleStrings(cfg), ruleStrings(reloaded)) {
+				t.Fatalf("standalone rules %v differ from running rules %v", ruleStrings(reloaded), ruleStrings(cfg))
+			}
+			for _, name := range []string{vpsSmartGroup, vpsAIGroup} {
+				if cfg.Proxies[name] == nil || reloaded.Proxies[name] == nil {
+					t.Errorf("smart outbound %q is missing", name)
+				}
+			}
+			members := raw.ProxyGroup[0]["proxies"].([]any)
+			if members[0] != vpsSmartGroup || len(members) != 3 {
+				t.Fatalf("persisted selector members = %v", members)
+			}
+			if got := raw.Proxy[1]["client-fingerprint"]; got != "chrome" {
+				t.Fatalf("persisted fingerprint = %v", got)
+			}
+		})
+	}
+}
+
+func TestRejectedProfileDoesNotReplaceTheLastConfig(t *testing.T) {
+	path := writeBaseProfile(t, "rules:\n  - MATCH,missing-proxy\n")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	previous := []byte("rules:\n  - MATCH,DIRECT\n")
+	if err := os.WriteFile(configPath, previous, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfigWithBase(&SetupBase{Path: path, Overlay: "{}"}, configPath); err == nil {
+		t.Fatal("invalid outbound accepted")
+	}
+	actual, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(actual, previous) {
+		t.Fatalf("rejected profile replaced the previous config: %s", actual)
+	}
+}
+
+func TestProfileMergeRejectsCyclicAliases(t *testing.T) {
+	for name, value := range map[string]string{
+		"merge":    "&root {<<: *root}",
+		"list":     "proxies: &list [*list]",
+		"indirect": "&root {nested: &child {parent: *root}}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, overlay := range []bool{false, true} {
+				base := &SetupBase{Path: writeBaseProfile(t, value), Overlay: "{}"}
+				if overlay {
+					base = &SetupBase{Path: writeBaseProfile(t, "{}"), Overlay: value}
+				}
+				if _, err := mergeProfileBase(base); err == nil || !strings.Contains(err.Error(), "cyclic YAML alias") {
+					t.Fatalf("overlay=%t: expected cyclic alias error, got %v", overlay, err)
+				}
+			}
+		})
+	}
+}

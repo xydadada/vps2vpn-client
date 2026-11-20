@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/metacubex/mihomo/constant"
 	cp "github.com/metacubex/mihomo/constant/provider"
@@ -240,5 +243,94 @@ func TestHandleCompileRuleSetReportsAFailedRequest(t *testing.T) {
 	}
 	if details, _ := methodErr.Details.(map[string]any); details["statusCode"] != http.StatusNotFound {
 		t.Fatalf("details = %v, want the status code", methodErr.Details)
+	}
+}
+
+func TestRuleSetWritesKeepConcurrentTemporaryFilesSeparate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rules")
+	const count = 32
+	start := make(chan struct{})
+	results := make(chan error, count)
+	payloads := make([][]byte, count)
+	for i := range payloads {
+		payloads[i] = bytes.Repeat([]byte{byte(i)}, 32<<10)
+		go func(payload []byte) {
+			<-start
+			results <- writeRuleSetFile(path, payload)
+		}(payloads[i])
+	}
+	close(start)
+	for range count {
+		if err := <-results; err != nil {
+			t.Errorf("concurrent write: %v", err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(payloads, func(payload []byte) bool { return bytes.Equal(data, payload) }) {
+		t.Fatal("the final file is not one complete write")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "rules" {
+		t.Fatalf("temporary files remain: %v", entries)
+	}
+}
+
+func TestRuleSetCompileRejectsConcurrentDownloadsForTheSameName(t *testing.T) {
+	withRuleSetHome(t)
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		started <- struct{}{}
+		<-release
+		_, _ = w.Write([]byte("example.com\n"))
+	}))
+	defer server.Close()
+	defer releaseAll()
+	params := CompileRuleSetParams{Name: "remote", URL: server.URL}
+	first := make(chan error, 1)
+	go func() {
+		_, err := handleCompileRuleSet(params)
+		first <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first download did not start")
+	}
+	second := make(chan error, 1)
+	go func() {
+		_, err := handleCompileRuleSet(params)
+		second <- err
+	}()
+	secondCompleted := false
+	select {
+	case err := <-second:
+		secondCompleted = true
+		var methodErr *MethodError
+		if !errors.As(err, &methodErr) || methodErr.Code != "rule_set_updating" {
+			t.Errorf("second compile = %v, want rule_set_updating", err)
+		}
+	case <-time.After(time.Second):
+		t.Error("concurrent compile was not rejected")
+	}
+	releaseAll()
+	if !secondCompleted {
+		select {
+		case <-second:
+		case <-time.After(5 * time.Second):
+			t.Error("second compile did not finish after release")
+		}
+	}
+	if err := <-first; err != nil {
+		t.Fatal(err)
 	}
 }

@@ -48,6 +48,11 @@ func handleCompileRuleSet(params CompileRuleSetParams) (*RuleSetInfo, error) {
 	if !ok {
 		return nil, &MethodError{Code: "invalid_arguments", Message: "invalid rule set name"}
 	}
+	key := "ruleSet:" + params.Name
+	if !claimUpdate(key) {
+		return nil, &MethodError{Code: "rule_set_updating", Message: "rule set is already updating"}
+	}
+	defer releaseUpdate(key)
 	var buf []byte
 	var err error
 	if params.URL != "" {
@@ -91,26 +96,26 @@ func writeRuleSetFile(path string, buf []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	// The directory belongs to the user while the Core may run as root, so the
-	// temp file is created afresh rather than opened through whatever is there.
-	temp := path + ".tmp"
-	_ = os.Remove(temp)
-	file, err := os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	file, err := os.CreateTemp(filepath.Dir(path), ".rules-*")
 	if err != nil {
 		return err
 	}
+	temp := file.Name()
+	defer os.Remove(temp)
 	_, err = file.Write(buf)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
 	if err != nil {
-		_ = os.Remove(temp)
+		return err
+	}
+	if err := os.Chmod(temp, 0o644); err != nil {
 		return err
 	}
 	if err := os.Rename(temp, path); err != nil {
-		_ = os.Remove(temp)
 		return err
 	}
+	scheduleReclaimOwnership()
 	return nil
 }
 

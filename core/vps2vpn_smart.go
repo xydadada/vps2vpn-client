@@ -74,7 +74,12 @@ func vpsName(p map[string]any) string {
 	return name
 }
 
-func vpsHasGroup(raw *config.RawConfig, name string) bool {
+func vpsHasOutbound(raw *config.RawConfig, name string) bool {
+	for _, p := range raw.Proxy {
+		if vpsName(p) == name {
+			return true
+		}
+	}
 	for _, g := range raw.ProxyGroup {
 		if vpsName(g) == name {
 			return true
@@ -98,9 +103,10 @@ func vpsRoutesAI(rules []string) bool {
 // vps2vpnEnhance adds the smart groups to raw in place. The AI rules go
 // after the first userRules rules (the user's own); a negative userRules
 // leaves the rules alone.
-func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
+func vps2vpnEnhance(raw *config.RawConfig, userRules int) vpsEnhancement {
+	changes := vpsEnhancement{selector: -1}
 	if !vpsSmartEnabled.Load() {
-		return
+		return changes
 	}
 	type line struct {
 		name   string
@@ -118,14 +124,15 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 		if rank == 1 {
 			if fp, _ := p["client-fingerprint"].(string); fp == "" {
 				p["client-fingerprint"] = "chrome"
+				changes.fingerprints = append(changes.fingerprints, i)
 			}
 		}
 		server, _ := p["server"].(string)
 		lines = append(lines, line{name: name, server: server, rank: rank, order: i})
 	}
 	// One line has nothing to fall back to; a second protocol is what makes this useful.
-	if len(lines) < 2 || vpsHasGroup(raw, vpsSmartGroup) {
-		return
+	if len(lines) < 2 || vpsHasOutbound(raw, vpsSmartGroup) {
+		return changes
 	}
 	// The primary server is the one the subscription lists first. Its lines
 	// come first so a protocol switch never changes the exit IP.
@@ -151,18 +158,31 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 		"max-failed-times": 2,
 		"lazy":             false,
 	})
+	changes.groups = append(changes.groups, raw.ProxyGroup[len(raw.ProxyGroup)-1])
 	// Offer it first in the main selector.
-	for _, g := range raw.ProxyGroup {
+	for i, g := range raw.ProxyGroup {
 		if strings.ToLower(fmt.Sprint(g["type"])) != "select" {
 			continue
 		}
-		members, _ := g["proxies"].([]any)
+		var members []any
+		switch value := g["proxies"].(type) {
+		case []any:
+			members = value
+		case []string:
+			for _, member := range value {
+				members = append(members, member)
+			}
+		case nil:
+		default:
+			continue
+		}
 		g["proxies"] = append([]any{vpsSmartGroup}, members...)
+		changes.selector = i
 		break
 	}
 
-	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsHasGroup(raw, vpsAIGroup) {
-		return
+	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsHasOutbound(raw, vpsAIGroup) {
+		return changes
 	}
 	aiNames := append([]string(nil), smart...)
 	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
@@ -175,11 +195,16 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 		"max-failed-times": 3,
 		"lazy":             false,
 	})
+	changes.groups = append(changes.groups, raw.ProxyGroup[len(raw.ProxyGroup)-1])
 	userRules = min(userRules, len(raw.Rule))
+	changes.ruleStart = userRules
 	rules := make([]string, 0, len(vpsAIDomains)+len(raw.Rule))
 	rules = append(rules, raw.Rule[:userRules]...)
 	for _, d := range vpsAIDomains {
-		rules = append(rules, "DOMAIN-SUFFIX,"+d+","+vpsAIGroup)
+		rule := "DOMAIN-SUFFIX," + d + "," + vpsAIGroup
+		rules = append(rules, rule)
+		changes.rules = append(changes.rules, rule)
 	}
 	raw.Rule = append(rules, raw.Rule[userRules:]...)
+	return changes
 }

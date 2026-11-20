@@ -1,6 +1,7 @@
 package core
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/metacubex/mihomo/config"
@@ -123,5 +124,34 @@ func TestVps2vpnEnhanceOffByDefault(t *testing.T) {
 	vps2vpnEnhance(raw, 0)
 	if len(raw.ProxyGroup) != 1 {
 		t.Fatal("changed while switched off")
+	}
+}
+
+func TestVps2vpnEnhancePreservesConflictingProxyNames(t *testing.T) {
+	vpsOn(t)
+	for _, name := range []string{vpsSmartGroup, vpsAIGroup} {
+		t.Run(name, func(t *testing.T) {
+			raw := vpsTestRaw("MATCH,Proxy")
+			raw.Proxy[0]["name"] = name
+			raw.ProxyGroup[0]["proxies"] = []any{name, "US-HY2", "SG-HY2"}
+			vps2vpnEnhance(raw, 0)
+			if vpsGroup(raw, name) != nil {
+				t.Fatalf("group replaced existing proxy %q", name)
+			}
+			if _, err := config.ParseRawConfig(raw); err != nil {
+				t.Fatalf("valid subscription rejected after enhancement: %v", err)
+			}
+		})
+	}
+}
+
+func TestVps2vpnEnhanceKeepsTypedSelectorMembers(t *testing.T) {
+	vpsOn(t)
+	raw := vpsTestRaw("MATCH,Proxy")
+	raw.ProxyGroup[0]["proxies"] = []string{"SG-REALITY", "US-HY2", "SG-HY2"}
+	vps2vpnEnhance(raw, 0)
+	want := []any{vpsSmartGroup, "SG-REALITY", "US-HY2", "SG-HY2"}
+	if got := raw.ProxyGroup[0]["proxies"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("selector members = %#v, want %#v", got, want)
 	}
 }

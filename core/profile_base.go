@@ -107,19 +107,28 @@ func loadConfigWithBase(base *SetupBase, configPath string) (*config.Config, err
 	if err := document.Decode(raw); err != nil {
 		return nil, err
 	}
-	if err := writeConfigDocument(configPath, document); err != nil {
-		return nil, err
-	}
 	// The overlay's rules (the user's own, first) stay ahead of the AI rules.
 	var overlay struct {
 		Rules []string `yaml:"rules"`
 	}
 	_ = yaml.Unmarshal([]byte(base.Overlay), &overlay)
-	vps2vpnEnhance(raw, len(overlay.Rules))
+	changes := vps2vpnEnhance(raw, len(overlay.Rules))
+	if err := changes.apply(document); err != nil {
+		return nil, err
+	}
+	temporary, err := writeDocumentFile(filepath.Dir(configPath), ".config-*.yaml", document)
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(temporary)
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
 		return nil, err
 	}
+	if err := os.Rename(temporary, configPath); err != nil {
+		return nil, err
+	}
+	scheduleReclaimOwnership()
 	return withPlatformLimits(cfg), nil
 }
 
@@ -138,6 +147,11 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 	}
 	if err := yaml.Unmarshal([]byte(base.Overlay), &overlayDocument); err != nil {
 		return nil, err
+	}
+	for _, document := range []*yaml.Node{&profileDocument, &overlayDocument} {
+		if err := validateYAMLGraph(document); err != nil {
+			return nil, err
+		}
 	}
 	profile, err := documentMapping(&profileDocument)
 	if err != nil {
@@ -163,6 +177,34 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 		retagShortIDs(root)
 	}
 	return &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}, nil
+}
+
+func validateYAMLGraph(root *yaml.Node) error {
+	visited := map[*yaml.Node]bool{}
+	var visit func(*yaml.Node) error
+	visit = func(node *yaml.Node) error {
+		if node == nil {
+			return nil
+		}
+		if complete, seen := visited[node]; seen {
+			if !complete {
+				return fmt.Errorf("line %d: cyclic YAML alias", node.Line)
+			}
+			return nil
+		}
+		visited[node] = false
+		if err := visit(node.Alias); err != nil {
+			return err
+		}
+		for _, child := range node.Content {
+			if err := visit(child); err != nil {
+				return err
+			}
+		}
+		visited[node] = true
+		return nil
+	}
+	return visit(root)
 }
 
 func documentMapping(document *yaml.Node) (*yaml.Node, error) {
@@ -253,21 +295,6 @@ func resolveAlias(node *yaml.Node) *yaml.Node {
 
 func isNull(node *yaml.Node) bool {
 	return node.Kind == yaml.ScalarNode && node.ShortTag() == "!!null"
-}
-
-// config.yaml is read again without this process: by the Android service
-// starting on its own and by mihomo's own reload through the controller.
-func writeConfigDocument(path string, document *yaml.Node) error {
-	temporary, err := writeDocumentFile(filepath.Dir(path), ".config-*.yaml", document)
-	if err != nil {
-		return err
-	}
-	if err := os.Rename(temporary, path); err != nil {
-		_ = os.Remove(temporary)
-		return err
-	}
-	scheduleReclaimOwnership()
-	return nil
 }
 
 func writeDocumentFile(dir, pattern string, document *yaml.Node) (string, error) {

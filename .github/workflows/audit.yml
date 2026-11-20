@@ -1,0 +1,112 @@
+name: Audit checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+  DASH__SUPPRESS_ANALYTICS: 'true'
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: core/go.sum
+      - name: Core static checks
+        run: make core-check
+      - name: Core race tests
+        if: always() && !cancelled()
+        working-directory: core
+        run: go test -race -count=1 .
+
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev xvfb
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/rust_api/rust
+      - name: Flutter SDK
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Flutter dependencies
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('pubspec.yaml')
+          text = path.read_text()
+          before = '    setup:\n      build_assets: true'
+          assert text.count(before) == 1
+          path.write_text(text.replace(before, '    setup:\n      build_assets: false'))
+          PY
+          flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Flutter tests
+        if: always() && !cancelled()
+        run: xvfb-run -a dart run tool/test.dart -- --reporter expanded
+      - name: Repository scripts
+        if: always() && !cancelled()
+        run: |
+          node --test .github/scripts/issue-gate.test.js
+          bash tool/hooks/test.sh
+
+  helper:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/helper
+      - name: Helper tests
+        run: cargo test --locked --manifest-path services/helper/Cargo.toml
+      - name: Windows service tests
+        if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path services/helper/Cargo.toml --features windows-service
+
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgtk-3-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/rust_api/rust
+      - name: Native Rust tests
+        run: cargo test --locked --manifest-path plugins/rust_api/rust/Cargo.toml

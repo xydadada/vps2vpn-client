@@ -1,11 +1,47 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_clash/core/desktop/launcher.dart';
 import 'package:fl_clash/core/desktop/model.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('direct launcher decodes split and malformed UTF-8 log chunks', () async {
+    final stderr = StreamController<List<int>>();
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) {
+        logs.add(message);
+      }
+    };
+    addTearDown(() => debugPrint = previousDebugPrint);
+    final launcher = DirectCoreLauncher(
+      startProcess: (_, _) async => _FakeProcess(
+        pid: 42,
+        exitCode: Completer<int>().future,
+        stderr: stderr.stream,
+      ),
+      corePath: 'FlClashCore',
+    );
+
+    await launcher.start(
+      sessionId: '0123456789abcdef0123456789abcdef',
+      address: 'test-address',
+    );
+    final bytes = utf8.encode('线路连接成功');
+    stderr.add(bytes.sublist(0, 1));
+    stderr.add(bytes.sublist(1));
+    stderr.add([0xff]);
+    await stderr.close();
+    await pumpEventQueue();
+
+    expect(logs.join(), contains('线路连接成功'));
+    expect(logs.join(), contains('\uFFFD'));
+  });
+
   test('createCoreSessionId returns lowercase 128-bit hex', () {
     expect(createCoreSessionId(), matches(RegExp(r'^[0-9a-f]{32}$')));
   });
@@ -89,11 +125,15 @@ class _FakeProcess implements Process {
   final Stream<List<int>> stdout = const Stream.empty();
 
   @override
-  final Stream<List<int>> stderr = const Stream.empty();
+  final Stream<List<int>> stderr;
 
   bool killed = false;
 
-  _FakeProcess({required this.pid, required this.exitCode});
+  _FakeProcess({
+    required this.pid,
+    required this.exitCode,
+    this.stderr = const Stream.empty(),
+  });
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
