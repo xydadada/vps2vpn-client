@@ -418,9 +418,9 @@ jobs:
           printf 'GRADLE_USER_HOME=%s\n' "$taskGradleHome" >> "$GITHUB_ENV"
           for artifact in kotlin-stdlib kotlin-gradle-plugin-api kotlin-gradle-plugins-bom; do
             curl --fail --location --connect-timeout 10 --max-time 60 \
-              "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/$artifact/2.4.10/$artifact-2.4.10.pom" \
+              "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/$artifact/2.4.20/$artifact-2.4.20.pom" \
               -o "$RUNNER_TEMP/$artifact.pom"
-            printf 'Resolved %s:2.4.10 from Maven Central\n' "$artifact"
+            printf 'Resolved %s:2.4.20 from Maven Central\n' "$artifact"
           done
       - name: Build Android ARM64 debug APK
         run: flutter build apk --debug --target-platform android-arm64 --no-pub
