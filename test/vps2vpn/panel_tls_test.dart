@@ -79,7 +79,7 @@ void main() {
       expect(base().scheme, 'https');
       expect(base().port, server.port);
       final member = await _localSocket(
-        () => fetchMember(base(), certificatePins: {fingerprint}),
+        () => fetchMember(base(), pinnedSha256: {fingerprint}),
       );
       expect(member?.member?.name, 'Pinned member');
       expect(
@@ -89,7 +89,7 @@ void main() {
             line: 'hy2',
             ok: false,
             host: '127.0.0.1',
-            certificatePins: {fingerprint},
+            pinnedSha256: {fingerprint},
           ),
         ),
         isTrue,
@@ -104,7 +104,7 @@ void main() {
   test('a wrong pin never sends the bearer token request', () async {
     expect(
       (await _localSocket(
-        () => fetchMember(base(), certificatePins: {'00' * 32}),
+        () => fetchMember(base(), pinnedSha256: {'00' * 32}),
       ))?.problem,
       VpsPanelProblem.unreachable,
     );
@@ -125,7 +125,7 @@ void main() {
 
   test('a wrong pin cannot be bypassed by the global override', () async {
     final result = await HttpOverrides.runWithHttpOverrides(
-      () => fetchMember(base(), certificatePins: {'00' * 32}),
+      () => fetchMember(base(), pinnedSha256: {'00' * 32}),
       _TrustEverything(),
     );
     expect(result?.problem, VpsPanelProblem.unreachable);
