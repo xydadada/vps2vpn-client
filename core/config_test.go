@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1062,5 +1063,47 @@ func TestTestDelayStopsQueueingOnceTheTimeoutIsSpent(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("handleTestDelay outlived the timeout it was given, waiting for a slot")
+	}
+}
+
+func TestControllerRecreationAppliesEachSecretBeforeReturning(t *testing.T) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := probe.Addr().String()
+	_ = probe.Close()
+	t.Cleanup(func() { route.ReCreateServer(&route.Config{}) })
+	transport := &http.Transport{DisableKeepAlives: true}
+	t.Cleanup(transport.CloseIdleConnections)
+	client := &http.Client{Transport: transport, Timeout: time.Second}
+	for i := range 12 {
+		secret := "generation-" + strconv.Itoa(i)
+		route.ReCreateServer(&route.Config{Addr: address, Secret: secret})
+		for _, authorization := range []string{"Bearer " + secret, "Bearer obsolete"} {
+			request, err := http.NewRequest(http.MethodGet, "http://"+address+"/version", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", authorization)
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatalf("generation %d did not bind its listener before returning: %v", i, err)
+			}
+			_ = response.Body.Close()
+			want := http.StatusOK
+			if authorization == "Bearer obsolete" {
+				want = http.StatusUnauthorized
+			}
+			if response.StatusCode != want {
+				t.Fatalf("generation %d status = %d, want %d", i, response.StatusCode, want)
+			}
+		}
+	}
+	route.ReCreateServer(&route.Config{})
+	connection, err := net.DialTimeout("tcp", address, time.Second)
+	if err == nil {
+		_ = connection.Close()
+		t.Fatal("disabled controller still accepts connections")
 	}
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -56,7 +57,7 @@ void main() {
     expect(await File(staged!).exists(), isFalse);
   });
 
-  test('successful validation copies the profile and removes staging', () async {
+  test('successful validation publishes the profile and removes staging', () async {
     String? staged;
     final saved = await profile.saveFile(
       utf8.encode('new profile'),
@@ -68,5 +69,92 @@ void main() {
     expect(saved.lastUpdateDate, isNotNull);
     expect(await (await saved.file).readAsString(), 'new profile');
     expect(await File(staged!).exists(), isFalse);
+  });
+
+  test('an obsolete validation cannot publish its bytes', () async {
+    final original = await profile.file;
+    await original.writeAsString('old profile');
+    final entered = Completer<void>();
+    final validation = Completer<String?>();
+    var current = true;
+    String? staged;
+    final pending = profile.saveFile(
+      utf8.encode('obsolete credentials'),
+      validate: (path, _) {
+        staged = path;
+        entered.complete();
+        return validation.future;
+      },
+      shouldCommit: () => current,
+    );
+    await entered.future;
+    current = false;
+    validation.complete(null);
+
+    final result = await pending;
+    expect(result, profile);
+    expect(await original.readAsString(), 'old profile');
+    expect(await File(staged!).exists(), isFalse);
+    expect(
+      original.parent.listSync().whereType<File>().map((file) => file.path),
+      [original.path],
+    );
+  });
+
+  test('a newer save wins when an older validation finishes last', () async {
+    final original = await profile.file;
+    await original.writeAsString('old profile');
+    final entered = Completer<void>();
+    final validation = Completer<String?>();
+    var generation = 1;
+    final older = profile.saveFile(
+      utf8.encode('older'),
+      validate: (_, _) {
+        entered.complete();
+        return validation.future;
+      },
+      shouldCommit: () => generation == 1,
+    );
+    await entered.future;
+    generation = 2;
+    final newer = await profile.saveFile(
+      utf8.encode('newer'),
+      validate: (_, _) async => null,
+      shouldCommit: () => generation == 2,
+    );
+    validation.complete(null);
+
+    expect(await older, profile);
+    expect(newer.lastUpdateDate, isNotNull);
+    expect(await original.readAsString(), 'newer');
+    expect(
+      original.parent.listSync().whereType<File>().map((file) => file.path),
+      [original.path],
+    );
+  });
+
+  test('a failed publication keeps the destination and removes staging', () async {
+    final path = await appPath.getProfilePath(profile.id.toString());
+    final destination = await Directory(path).create(recursive: true);
+    final sentinel = File('${destination.path}/existing');
+    await sentinel.writeAsString('keep');
+    String? staged;
+
+    await expectLater(
+      profile.saveFile(
+        utf8.encode('new credentials'),
+        validate: (path, _) async {
+          staged = path;
+          return null;
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(await sentinel.readAsString(), 'keep');
+    expect(await File(staged!).exists(), isFalse);
+    expect(destination.parent.listSync().map((entry) => entry.path), [
+      destination.path,
+    ]);
   });
 }

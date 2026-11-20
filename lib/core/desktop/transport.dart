@@ -265,17 +265,18 @@ final class IpcCoreTransport implements DesktopCoreTransport {
       return Future.error(StateError('IPC transport is closed'));
     }
     return events
-        .firstWhere(
+        .where(
           (event) => event is TransportConnected || event is TransportFailed,
         )
+        .timeout(timeout)
+        .first
         .then<TransportConnected>((event) {
           if (event case TransportConnected()) {
             return event;
           }
           final failure = event as TransportFailed;
           Error.throwWithStackTrace(failure.error, failure.stackTrace);
-        })
-        .timeout(timeout);
+        });
   }
 
   @override

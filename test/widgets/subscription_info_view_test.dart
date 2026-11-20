@@ -8,6 +8,32 @@ import '../helpers/test_app.dart';
 import '../helpers/host_scaffold.dart';
 
 void main() {
+
+  testWidgets('invalid expiry cannot crash summary or detail views', (
+    tester,
+  ) async {
+    for (final expiry in [-1, 253402300800, 9223372036854775807]) {
+      final info = SubscriptionInfo(total: 1024, expire: expiry);
+      await tester.pumpWidget(
+        HostApp(
+          builder: (context, child) => wrapAppScopes(context, child!),
+          home: HostScaffold(
+            body: Column(
+              children: [
+                SubscriptionInfoView(subscriptionInfo: info),
+                SubscriptionInfoDetailView(subscriptionInfo: info),
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull, reason: '$expiry');
+      expect(
+        find.text(currentAppLocalizations.infiniteTime),
+        findsWidgets,
+      );
+    }
+  });
   testWidgets('hides expiry when both values do not fit', (tester) async {
     const trafficLabel = '1KB / 1GB';
 

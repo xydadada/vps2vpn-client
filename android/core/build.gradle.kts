@@ -129,6 +129,11 @@ abstract class GomobileBind : DefaultTask() {
         execOperations.exec {
             workingDir(moduleDirectory)
             environment("PATH", path)
+            commandLine(go, "run", "../tool/apply_core_patches.go")
+        }
+        execOperations.exec {
+            workingDir(moduleDirectory)
+            environment("PATH", path)
             commandLine(go, "build", "-o", tools.path + File.separator, "golang.org/x/mobile/cmd/gomobile", "golang.org/x/mobile/cmd/gobind")
         }
         // gomobile links the library as the main package of a module it generates, whose go line is the toolchain's,
@@ -229,6 +234,8 @@ abstract class UnpackJniLibs : DefaultTask() {
 val bindCore =
     tasks.register<GomobileBind>("bindCore") {
         sources.from(
+            rootProject.layout.projectDirectory.file("../tool/apply_core_patches.go"),
+            rootProject.layout.projectDirectory.file("../tool/patches/clash-meta-controller-lifecycle.patch"),
             fileTree(goModule) {
                 exclude("**/*_test.go", "**/testdata/**", "cmd/**", "Clash.Meta/.github/**")
             },

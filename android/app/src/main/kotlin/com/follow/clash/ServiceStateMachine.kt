@@ -119,7 +119,8 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
     }
 
     suspend fun handleVpnRevokeAction() {
-        if (host.runtime?.vpn != true) {
+        val isStartingVpn = transition == RunState.STARTING && sharedState.vpnOptions?.enable == true
+        if (host.runtime?.vpn != true && !isStartingVpn) {
             return
         }
         handleStopAction()

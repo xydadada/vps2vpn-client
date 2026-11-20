@@ -3,6 +3,7 @@ part of '../action.dart';
 @Riverpod(keepAlive: true)
 class ProfilesAction extends _$ProfilesAction {
   CoreController get _core => ref.read(coreHandlerProvider);
+  final _updates = <int, Object>{};
 
   @override
   void build() {}
@@ -38,6 +39,7 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   Future<void> deleteProfile(int id) async {
+    _updates.remove(id);
     await ref.read(profilesProvider.notifier).del(id);
     await clearEffect(id);
     final currentProfileId = ref.read(currentProfileIdProvider);
@@ -157,20 +159,29 @@ class ProfilesAction extends _$ProfilesAction {
     Profile profile, {
     bool showLoading = false,
   }) async {
+    final current = ref.read(profilesProvider).getProfile(profile.id);
+    if (current == null || current.type != ProfileType.url) return;
+    profile = current;
+    final token = Object();
+    _updates[profile.id] = token;
+    bool isCurrent() {
+      if (!ref.mounted || !identical(_updates[profile.id], token)) return false;
+      final latest = ref.read(profilesProvider).getProfile(profile.id);
+      return latest != null &&
+          latest.type == profile.type &&
+          latest.url == profile.url &&
+          latest.ageSecretKey == profile.ageSecretKey;
+    }
     final operation = showLoading
         ? ref.read(updatingKeysProvider.notifier).start(profile.updatingKey)
         : null;
     try {
-      ref.read(profilesProvider.notifier).put(profile);
       final updated = await profile.update(
         validate: (path, key) => _core.validateProfile(path, key),
+        shouldCommit: isCurrent,
       );
-      // The download can take minutes; edits and deletes made meanwhile win.
-      final latest = ref.read(profilesProvider).getProfile(profile.id);
-      if (latest == null) {
-        await clearEffect(profile.id);
-        return;
-      }
+      if (!isCurrent()) return;
+      final latest = ref.read(profilesProvider).getProfile(profile.id)!;
       final newProfile = latest.copyWith(
         label: latest.label.takeFirstValid([updated.label]),
         subscriptionInfo: updated.subscriptionInfo,
@@ -194,8 +205,11 @@ class ProfilesAction extends _$ProfilesAction {
           ),
         );
       }
+    } catch (_) {
+      if (isCurrent()) rethrow;
     } finally {
-      if (operation != null) {
+      if (identical(_updates[profile.id], token)) _updates.remove(profile.id);
+      if (operation != null && ref.mounted) {
         ref
             .read(updatingKeysProvider.notifier)
             .stop(profile.updatingKey, operation);

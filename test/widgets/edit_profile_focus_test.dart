@@ -24,6 +24,18 @@ class _NoopSetupAction extends SetupAction {
   void autoApplyProfile() {}
 }
 
+class _RecordingProfilesAction extends ProfilesAction {
+  final refreshed = <Profile>[];
+
+  @override
+  Future<void> updateProfile(
+    Profile profile, {
+    bool showLoading = false,
+  }) async {
+    refreshed.add(ref.read(profilesProvider).getProfile(profile.id)!);
+  }
+}
+
 Profile _urlProfile() =>
     Profile.normal(label: 'test', url: 'https://example.com/sub');
 
@@ -196,5 +208,35 @@ void main() {
     final saved = globalState.container.read(profilesProvider).single;
     expect(saved.autoUpdate, isFalse);
     expect(saved.autoUpdateDuration, profile.autoUpdateDuration);
+  });
+
+  testWidgets('a changed URL is saved before its delayed refresh', (
+    tester,
+  ) async {
+    final profile = _urlProfile();
+    final action = _RecordingProfilesAction();
+    await pumpEditProfile(
+      tester,
+      profile: profile,
+      overrides: [
+        profilesProvider.overrideWith(() => TestProfiles([profile])),
+        profilesActionProvider.overrideWith(() => action),
+      ],
+    );
+    final url = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.controller?.text == profile.url,
+    );
+    await tester.enterText(url, 'https://new.example.com/sub');
+    await tester.tap(find.byTooltip('Save'));
+
+    expect(
+      globalState.container.read(profilesProvider).single.url,
+      'https://new.example.com/sub',
+    );
+    expect(action.refreshed, isEmpty);
+    await tester.pump(commonDuration);
+    expect(action.refreshed.single.url, 'https://new.example.com/sub');
+    expect(tester.takeException(), isNull);
   });
 }

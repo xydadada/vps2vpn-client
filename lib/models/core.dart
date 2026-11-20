@@ -1,4 +1,5 @@
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/datetime.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -547,7 +548,7 @@ SubscriptionInfo? subscriptionInfoFormCore(Map<String, Object?>? json) {
     upload: (json['Upload'] as num?)?.toInt() ?? 0,
     download: (json['Download'] as num?)?.toInt() ?? 0,
     total: (json['Total'] as num?)?.toInt() ?? 0,
-    expire: (json['Expire'] as num?)?.toInt() ?? 0,
+    expire: unixSecondsOrZero(json['Expire']),
   );
 }
 

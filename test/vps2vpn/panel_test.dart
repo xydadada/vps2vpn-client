@@ -88,6 +88,27 @@ void main() {
     expect(VpsMember.fromJson({'expire_at': 0}).expireAt, isNull);
   });
 
+  test('invalid panel timestamps do not break the member result', () {
+    for (final value in [
+      -1,
+      253402300800,
+      9223372036854775807,
+      1e100,
+      double.infinity,
+      double.nan,
+      'not a date',
+    ]) {
+      final member = VpsMember.fromJson({
+        'name': 'Ann',
+        'expire_at': value,
+        'ai': {'summary': 'ok', 'at': value},
+      });
+      expect(member.name, 'Ann');
+      expect(member.expireAt, isNull);
+      expect(member.ai?.at, isNull);
+    }
+  });
+
   test('a published client is offered only when it is newer', () {
     final r = VpsClientRelease.fromJson({
       'version': 'v1.4.0',
@@ -203,7 +224,7 @@ void main() {
         } else if (path == '/s/$_tok/api/report' &&
             req.method == 'POST' &&
             req.contentLength < 0) {
-          // Like the panel's Python server: a chunked body reads as empty.
+          // Require fixed framing here; current panels also accept chunked bodies.
           req.response.statusCode = HttpStatus.badRequest;
         } else if (path == '/s/$_tok/api/report' && req.method == 'POST') {
           posts.add((

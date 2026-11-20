@@ -72,16 +72,24 @@ String renamedDnsServer(String server, Map<String, String> names) {
   if (hash < 0) {
     return head;
   }
-  final parts = [
-    for (final part in server.substring(hash + 1).split('&'))
-      part.contains('=')
-          ? part
-          : switch (names[_decodedOrSelf(part)]) {
-              final String name => _fragmentName(name),
-              null => part,
-            },
-  ];
-  return '$head#${parts.join('&')}';
+  final rawFragment = server.substring(hash + 1);
+  // Go's url.Parse decodes the whole fragment before parseNameServer splits
+  // parameters. Splitting first misses a dialer beside an encoded '&' or '='.
+  final parts = _decodedOrSelf(rawFragment).split('&');
+  var dialer = -1;
+  for (var index = 0; index < parts.length; index++) {
+    if (!parts[index].contains('=')) {
+      dialer = index;
+    }
+  }
+  final renamed = dialer < 0 ? null : names[parts[dialer]];
+  if (renamed == null) {
+    return '$head#$rawFragment';
+  }
+  parts[dialer] = renamed;
+  // Keep decoded parameters intact and protect characters the app uses to
+  // separate multiple DNS servers when it writes a policy value.
+  return '$head#${parts.map(_fragmentName).join('&')}';
 }
 
 List<String> _policyServers(String value) =>

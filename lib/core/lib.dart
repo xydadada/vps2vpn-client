@@ -18,7 +18,12 @@ class CoreLib extends CoreHandlerInterface {
 
   Completer<bool> _connectedCompleter = Completer<bool>();
   Future<CoreLifecycleResult>? _closeOperation;
+  Future<void> _lifecycleTail = Future.value();
   int _lifecycleRevision = 0;
+  int _startGeneration = 0;
+  int _listenerRevision = 0;
+  bool _initialized = false;
+  bool _pendingListenerStart = false;
   int _methodCallId = 0;
   bool _closed = false;
 
@@ -37,104 +42,205 @@ class CoreLib extends CoreHandlerInterface {
     return _instance!;
   }
 
+  Future<T> _enqueue<T>(
+    Future<T> Function() operation,
+  ) {
+    final result = _lifecycleTail.then((_) => operation());
+    _lifecycleTail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
+  }
+
+  bool _startWanted(int generation) =>
+      !_closed && generation == _startGeneration;
+
   @override
-  Future<CoreLifecycleResult> start() async {
+  Future<CoreLifecycleResult> start() {
     if (_closed) {
-      throw StateError('Core lifecycle is closed');
+      return Future.error(StateError('Core lifecycle is closed'));
     }
     final revision = ++_lifecycleRevision;
+    final generation = _startGeneration;
+    return _enqueue(() => _start(revision, generation));
+  }
+
+  Future<CoreLifecycleResult> _start(int revision, int generation) async {
+    CoreLifecycleResult superseded() => CoreLifecycleResult(
+      revision: revision,
+      outcome: CoreLifecycleOutcome.superseded,
+    );
+    if (!_startWanted(generation)) return superseded();
     if (_connectedCompleter.isCompleted) {
       return CoreLifecycleResult(
         revision: revision,
         outcome: CoreLifecycleOutcome.coalesced,
       );
     }
-    final initializationError = await _service?.init() ?? '';
-    if (initializationError.isNotEmpty) {
-      throw StateError(initializationError);
-    }
-    await globalState.container.read(vpnOptionsProvider.future);
-    _connectedCompleter.complete(true);
-    final syncError =
-        await _service?.syncState(
-          globalState.container.read(sharedStateProvider),
-        ) ??
-        '';
-    if (syncError.isNotEmpty) {
-      _connectedCompleter = Completer<bool>();
-      await _service?.shutdown();
-      throw StateError(syncError);
-    }
-    return CoreLifecycleResult(
-      revision: revision,
-      outcome: CoreLifecycleOutcome.applied,
-    );
-  }
-
-  @override
-  Future<CoreLifecycleResult> restart() async {
-    await stop();
-    return start();
-  }
-
-  @override
-  Future<CoreLifecycleResult> stop() => _stop();
-
-  Future<CoreLifecycleResult> _stop({bool allowClosed = false}) async {
-    if (_closed && !allowClosed) {
-      throw StateError('Core lifecycle is closed');
-    }
-    final revision = ++_lifecycleRevision;
-    if (!_connectedCompleter.isCompleted) {
+    if (_initialized) await _shutdown();
+    if (!_startWanted(generation)) return superseded();
+    _initialized = true;
+    var committed = false;
+    try {
+      final initializationError = await _service?.init() ?? '';
+      if (initializationError.isNotEmpty) {
+        throw StateError(initializationError);
+      }
+      if (!_startWanted(generation)) return superseded();
+      await globalState.container.read(vpnOptionsProvider.future);
+      if (!_startWanted(generation)) return superseded();
+      _connectedCompleter.complete(true);
+      final syncError =
+          await _service?.syncState(
+            globalState.container.read(sharedStateProvider),
+          ) ??
+          '';
+      if (syncError.isNotEmpty) {
+        throw StateError(syncError);
+      }
+      if (!_startWanted(generation)) return superseded();
+      committed = true;
       return CoreLifecycleResult(
         revision: revision,
-        outcome: CoreLifecycleOutcome.coalesced,
+        outcome: CoreLifecycleOutcome.applied,
       );
+    } finally {
+      if (!committed) await _shutdown();
     }
+  }
+
+  @override
+  Future<CoreLifecycleResult> restart() {
+    if (_closed) {
+      return Future.error(StateError('Core lifecycle is closed'));
+    }
+    final revision = ++_lifecycleRevision;
+    final generation = ++_startGeneration;
+    return _enqueue(() async {
+      await _stop(revision);
+      return _start(revision, generation);
+    });
+  }
+
+  @override
+  Future<CoreLifecycleResult> stop() {
+    if (_closed) {
+      return Future.error(StateError('Core lifecycle is closed'));
+    }
+    final revision = ++_lifecycleRevision;
+    _startGeneration++;
+    return _enqueue(() => _stop(revision));
+  }
+
+  Future<void> _shutdown() async {
+    final connection = _connectedCompleter;
     _connectedCompleter = Completer<bool>();
+    if (!connection.isCompleted) connection.complete(false);
+    if (!_initialized) return;
     final stopped = await _service?.shutdown() ?? true;
     if (!stopped) {
       throw StateError('Android Core service shutdown failed');
     }
+    _initialized = false;
+  }
+
+  Future<CoreLifecycleResult> _stop(int revision) async {
+    await _cancelUnconfirmedListenerStart();
+    final initialized = _initialized;
+    await _shutdown();
     return CoreLifecycleResult(
       revision: revision,
-      outcome: CoreLifecycleOutcome.applied,
+      outcome: initialized
+          ? CoreLifecycleOutcome.applied
+          : CoreLifecycleOutcome.coalesced,
     );
   }
 
   @override
   Future<CoreLifecycleResult> close() {
-    return _closeOperation ??= _close();
-  }
-
-  Future<CoreLifecycleResult> _close() async {
+    if (_closeOperation case final pending?) return pending;
     _closed = true;
-    return _stop(allowClosed: true);
+    _startGeneration++;
+    final revision = ++_lifecycleRevision;
+    final operation = _enqueue(() => _stop(revision));
+    _closeOperation = operation;
+    unawaited(
+      operation.then<void>((_) {}, onError: (Object _, StackTrace _) {
+        // Keep ownership when shutdown fails, and allow an explicit retry.
+        if (identical(_closeOperation, operation)) _closeOperation = null;
+      }),
+    );
+    return operation;
   }
 
   // The service opens and closes the Core's listeners itself and reports a run
   // that ends, so once it takes the command the Core's own answer is moot.
   @override
-  Future<void> startListener() async {
-    await _ignoreUnanswered(super.startListener);
-    if (!await _service!.start()) {
+  Future<void> startListener() {
+    final revision = ++_listenerRevision;
+    final generation = _startGeneration;
+    bool current() =>
+        revision == _listenerRevision && _startWanted(generation);
+    void checkCurrent() {
+      if (!current() || !_initialized || !_connectedCompleter.isCompleted) {
+        throw const CoreMethodException(
+          code: 'core_unavailable',
+          message: 'Core listener start was superseded',
+        );
+      }
+    }
+    return _enqueue(() async {
+      checkCurrent();
+      final service = _service!;
+      final alreadyRunning = await service.getRunTime() != null;
+      checkCurrent();
+      if (!alreadyRunning) _pendingListenerStart = true;
+      try {
+        await _ignoreUnanswered(super.startListener);
+        checkCurrent();
+        if (!await service.start()) {
+          throw const CoreMethodException(
+            code: 'service_refused',
+            message: 'The Android service did not start',
+          );
+        }
+        checkCurrent();
+        final running = await service.getRunTime() != null;
+        checkCurrent();
+        if (running) _pendingListenerStart = false;
+      } catch (_) {
+        if (!alreadyRunning) {
+          await _cancelUnconfirmedListenerStart(force: true);
+        }
+        rethrow;
+      }
+    });
+  }
+
+  Future<void> _cancelUnconfirmedListenerStart({bool force = false}) async {
+    if (!_pendingListenerStart) return;
+    final running = !force && await _service!.getRunTime() != null;
+    if (!running && !await _service!.stop()) {
       throw const CoreMethodException(
         code: 'service_refused',
-        message: 'The Android service did not start',
+        message: 'The pending Android service start did not stop',
       );
     }
+    _pendingListenerStart = false;
   }
 
   @override
-  Future<void> stopListener() async {
-    final serviceStopped = await _service!.stop();
-    await _ignoreUnanswered(super.stopListener);
-    if (!serviceStopped) {
-      throw const CoreMethodException(
-        code: 'service_refused',
-        message: 'The Android service did not stop',
-      );
-    }
+  Future<void> stopListener() {
+    _listenerRevision++;
+    return _enqueue(() async {
+      final serviceStopped = await _service!.stop();
+      if (serviceStopped) _pendingListenerStart = false;
+      await _ignoreUnanswered(super.stopListener);
+      if (!serviceStopped) {
+        throw const CoreMethodException(
+          code: 'service_refused',
+          message: 'The Android service did not stop',
+        );
+      }
+    });
   }
 
   Future<void> _ignoreUnanswered(Future<void> Function() command) async {
@@ -169,8 +275,21 @@ class CoreLib extends CoreHandlerInterface {
     Object? arguments,
     CoreResultModel? model,
   }) async {
+    if (_closed) {
+      throw const CoreMethodException(
+        code: 'core_unavailable',
+        message: 'Core lifecycle is closed',
+      );
+    }
+    final connection = _connectedCompleter;
     try {
-      await _connectedCompleter.future.timeout(coreConnectionWaitDuration);
+      final connected = await connection.future.timeout(coreConnectionWaitDuration);
+      if (!connected || _closed || !identical(connection, _connectedCompleter)) {
+        throw const CoreMethodException(
+          code: 'core_unavailable',
+          message: 'Core connection was superseded',
+        );
+      }
     } on TimeoutException {
       throw CoreMethodException(
         code: 'core_unavailable',

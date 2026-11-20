@@ -6,6 +6,7 @@ MitmModuleContent _parseMitmModule((String, Map<String, String>) source) =>
 @Riverpod(keepAlive: true)
 class MitmModulesAction extends _$MitmModulesAction {
   var _autoUpdating = false;
+  final _resourceDownloads = TaskPool(4);
 
   /// Files written before a row or a line names them, which [clean] keeps.
   final _held = <String>[];
@@ -322,9 +323,12 @@ class MitmModulesAction extends _$MitmModulesAction {
     final directory = await appPath.mitmResourcesDirPath;
     final names = await Future.wait([
       for (final url in urls)
-        () async {
+        _resourceDownloads.run(() async {
           try {
-            final bytes = (await request.getFileResponseForUrl(url)).data;
+            final bytes = (await request.getFileResponseForUrl(
+              url,
+              maxBytes: maxMitmResourceSize,
+            )).data;
             if (bytes == null || bytes.length > maxMitmResourceSize) {
               throw const FileSystemException('too large');
             }
@@ -337,14 +341,14 @@ class MitmModulesAction extends _$MitmModulesAction {
               logLevel: LogLevel.warning,
             );
             final name = previous[url];
-            if (name == null) {
+            if (name == null || !isMitmResourceName(name)) {
               return null;
             }
             held.add(name);
             _held.add(name);
             return await File(join(directory, name)).exists() ? name : null;
           }
-        }(),
+        }),
     ]);
     return {for (final (index, url) in urls.indexed) url: ?names[index]};
   }
@@ -429,7 +433,9 @@ class MitmModulesAction extends _$MitmModulesAction {
             !await File(await _pathOf(module)).exists() ||
             !(await Future.wait([
               for (final name in module.resources.values)
-                File(join(resourcesDir, name)).exists(),
+                isMitmResourceName(name)
+                    ? File(join(resourcesDir, name)).exists()
+                    : Future.value(false),
             ])).every((exists) => exists);
         final due =
             setting.geoAutoUpdate &&

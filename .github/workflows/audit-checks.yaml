@@ -32,6 +32,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        id: go_toolchain
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: core/go.sum
@@ -49,19 +50,34 @@ jobs:
             gofmt -d "${files[@]}"
             test -z "$(gofmt -l "${files[@]}")"
           fi
+      - name: Core patch tooling tests
+        if: ${{ !cancelled() && steps.go_toolchain.outcome == 'success' }}
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race tool/apply_core_patches.go tool/apply_core_patches_test.go
+      - name: Apply reviewed Core patch
+        id: core_patch
+        if: ${{ !cancelled() && steps.go_toolchain.outcome == 'success' }}
+        run: |
+          go run tool/apply_core_patches.go
+          go run tool/apply_core_patches.go
       - name: Core tests
+        if: ${{ !cancelled() && steps.core_patch.outcome == 'success' }}
         working-directory: core
         run: go test ./...
       - name: Core static checks
+        if: ${{ !cancelled() && steps.core_patch.outcome == 'success' }}
         working-directory: core
         run: go vet ./...
       - name: Android Core static checks
+        if: ${{ !cancelled() && steps.core_patch.outcome == 'success' }}
         working-directory: core
         env:
           GOOS: android
           GOARCH: arm64
         run: go vet -tags=with_gvisor . ./mobile ./tun ./platform
       - name: Core race checks
+        if: ${{ !cancelled() && steps.core_patch.outcome == 'success' }}
         working-directory: core
         env:
           CGO_ENABLED: '1'
@@ -136,6 +152,9 @@ jobs:
       - name: Flutter dependencies
         id: flutter_dependencies
         run: flutter pub get
+      - name: Check dependency lockfile
+        if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
+        run: git diff --exit-code -- pubspec.lock
       - name: Changed Dart formatting
         if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
         run: |
@@ -154,7 +173,7 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Flutter tests
         if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
-        run: flutter test --concurrency=4 --reporter expanded
+        run: dart run tool/test.dart -- --concurrency=4 --reporter expanded
       - name: Plugin checks
         if: ${{ !cancelled() && steps.flutter_dependencies.outcome == 'success' }}
         run: bash tool/check_plugins.sh
@@ -165,3 +184,142 @@ jobs:
           dart pub get
           dart analyze
           dart test
+
+  dependency-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        id: audit_go
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - name: Install verified cargo-audit
+        id: rust_auditor
+        run: |
+          directory="$RUNNER_TEMP/cargo-audit-0.23.0"
+          mkdir -p "$directory"
+          archive="$directory/audit.tgz"
+          curl -fsSL --retry 3 -o "$archive" 'https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.23.0/cargo-audit-x86_64-unknown-linux-gnu-v0.23.0.tgz'
+          echo "b77993532b253fcbf550996d7716465ec3d734d4e74e7f87bfb65a19add0fb59  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$directory"
+          mapfile -t binaries < <(rg --files --hidden "$directory" | rg '(^|/)cargo-audit$')
+          test "${#binaries[@]}" -eq 1
+          chmod +x "${binaries[0]}"
+          echo "CARGO_AUDIT=${binaries[0]}" >> "$GITHUB_ENV"
+      - name: Audit owned Rust lockfiles
+        if: ${{ !cancelled() && steps.rust_auditor.outcome == 'success' }}
+        run: |
+          status=0
+          while IFS= read -r -d '' lockfile; do
+            echo "::group::$lockfile"
+            if ! "$CARGO_AUDIT" audit --file "$lockfile"; then
+              status=1
+            fi
+            echo "::endgroup::"
+          done < <(git ls-files -z '*Cargo.lock')
+          exit "$status"
+      - name: Prepare Go vulnerability audit
+        id: go_auditor
+        if: ${{ !cancelled() && steps.audit_go.outcome == 'success' }}
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+          go run tool/apply_core_patches.go
+          go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
+      - name: Audit Go dependencies and reachable vulnerabilities
+        if: ${{ !cancelled() && steps.go_auditor.outcome == 'success' }}
+        working-directory: core
+        run: '"$(go env GOPATH)/bin/govulncheck" ./...'
+
+  linux-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev liblzma-dev
+          rustup toolchain install 1.99.0 --profile minimal
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Fetch verified CA bundle
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+      - name: Build Linux release with normal native hooks
+        run: |
+          flutter pub get
+          flutter build linux --release
+
+  android-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+      - name: Install Android native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup target add --toolchain 1.99.0 aarch64-linux-android
+          test -d "$JAVA_HOME_21_X64"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37' 'ndk;28.2.13676358'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Fetch verified CA bundle
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+      - name: Android dependencies
+        id: android_dependencies
+        run: |
+          flutter pub get
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          Path('android/local.properties').write_text(
+              'flutter.sdk=' + os.environ['FLUTTER_ROOT'] + '\n'
+              'sdk.dir=' + os.environ['ANDROID_HOME'] + '\n'
+          )
+          PY
+      - name: Build Android ARM64 debug APK
+        run: flutter build apk --debug --target-platform android-arm64 --no-pub
+      - name: Android JVM tests
+        if: ${{ !cancelled() && steps.android_dependencies.outcome == 'success' }}
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest :common:testDebugUnitTest :service:testDebugUnitTest -Ptarget-platform=android-arm64

@@ -52,8 +52,8 @@ final class QrMatrix {
 
   /// Null when [data] does not fit the largest code.
   static QrMatrix? encode(String data) {
-    final bytes = utf8.encode(data);
     final eci = data.codeUnits.any((unit) => unit > 255);
+    final bytes = eci ? utf8.encode(data) : latin1.encode(data);
     final version = _smallestVersion(bytes.length, eci);
     if (version == null) {
       return null;

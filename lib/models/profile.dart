@@ -20,7 +20,7 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
     @Default(0) int upload,
     @Default(0) int download,
     @Default(0) int total,
-    @Default(0) int expire,
+    @Default(0) @JsonKey(fromJson: unixSecondsOrZero) int expire,
   }) = _SubscriptionInfo;
 
   factory SubscriptionInfo.fromJson(Map<String, Object?> json) =>
@@ -41,7 +41,7 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
       upload: map['upload'] ?? 0,
       download: map['download'] ?? 0,
       total: map['total'] ?? 0,
-      expire: map['expire'] ?? 0,
+      expire: unixSecondsOrZero(map['expire']),
     );
   }
 
@@ -55,10 +55,11 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
 
 extension SubscriptionInfoExt on SubscriptionInfo {
   double? get usage =>
-      total > 0 ? ((upload + download) / total).clamp(0.0, 1.0) : null;
+      total > 0
+          ? ((upload.toDouble() + download.toDouble()) / total).clamp(0.0, 1.0)
+          : null;
 
-  DateTime? get expireDate =>
-      expire > 0 ? DateTime.fromMillisecondsSinceEpoch(expire * 1000) : null;
+  DateTime? get expireDate => dateTimeFromUnixSeconds(expire);
 }
 
 @freezed
@@ -182,8 +183,12 @@ extension ProfileExtension on Profile {
     return _getFile();
   }
 
-  Future<Profile> update({required ValidateConfig validate}) async {
+  Future<Profile> update({
+    required ValidateConfig validate,
+    bool Function()? shouldCommit,
+  }) async {
     final response = await request.getFileResponseForUrl(url);
+    if (shouldCommit?.call() == false) return this;
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
     return copyWith(
@@ -195,25 +200,38 @@ extension ProfileExtension on Profile {
     ).saveFile(
       decompressUnlabeled(response.data ?? Uint8List(0)),
       validate: validate,
+      shouldCommit: shouldCommit,
     );
   }
 
   Future<Profile> saveFile(
     Uint8List bytes, {
     required ValidateConfig validate,
+    bool Function()? shouldCommit,
   }) async {
     final path = await appPath.tempFilePath;
     final tempFile = File(path);
+    File? staging;
     try {
       await tempFile.safeWriteAsBytes(bytes);
-      if (await validate(path, ageSecretKey) case final issue?) {
-        throw MessageException(issue);
-      }
-      final mFile = await file;
-      await tempFile.copy(mFile.path);
+      final issue = await validate(path, ageSecretKey);
+      if (shouldCommit?.call() == false) return this;
+      if (issue != null) throw MessageException(issue);
+      final target = File(await appPath.getProfilePath(id.toString()));
+      await target.parent.create(recursive: true);
+      staging = File('${target.path}.${tempFile.uri.pathSegments.last}.tmp');
+      await tempFile.copy(staging.path);
+      if (shouldCommit?.call() == false) return this;
+      // Only the metadata rename is synchronous: a newer UI intent cannot
+      // interleave between the ownership check and publishing validated bytes.
+      staging.renameSync(target.path);
       return copyWith(lastUpdateDate: DateTime.now());
     } finally {
-      await tempFile.safeDelete();
+      try {
+        await staging?.safeDelete();
+      } finally {
+        await tempFile.safeDelete();
+      }
     }
   }
 }

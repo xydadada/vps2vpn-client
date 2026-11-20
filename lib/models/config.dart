@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +11,7 @@ import 'package:prism_ui/prism_ui.dart';
 part 'generated/config.freezed.dart';
 part 'generated/config.g.dart';
 
-const defaultBypassDomain = [
+const _defaultBypassDomainPrefix = [
   '*zhihu.com',
   '*zhimg.com',
   '*jd.com',
@@ -24,10 +25,33 @@ const defaultBypassDomain = [
   '172.17.*',
   '172.18.*',
   '172.19.*',
-  '172.2*',
+];
+
+const _defaultBypassDomainSuffix = [
   '172.30.*',
   '172.31.*',
   '192.168.*',
+];
+
+const defaultBypassDomain = [
+  ..._defaultBypassDomainPrefix,
+  '172.20.*',
+  '172.21.*',
+  '172.22.*',
+  '172.23.*',
+  '172.24.*',
+  '172.25.*',
+  '172.26.*',
+  '172.27.*',
+  '172.28.*',
+  '172.29.*',
+  ..._defaultBypassDomainSuffix,
+];
+
+const _legacyDefaultBypassDomain = [
+  ..._defaultBypassDomainPrefix,
+  '172.2*',
+  ..._defaultBypassDomainSuffix,
 ];
 
 /// WinINet's entry for every host without a dot; the other platforms leave it
@@ -404,11 +428,32 @@ extension AuthenticationPropsExt on AuthenticationProps {
       enable && username.isNotEmpty ? ['$username:$password'] : [];
 }
 
+/// Only migrate an exact old default. A user's edited bypass list is policy.
+List<String> _bypassDomainFromJson(List<dynamic>? value) {
+  if (value == null) {
+    return defaultBypassDomain;
+  }
+  final domains = value.cast<String>();
+  const equality = ListEquality<String>();
+  if (equality.equals(domains, _legacyDefaultBypassDomain)) {
+    return defaultBypassDomain;
+  }
+  if (equality.equals(domains, const [
+    ..._legacyDefaultBypassDomain,
+    windowsLocalBypass,
+  ])) {
+    return const [...defaultBypassDomain, windowsLocalBypass];
+  }
+  return domains;
+}
+
 @freezed
 abstract class NetworkProps with _$NetworkProps {
   const factory NetworkProps({
     @Default(true) bool systemProxy,
-    @Default(defaultBypassDomain) List<String> bypassDomain,
+    @Default(defaultBypassDomain)
+    @JsonKey(fromJson: _bypassDomainFromJson)
+    List<String> bypassDomain,
     @Default(false) bool pacMode,
     @Default(defaultPacScript) String pacScript,
     @Default(true) bool bypassPrivateRoute,

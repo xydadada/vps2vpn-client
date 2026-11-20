@@ -222,6 +222,23 @@ mod tests {
             }
         }
         let _client = client;
+        server.set_nonblocking(true).unwrap();
+        let fill_started = Instant::now();
+        let chunk = [b'x'; 64 * 1024];
+        let mut queued = 0;
+        loop {
+            match server.write(&chunk) {
+                Ok(0) => panic!("connection closed while filling the send buffer"),
+                Ok(written) => queued += written,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(error) => panic!("could not fill the send buffer: {error}"),
+            }
+            assert!(
+                queued <= 64 * 1024 * 1024 && fill_started.elapsed() < Duration::from_secs(2),
+                "the non-reading peer never applied backpressure after {queued} bytes",
+            );
+        }
+        server.set_nonblocking(false).unwrap();
         let payload = vec![b'x'; 16 * 1024 * 1024];
         let started = Instant::now();
         assert!(write_before_deadline(

@@ -55,7 +55,7 @@ abstract final class BackupEntries {
       ...localModules.map(mitmModule),
       ...{
         for (final module in localModules) ...mitmAttachments(module).values,
-      }.where(_isResourceName).map(mitmResource),
+      }.where(isMitmResourceName).map(mitmResource),
     ];
   }
 
@@ -67,14 +67,6 @@ abstract final class BackupEntries {
       mitmModules: data.mitmModules,
     );
   }
-
-  /// One that climbed out of the resources directory could carry the CA key.
-  static bool _isResourceName(String name) =>
-      name.isNotEmpty &&
-      name != '.' &&
-      name != '..' &&
-      !name.contains('/') &&
-      !name.contains(r'\');
 
   static String resolve(String root, String entry) {
     return joinAll([root, ...posix.split(entry)]);

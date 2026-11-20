@@ -157,13 +157,25 @@ class DAVTransport {
       if (status != null && accept.contains(status)) {
         return response;
       }
-      if (status == 401 && !retriedAuth && _adoptChallenge(response)) {
+      if (status == 401 &&
+          !retriedAuth &&
+          _sameOrigin(uri, origin) &&
+          _adoptChallenge(response)) {
         retriedAuth = true;
         continue;
       }
       final location = _redirectTarget(response);
       if (location != null && redirects < _maxRedirects) {
-        uri = uri.resolveUri(location);
+        final target = uri.resolveUri(location);
+        if (body != null && !_sameOrigin(target, origin)) {
+          throw DAVException(
+            method: method,
+            path: path,
+            statusCode: status,
+            reasonPhrase: 'Refusing to redirect an upload to another origin',
+          );
+        }
+        uri = target;
         continue;
       }
       throw DAVException(

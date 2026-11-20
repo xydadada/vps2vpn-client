@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -26,6 +27,7 @@ void main() {
   late Directory home;
   late db.Database testDatabase;
   late ProviderContainer container;
+  Future<void> Function(HttpRequest)? serve;
 
   setUpAll(() async {
     loadAppLocalizations(const Locale('en'));
@@ -37,6 +39,10 @@ void main() {
     );
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
+      if (serve case final handler?) {
+        await handler(request);
+        return;
+      }
       final response = request.response;
       final body = bodies[request.uri.path];
       if (body == null) {
@@ -51,6 +57,7 @@ void main() {
   tearDownAll(() => server.close(force: true));
 
   setUp(() async {
+    serve = null;
     final bindingOverrides = HttpOverrides.current;
     HttpOverrides.global = null;
     addTearDown(() => HttpOverrides.global = bindingOverrides);
@@ -231,6 +238,44 @@ Extra = type=http-response,pattern=^https://b,script-path=${urlOf('/extra.js')},
       expect((await stored()).single.enabled, isTrue);
     },
   );
+
+  test('module resource downloads share four slots', () async {
+    final firstBatch = Completer<void>();
+    final release = Completer<void>();
+    addTearDown(() {
+      if (!release.isCompleted) release.complete();
+    });
+    var active = 0;
+    var peak = 0;
+    serve = (incoming) async {
+      active++;
+      if (active > peak) peak = active;
+      if (active == 4 && !firstBatch.isCompleted) firstBatch.complete();
+      try {
+        await release.future;
+        incoming.response.write('{}');
+        await incoming.response.close();
+      } finally {
+        active--;
+      }
+    };
+    final text = [
+      '[Map Local]',
+      for (var i = 0; i < 7; i++)
+        '^https://example.com/$i data="${urlOf('/resource-$i.json')}"',
+    ].join('\n');
+    final pending = action().addFromFile(text, 'bounded.sgmodule');
+
+    await firstBatch.future.timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(active, 4);
+    release.complete();
+    final added = await pending;
+
+    expect(added.resources, hasLength(7));
+    expect(peak, 4);
+    await action().clean();
+  });
 
   test('a module that changes network settings is added off', () async {
     bodies = {'/dns.sgmodule': '[General]\ndns-server = 223.5.5.5\n'};

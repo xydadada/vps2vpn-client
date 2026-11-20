@@ -165,6 +165,7 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
     } else if (!hasUpdate) {
       profilesAction.putProfile(profile);
     } else {
+      profilesAction.putProfile(profile);
       unawaited(
         globalState.safeRun(() async {
           await Future.delayed(commonDuration);

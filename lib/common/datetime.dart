@@ -2,6 +2,37 @@ import 'package:flutter/widgets.dart';
 
 import 'context.dart';
 
+/// Largest Unix timestamp whose UTC date has a four-digit year (9999-12-31).
+/// Zero denotes an absent or unusable timestamp in subscription metadata.
+const maxDisplayUnixSeconds = 253402300799;
+
+/// Validate before converting to an int or multiplying by 1000: both steps can
+/// overflow or throw for untrusted headers, restored JSON and core metadata.
+int unixSecondsOrZero(Object? value) {
+  final seconds = switch (value) {
+    final num number => number,
+    final String text => num.tryParse(text),
+    _ => null,
+  };
+  if (seconds == null ||
+      !seconds.isFinite ||
+      seconds <= 0 ||
+      seconds > maxDisplayUnixSeconds) {
+    return 0;
+  }
+  return seconds.toInt();
+}
+
+DateTime? dateTimeFromUnixSeconds(Object? value) {
+  final seconds = unixSecondsOrZero(value);
+  if (seconds == 0) {
+    return null;
+  }
+  final date = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+  // UTC's final day in year 9999 can be year 10000 in a positive local zone.
+  return date.year <= 9999 ? date : null;
+}
+
 extension DateTimeExtension on DateTime {
   bool get isBeforeNow {
     return isBefore(DateTime.now());
