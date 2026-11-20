@@ -1,19 +1,19 @@
 const SYSTEM: &str = "S-1-5-18";
 const ADMINISTRATORS: &str = "S-1-5-32-544";
-const TRUSTED_INSTALLER: &str = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+pub(super) const TRUSTED_INSTALLER: &str = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
 
-struct Entry {
-    kind: u8,
-    inherit_only: bool,
-    mask: u32,
-    sid: String,
+pub(super) struct Entry {
+    pub(super) kind: u8,
+    pub(super) inherit_only: bool,
+    pub(super) mask: u32,
+    pub(super) sid: String,
 }
 
 fn trusted(sid: &str) -> bool {
     matches!(sid, SYSTEM | ADMINISTRATORS | TRUSTED_INSTALLER)
 }
 
-fn protected(owner: &str, entries: &[Entry], payload_directory_or_file: bool) -> bool {
+pub(super) fn protected(owner: &str, entries: &[Entry], payload_directory_or_file: bool) -> bool {
     const REPLACE: u32 = 0x1000_0000 | 0x4000_0000 | 0x000d_0000 | 0x0000_0150;
     let mutation = REPLACE | if payload_directory_or_file { 0x6 } else { 0 };
     trusted(owner)
