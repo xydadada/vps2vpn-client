@@ -148,9 +148,14 @@ func applyConfig(params *SetupParams) error {
 	configMu.Lock()
 	defer configMu.Unlock()
 
-	applyOptions(params.Options)
+	// SmartLines participates in parsing the raw configuration. Other global
+	// options must not be committed until the profile has actually passed
+	// validation: a malformed subscription must not turn off TLS checks.
+	previousSmart := vpsSmartEnabled.Load()
+	vpsSmartEnabled.Store(params.Options.SmartLines)
 	cfg, err := loadSetupConfig(params)
 	if err != nil {
+		vpsSmartEnabled.Store(previousSmart)
 		if currentConfig != nil {
 			// A rejected profile is not a request to replace the last working
 			// route graph. Otherwise every proxy silently disappears while the
@@ -168,6 +173,7 @@ func applyConfig(params *SetupParams) error {
 		cfg = fallback
 	}
 
+	applyOptions(params.Options)
 	currentConfig = cfg
 	hub.ApplyConfig(cfg)
 	patchSelectGroup(params.SelectedMap)

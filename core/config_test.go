@@ -829,11 +829,25 @@ func TestApplyConfigKeepsTheWorkingProxyGraphOnRejectedUpdate(t *testing.T) {
 	working := &config.Config{General: &config.General{}, Controller: &config.Controller{}}
 	withCurrentConfig(t, working)
 	keepTunnel(t)
+	previousSkip := skipCertVerify.Load()
+	previousSmart := vpsSmartEnabled.Load()
+	previousURL := currentTestURL()
+	skipCertVerify.Store(false)
+	vpsSmartEnabled.Store(false)
+	t.Cleanup(func() {
+		skipCertVerify.Store(previousSkip)
+		vpsSmartEnabled.Store(previousSmart)
+	})
 	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("proxies: [unterminated\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	err := applyConfig(&SetupParams{})
+	err := applyConfig(&SetupParams{Options: CoreOptions{
+		SkipCertVerify: true,
+		SmartLines: true,
+		TestURL: "https://rejected-profile.invalid/probe",
+		DelayTestTimeout: 15000,
+	}})
 
 	var rejected *MethodError
 	if !errors.As(err, &rejected) || rejected.Code != "config_rejected" {
@@ -841,6 +855,10 @@ func TestApplyConfigKeepsTheWorkingProxyGraphOnRejectedUpdate(t *testing.T) {
 	}
 	if currentConfig != working {
 		t.Fatal("a rejected update replaced the previous working configuration")
+	}
+	if skipCertVerify.Load() || vpsSmartEnabled.Load() || currentTestURL() != previousURL {
+		t.Fatalf("a rejected profile changed active security or smart defaults: skipTLS=%t smart=%t URL=%q",
+			skipCertVerify.Load(), vpsSmartEnabled.Load(), currentTestURL())
 	}
 }
 
