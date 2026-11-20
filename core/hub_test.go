@@ -308,7 +308,7 @@ func TestHandleValidateConfigAcceptsAValidFile(t *testing.T) {
 	}
 }
 
-func TestHandleDecryptConfigReadsAnAgeEncryptedFile(t *testing.T) {
+func TestHandleDecryptConfigDecryptsAppReadAgeBytes(t *testing.T) {
 	secretKey, publicKey, err := age.GenX25519KeyPair()
 	if err != nil {
 		t.Fatalf("generate key pair: %v", err)
@@ -322,7 +322,11 @@ func TestHandleDecryptConfigReadsAnAgeEncryptedFile(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	got, err := handleDecryptConfig(DecryptConfigParams{Path: path, AgeSecretKey: secretKey})
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config as the caller: %v", err)
+	}
+	got, err := handleDecryptConfig(DecryptConfigParams{Data: data, AgeSecretKey: secretKey})
 	if err != nil {
 		t.Fatalf("handleDecryptConfig = %v, want no error", err)
 	}
@@ -334,7 +338,7 @@ func TestHandleDecryptConfigReadsAnAgeEncryptedFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate key pair: %v", err)
 	}
-	if _, err := handleDecryptConfig(DecryptConfigParams{Path: path, AgeSecretKey: otherKey}); err == nil {
+	if _, err := handleDecryptConfig(DecryptConfigParams{Data: data, AgeSecretKey: otherKey}); err == nil {
 		t.Error("handleDecryptConfig decrypted with a key the file was not encrypted to")
 	}
 }
