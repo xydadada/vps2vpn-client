@@ -83,7 +83,7 @@ void main() {
       expect(file.readAsStringSync(), 'mode: rule');
     });
 
-    test('does not overwrite a directory and cleans failed staging files', () async {
+    test('cleans failed writes to a directory target', () async {
       final path = join(root.path, 'config.yaml');
       final target = Directory(path)..createSync();
 

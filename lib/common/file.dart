@@ -45,8 +45,10 @@ extension FileExt on File {
   /// overlapping writers truncate or rename each other's staging file.
   Future<void> writeAsStringAtomically(String content) async {
     final random = Random.secure();
-    final suffix = random.nextInt(1 << 32).toRadixString(36) +
-        random.nextInt(1 << 32).toRadixString(36);
+    final suffix = [
+      random.nextInt(1 << 32).toRadixString(36),
+      random.nextInt(1 << 32).toRadixString(36),
+    ].join();
     final temp = File('$path.$pid.$suffix.tmp');
     try {
       await temp.parent.create(recursive: true);
