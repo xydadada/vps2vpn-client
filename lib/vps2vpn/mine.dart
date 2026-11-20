@@ -136,7 +136,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                             ? context.appLocalizations.loading
                             : tr(context, '全部更新', 'Update all'),
                         style: vpsText(
-                          p,
+                          context,
                           size: 13,
                           weight: FontWeight.w700,
                           color: p.accent,
@@ -168,7 +168,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 profiles.isEmpty
                     ? tr(context, '导入订阅', 'Import a subscription')
                     : tr(context, '导入更多订阅', 'Import another'),
-                style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                style: vpsText(context, size: 14.5, weight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
@@ -177,7 +177,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   '从剪贴板读取订阅链接，或导入本地配置文件',
                   'Read a link from the clipboard, or import a local config file',
                 ),
-                style: vpsText(p, size: 13, color: p.soft),
+                style: vpsText(context, size: 13, color: p.soft),
               ),
               const SizedBox(height: 14),
               Wrap(
@@ -201,7 +201,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               ),
               if (_note != null) ...[
                 const SizedBox(height: 10),
-                Text(_note!, style: vpsText(p, size: 12.5, color: p.warn)),
+                Text(_note!, style: vpsText(context, size: 12.5, color: p.warn)),
               ],
             ],
           ),
@@ -355,12 +355,12 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                           return 'vps2vpn';
                         }
                       }(),
-                      style: vpsText(p, size: 15, weight: FontWeight.w700),
+                      style: vpsText(context, size: 15, weight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       tr(context, '你的私有网络客户端', 'Your private network client'),
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(context, size: 12.5, color: p.soft),
                     ),
                   ],
                 ),
@@ -389,7 +389,7 @@ class _LegalLineState extends State<_LegalLine> {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final style = vpsText(p, size: 11, color: p.muted, height: 1.6);
+    final style = vpsText(context, size: 11, color: p.muted, height: 1.6);
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 8),
       child: Column(
@@ -592,7 +592,7 @@ class _ChoiceRow extends StatelessWidget {
           child: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+            style: vpsText(context, size: 14.5, weight: FontWeight.w500),
           ),
         ),
       ],
@@ -682,7 +682,7 @@ class _ProfileCard extends ConsumerWidget {
                       profile.realLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(context, size: 14.5, weight: FontWeight.w600),
                     ),
                     Text(
                       [
@@ -695,7 +695,7 @@ class _ProfileCard extends ConsumerWidget {
                           ),
                       ].join(' · '),
                       style: vpsText(
-                        p,
+                        context,
                         size: 12.5,
                         color: selected ? p.accent : p.soft,
                       ),
@@ -746,11 +746,11 @@ class _ProfileCard extends ConsumerWidget {
                       '已用 ${used.traffic.show} / ${total.traffic.show}',
                       '${used.traffic.show} of ${total.traffic.show} used',
                     ),
-                    style: vpsText(p, size: 12.5, color: p.soft),
+                    style: vpsText(context, size: 12.5, color: p.soft),
                   ),
                 const Spacer(),
                 if (expire != null)
-                  Text(expire, style: vpsText(p, size: 12.5, color: p.soft)),
+                  Text(expire, style: vpsText(context, size: 12.5, color: p.soft)),
               ],
             ),
           ],

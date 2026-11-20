@@ -141,7 +141,7 @@ class _SideNav extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: vpsText(
-                          p,
+                          context,
                           size: 16,
                           weight: FontWeight.w700,
                           spacing: 0.2,
@@ -151,7 +151,7 @@ class _SideNav extends ConsumerWidget {
                         tr(context, '私有网络', 'Private network'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: vpsText(p, size: 11.5, color: p.soft),
+                        style: vpsText(context, size: 11.5, color: p.soft),
                       ),
                     ],
                   ),
@@ -211,7 +211,7 @@ class _SideStatus extends ConsumerWidget {
         : on
         ? p.good
         : p.muted;
-    final small = vpsText(p, size: 11.5, color: p.soft, tabular: true);
+    final small = vpsText(context, size: 11.5, color: p.soft, tabular: true);
     return VpsPressable(
       onTap: () => vpsTab.value = vpsTabHome,
       child: Container(
@@ -252,7 +252,7 @@ class _SideStatus extends ConsumerWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: vpsText(p, size: 13, weight: FontWeight.w600),
+                    style: vpsText(context, size: 13, weight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -263,7 +263,7 @@ class _SideStatus extends ConsumerWidget {
                 friendlyLineName(context, line),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: vpsText(p, size: 12, color: p.soft),
+                style: vpsText(context, size: 12, color: p.soft),
               ),
             ],
             AnimatedSize(
@@ -349,7 +349,7 @@ class _NavItem extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: vpsText(
-                  p,
+                  context,
                   size: 14,
                   weight: selected ? FontWeight.w600 : FontWeight.w500,
                   color: selected ? p.text : p.soft,
@@ -419,7 +419,7 @@ class _BottomNav extends StatelessWidget {
                       Text(
                         label,
                         style: vpsText(
-                          p,
+                          context,
                           size: 11,
                           weight: FontWeight.w600,
                           color: i == tab ? p.text : p.soft,
@@ -483,7 +483,7 @@ class VpsPage extends StatelessWidget {
                             Text(
                               title,
                               style: vpsText(
-                                p,
+                                context,
                                 size: wide ? 26 : 22,
                                 weight: FontWeight.w600,
                                 spacing: -0.5,
@@ -494,7 +494,7 @@ class VpsPage extends StatelessWidget {
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(
                                   subtitle!,
-                                  style: vpsText(p, size: 14, color: p.soft),
+                                  style: vpsText(context, size: 14, color: p.soft),
                                 ),
                               ),
                           ],

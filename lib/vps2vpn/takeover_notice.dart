@@ -133,7 +133,7 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                           child: Text(
                             tr(context, line, en[i]),
                             style: vpsText(
-                              p,
+                              context,
                               size: 13,
                               color: i == 0 ? p.text : p.soft,
                               height: 1.45,
@@ -156,7 +156,7 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                       padding: const EdgeInsets.all(6),
                       child: Text(
                         '×',
-                        style: vpsText(p, size: 16, color: p.muted),
+                        style: vpsText(context, size: 16, color: p.muted),
                       ),
                     ),
                   ),
