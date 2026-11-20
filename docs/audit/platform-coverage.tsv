@@ -1,64 +1,65 @@
 path	review_status	note
+.github/homebrew_cask_template.rb	inventory-only	
 .github/ISSUE_TEMPLATE/bug_report.yml	inventory-only	
 .github/ISSUE_TEMPLATE/config.yml	inventory-only	
 .github/ISSUE_TEMPLATE/feature_request.yml	inventory-only	
-.github/homebrew_cask_template.rb	inventory-only	
 .github/release_template.md	inventory-only	
 .github/scripts/issue-gate.js	inventory-only	
 .github/scripts/issue-gate.test.js	inventory-only	
-.github/scripts/takeover-e2e.ps1	manual-full	
-.github/workflows/e2e.yaml	manual-full	
-.github/workflows/vps2vpn.yaml	manual-full	
-.gitmodules	manual-full	
+.github/scripts/takeover-e2e.ps1	manual-full	Complete manual source read
+.github/workflows/audit-checks.yaml	manual-full	Added during audit; complete source read
+.github/workflows/e2e.yaml	manual-full	Complete manual source read
+.github/workflows/vps2vpn.yaml	manual-full	Complete manual source read
+.gitmodules	manual-full	Complete manual source read
 .metadata	inventory-only	
-Makefile	inventory-only	
-analysis_options.yaml	manual-full	
+analysis_options.yaml	manual-full	Complete manual source read
 android/.gitignore	inventory-only	
-android/app/build.gradle.kts	inventory-only	
-android/app/proguard-rules.pro	inventory-only	
-android/app/src/debug/AndroidManifest.xml	inventory-only	
-android/app/src/main/AndroidManifest.xml	inventory-only	
-android/app/src/main/assets/mitm_ca/inject.sh	inventory-only	
-android/app/src/main/assets/mitm_ca/module.prop	inventory-only	
-android/app/src/main/assets/mitm_ca/post-fs-data.sh	inventory-only	
-android/app/src/main/assets/mitm_ca/root.sh	inventory-only	
-android/app/src/main/assets/mitm_ca/service.sh	inventory-only	
-android/app/src/main/assets/mitm_ca/update-binary	inventory-only	
-android/app/src/main/assets/mitm_ca/updater-script	inventory-only	
+android/app/build.gradle.kts	manual-full	Complete manual source read
+android/app/proguard-rules.pro	manual-full	Complete manual source read
+android/app/src/debug/AndroidManifest.xml	manual-full	Complete manual source read
+android/app/src/main/AndroidManifest.xml	manual-full	Complete manual source read
+android/app/src/main/assets/mitm_ca/inject.sh	manual-full	Complete manual source read
+android/app/src/main/assets/mitm_ca/module.prop	manual-full	Complete manual source read
+android/app/src/main/assets/mitm_ca/post-fs-data.sh	manual-full	Complete manual source read
+android/app/src/main/assets/mitm_ca/root.sh	manual-full	Complete manual source read
+android/app/src/main/assets/mitm_ca/service.sh	manual-full	Complete manual source read
+android/app/src/main/assets/mitm_ca/update-binary	manual-full	Complete manual source read
+android/app/src/main/assets/mitm_ca/updater-script	manual-full	Complete manual source read
 android/app/src/main/ic_launcher-playstore.png	binary-asset-inventory	
-android/app/src/main/kotlin/com/follow/clash/Ext.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/FlClashApplication.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/MainActivity.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/QuickActionActivity.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/ServiceBroadcastReceiver.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/ServiceController.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/ServiceState.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/ServiceStateHost.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/ServiceStateMachine.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/SystemCaStore.kt	manual-full	
-android/app/src/main/kotlin/com/follow/clash/TileService.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/models/InstalledPackage.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/models/State.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/packages/ChinaPackageMatcher.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/packages/PackageResolver.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/plugins/AppPlugin.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/plugins/BatteryPlugin.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/plugins/DefaultNetworkWatcher.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/plugins/LinkPlugin.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/plugins/ServicePlugin.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/plugins/TilePlugin.kt	inventory-only	
-android/app/src/main/kotlin/com/follow/clash/plugins/WifiSsidPlugin.kt	inventory-only	
-android/app/src/main/res/drawable/ic_launcher_foreground.xml	inventory-only	
+android/app/src/main/kotlin/com/follow/clash/Ext.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/FlClashApplication.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/MainActivity.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/models/InstalledPackage.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/models/State.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/packages/ChinaPackageMatcher.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/packages/PackageResolver.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/plugins/AppPlugin.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/plugins/BatteryPlugin.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/plugins/DefaultNetworkWatcher.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/plugins/LinkPlugin.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/plugins/ServicePlugin.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/plugins/SsidNetworkState.kt	manual-full	Added during audit; complete source read
+android/app/src/main/kotlin/com/follow/clash/plugins/TilePlugin.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/plugins/WifiSsidPlugin.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/QuickActionActivity.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/ServiceBroadcastReceiver.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/ServiceController.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/ServiceState.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/ServiceStateHost.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/ServiceStateMachine.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/SystemCaStore.kt	manual-full	Complete manual source read
+android/app/src/main/kotlin/com/follow/clash/TileService.kt	manual-full	Complete manual source read
 android/app/src/main/res/drawable/ic_launcher_foreground_tv.xml	inventory-only	
+android/app/src/main/res/drawable/ic_launcher_foreground.xml	inventory-only	
 android/app/src/main/res/drawable/ic_shortcut_start.xml	inventory-only	
 android/app/src/main/res/drawable/ic_shortcut_stop.xml	inventory-only	
 android/app/src/main/res/drawable/ic_shortcut_toggle.xml	inventory-only	
-android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml	inventory-only	
 android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml	inventory-only	
-android/app/src/main/res/mipmap-hdpi/ic_launcher.webp	binary-asset-inventory	
+android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml	inventory-only	
 android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp	binary-asset-inventory	
-android/app/src/main/res/mipmap-mdpi/ic_launcher.webp	binary-asset-inventory	
+android/app/src/main/res/mipmap-hdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp	binary-asset-inventory	
+android/app/src/main/res/mipmap-mdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-television-anydpi-v26/ic_launcher.xml	inventory-only	
 android/app/src/main/res/mipmap-television-hdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-television-mdpi/ic_launcher.webp	binary-asset-inventory	
@@ -66,69 +67,72 @@ android/app/src/main/res/mipmap-television-xhdpi/ic_launcher.webp	binary-asset-i
 android/app/src/main/res/mipmap-television-xxhdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-television-xxxhdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-xhdpi/ic_banner.png	binary-asset-inventory	
-android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp	binary-asset-inventory	
-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp	binary-asset-inventory	
+android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp	binary-asset-inventory	
-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp	binary-asset-inventory	
+android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp	binary-asset-inventory	
+android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp	binary-asset-inventory	
 android/app/src/main/res/values-night-v27/styles.xml	inventory-only	
 android/app/src/main/res/values-night/styles.xml	inventory-only	
 android/app/src/main/res/values-v27/styles.xml	inventory-only	
 android/app/src/main/res/values/colors.xml	inventory-only	
 android/app/src/main/res/values/ic_launcher_background.xml	inventory-only	
 android/app/src/main/res/values/styles.xml	inventory-only	
-android/build.gradle.kts	inventory-only	
+android/build.gradle.kts	manual-full	Complete manual source read
 android/common/.gitignore	inventory-only	
-android/common/build.gradle.kts	inventory-only	
-android/common/src/main/AndroidManifest.xml	inventory-only	
-android/common/src/main/java/com/follow/clash/common/BroadcastLease.kt	inventory-only	
-android/common/src/main/java/com/follow/clash/common/Components.kt	inventory-only	
-android/common/src/main/java/com/follow/clash/common/Enums.kt	inventory-only	
-android/common/src/main/java/com/follow/clash/common/Ext.kt	inventory-only	
-android/common/src/main/java/com/follow/clash/common/GlobalState.kt	inventory-only	
-android/common/src/main/java/com/follow/clash/common/PendingCallback.kt	inventory-only	
-android/common/src/main/java/com/follow/clash/common/RunIntentArbiter.kt	inventory-only	
+android/common/build.gradle.kts	manual-full	Complete manual source read
+android/common/src/main/AndroidManifest.xml	manual-full	Complete manual source read
+android/common/src/main/java/com/follow/clash/common/BroadcastLease.kt	manual-full	Complete manual source read
+android/common/src/main/java/com/follow/clash/common/Components.kt	manual-full	Complete manual source read
+android/common/src/main/java/com/follow/clash/common/Enums.kt	manual-full	Complete manual source read
+android/common/src/main/java/com/follow/clash/common/Ext.kt	manual-full	Complete manual source read
+android/common/src/main/java/com/follow/clash/common/GlobalState.kt	manual-full	Complete manual source read
+android/common/src/main/java/com/follow/clash/common/PendingCallback.kt	manual-full	Complete manual source read
+android/common/src/main/java/com/follow/clash/common/RunIntentArbiter.kt	manual-full	Complete manual source read
 android/common/src/main/res/values/strings.xml	inventory-only	
 android/core/.gitignore	inventory-only	
-android/core/build.gradle.kts	inventory-only	
+android/core/build.gradle.kts	manual-full	Complete manual source read
 android/core/consumer-rules.pro	inventory-only	
-android/core/src/main/AndroidManifest.xml	inventory-only	
-android/core/src/main/java/com/follow/clash/core/Core.kt	manual-full	
+android/core/src/main/AndroidManifest.xml	manual-full	Complete manual source read
+android/core/src/main/java/com/follow/clash/core/Core.kt	manual-full	Complete manual source read
 android/gradle.properties	inventory-only	
-android/gradle/libs.versions.toml	inventory-only	
-android/gradle/wrapper/gradle-wrapper.properties	inventory-only	
+android/gradle/libs.versions.toml	manual-full	Complete manual source read
+android/gradle/wrapper/gradle-wrapper.properties	manual-full	Complete manual source read
 android/service/.gitignore	inventory-only	
-android/service/build.gradle.kts	inventory-only	
-android/service/src/main/AndroidManifest.xml	manual-full	
-android/service/src/main/java/com/follow/clash/service/FilesProvider.kt	manual-full	
-android/service/src/main/java/com/follow/clash/service/ManagedService.kt	manual-full	
-android/service/src/main/java/com/follow/clash/service/MitmPressure.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/NetworkObserver.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/ProxyService.kt	manual-full	
-android/service/src/main/java/com/follow/clash/service/ServiceConfig.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/VpnService.kt	manual-full	
-android/service/src/main/java/com/follow/clash/service/models/NotificationParams.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/models/Traffic.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/models/VpnOptions.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/modules/MemoryPressureModule.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/modules/NotificationModule.kt	inventory-only	
-android/service/src/main/java/com/follow/clash/service/modules/ServiceModules.kt	inventory-only	
-android/service/src/main/res/drawable/ic.xml	inventory-only	
+android/service/build.gradle.kts	manual-full	Complete manual source read
+android/service/src/main/AndroidManifest.xml	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/FilesProvider.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/ManagedService.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/MitmPressure.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/models/NotificationParams.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/models/Traffic.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/models/VpnOptions.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/modules/MemoryPressureModule.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/modules/NotificationModule.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/modules/ServiceModules.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/NetworkObserver.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/NetworkSelection.kt	manual-full	Added during audit; complete source read
+android/service/src/main/java/com/follow/clash/service/ProxyService.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/ServiceConfig.kt	manual-full	Complete manual source read
+android/service/src/main/java/com/follow/clash/service/VpnService.kt	manual-full	Complete manual source read
 android/service/src/main/res/drawable/ic_service.xml	inventory-only	
-android/settings.gradle.kts	inventory-only	
+android/service/src/main/res/drawable/ic.xml	inventory-only	
+android/settings.gradle.kts	manual-full	Complete manual source read
 android/tests/app/ChinaPackageMatcherTest.kt	inventory-only	
-android/tests/app/ServiceStateMachineTest.kt	inventory-only	
+android/tests/app/ServiceStateMachineTest.kt	manual-full	Complete manual source read
 android/tests/app/SharedStateTest.kt	inventory-only	
+android/tests/app/SsidNetworkStateTest.kt	manual-full	Added during audit; complete source read
 android/tests/common/BroadcastLeaseTest.kt	inventory-only	
 android/tests/common/EnumsTest.kt	inventory-only	
 android/tests/common/PendingCallbackTest.kt	inventory-only	
 android/tests/common/RunIntentArbiterTest.kt	inventory-only	
+android/tests/service/NetworkSelectionTest.kt	manual-full	Added during audit; complete source read
 android/tests/service/ServiceConfigTest.kt	inventory-only	
 android/tests/service/TrafficTest.kt	inventory-only	
 android/tests/service/VpnOptionsTest.kt	inventory-only	
-build.yaml	inventory-only	
 build_config.yaml	inventory-only	
+build.yaml	inventory-only	
 l10n.yaml	inventory-only	
 lint_options.yaml	inventory-only	
 linux/.gitignore	inventory-only	
@@ -137,9 +141,9 @@ linux/flutter/CMakeLists.txt	inventory-only
 linux/flutter/generated_plugin_registrant.cc	generated-inventory	
 linux/flutter/generated_plugin_registrant.h	generated-inventory	
 linux/flutter/generated_plugins.cmake	generated-inventory	
-linux/packaging/appimage/make_config.yaml	manual-full	
-linux/packaging/deb/make_config.yaml	manual-full	
-linux/packaging/rpm/make_config.yaml	manual-full	
+linux/packaging/appimage/make_config.yaml	manual-full	Complete manual source read
+linux/packaging/deb/make_config.yaml	manual-full	Complete manual source read
+linux/packaging/rpm/make_config.yaml	manual-full	Complete manual source read
 linux/runner/CMakeLists.txt	inventory-only	
 linux/runner/main.cc	inventory-only	
 linux/runner/my_application.cc	inventory-only	
@@ -148,13 +152,13 @@ macos/.gitignore	inventory-only
 macos/Flutter/Flutter-Debug.xcconfig	inventory-only	
 macos/Flutter/Flutter-Release.xcconfig	inventory-only	
 macos/Flutter/GeneratedPluginRegistrant.swift	inventory-only	
+macos/packaging/dmg/make_config.yaml	inventory-only	
 macos/Runner.xcodeproj/project.pbxproj	inventory-only	
 macos/Runner.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist	inventory-only	
 macos/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme	inventory-only	
 macos/Runner.xcworkspace/contents.xcworkspacedata	inventory-only	
 macos/Runner.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist	inventory-only	
 macos/Runner/AppDelegate.swift	inventory-only	
-macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json	inventory-only	
 macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png	binary-asset-inventory	
 macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png	binary-asset-inventory	
 macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_16.png	binary-asset-inventory	
@@ -162,6 +166,7 @@ macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png	binary-asset-in
 macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_32.png	binary-asset-inventory	
 macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png	binary-asset-inventory	
 macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_64.png	binary-asset-inventory	
+macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json	inventory-only	
 macos/Runner/Assets.xcassets/Contents.json	inventory-only	
 macos/Runner/Base.lproj/MainMenu.xib	inventory-only	
 macos/Runner/Configs/AppInfo.xcconfig	inventory-only	
@@ -173,24 +178,22 @@ macos/Runner/Info.plist	inventory-only
 macos/Runner/MainFlutterWindow.swift	inventory-only	
 macos/Runner/Release.entitlements	inventory-only	
 macos/RunnerTests/RunnerTests.swift	inventory-only	
-macos/packaging/dmg/make_config.yaml	inventory-only	
+Makefile	inventory-only	
 plugins/code_forge/.gitignore	inventory-only	
-plugins/code_forge/LICENSE	dependency-license-inventory	
-plugins/code_forge/README.md	inventory-only	
 plugins/code_forge/analysis_options.yaml	inventory-only	
 plugins/code_forge/lib/code_forge.dart	inventory-only	
 plugins/code_forge/lib/code_forge/clipboard.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area.dart	inventory-only	
-plugins/code_forge/lib/code_forge/code_area/editor_state.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/editor_state_keyboard.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/editor_state_overlays.dart	inventory-only	
-plugins/code_forge/lib/code_forge/code_area/renderer.dart	inventory-only	
+plugins/code_forge/lib/code_forge/code_area/editor_state.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/renderer_caret.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/renderer_folding.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/renderer_gutter.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/renderer_highlights.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/renderer_layout.dart	inventory-only	
 plugins/code_forge/lib/code_forge/code_area/renderer_pointer.dart	inventory-only	
+plugins/code_forge/lib/code_forge/code_area/renderer.dart	inventory-only	
 plugins/code_forge/lib/code_forge/controller.dart	inventory-only	
 plugins/code_forge/lib/code_forge/controller/completion.dart	inventory-only	
 plugins/code_forge/lib/code_forge/controller/document.dart	inventory-only	
@@ -210,15 +213,17 @@ plugins/code_forge/lib/code_forge/text_offsets.dart	inventory-only
 plugins/code_forge/lib/code_forge/undo_redo.dart	inventory-only	
 plugins/code_forge/lib/code_forge/view_line_layout.dart	inventory-only	
 plugins/code_forge/lib/code_forge/word_chars.dart	inventory-only	
+plugins/code_forge/LICENSE	dependency-license-inventory	
 plugins/code_forge/pubspec.yaml	inventory-only	
+plugins/code_forge/README.md	inventory-only	
 plugins/dynamic_color/.gitignore	inventory-only	
-plugins/dynamic_color/LICENSE	dependency-license-inventory	
 plugins/dynamic_color/analysis_options.yaml	inventory-only	
 plugins/dynamic_color/android/build.gradle.kts	inventory-only	
 plugins/dynamic_color/android/settings.gradle.kts	inventory-only	
 plugins/dynamic_color/android/src/main/AndroidManifest.xml	inventory-only	
 plugins/dynamic_color/android/src/main/kotlin/io/material/plugins/dynamic_color/DynamicColorPlugin.kt	inventory-only	
 plugins/dynamic_color/lib/dynamic_color.dart	inventory-only	
+plugins/dynamic_color/LICENSE	dependency-license-inventory	
 plugins/dynamic_color/linux/CMakeLists.txt	inventory-only	
 plugins/dynamic_color/linux/dynamic_color_plugin.cc	inventory-only	
 plugins/dynamic_color/linux/include/dynamic_color/dynamic_color_plugin.h	inventory-only	
@@ -229,19 +234,17 @@ plugins/dynamic_color/macos/dynamic_color/Sources/dynamic_color/PrivacyInfo.xcpr
 plugins/dynamic_color/pubspec.yaml	inventory-only	
 plugins/dynamic_color/windows/CMakeLists.txt	inventory-only	
 plugins/dynamic_color/windows/dwm.c	inventory-only	
+plugins/dynamic_color/windows/dynamic_color_plugin_c_api.cpp	inventory-only	
 plugins/dynamic_color/windows/dynamic_color_plugin.cpp	inventory-only	
 plugins/dynamic_color/windows/dynamic_color_plugin.h	inventory-only	
-plugins/dynamic_color/windows/dynamic_color_plugin_c_api.cpp	inventory-only	
 plugins/dynamic_color/windows/include/dynamic_color/dynamic_color_plugin_c_api.h	inventory-only	
 plugins/rust_api/.gitignore	inventory-only	
 plugins/rust_api/.metadata	inventory-only	
+plugins/rust_api/analysis_options.yaml	inventory-only	
 plugins/rust_api/CHANGELOG.md	inventory-only	
 plugins/rust_api/CLAUDE.md	inventory-only	
-plugins/rust_api/LICENSE	dependency-license-inventory	
-plugins/rust_api/README.md	inventory-only	
-plugins/rust_api/analysis_options.yaml	inventory-only	
 plugins/rust_api/flutter_rust_bridge.yaml	inventory-only	
-plugins/rust_api/hook/build.dart	manual-full	
+plugins/rust_api/hook/build.dart	manual-full	Complete manual source read
 plugins/rust_api/lib/editor.dart	inventory-only	
 plugins/rust_api/lib/link.dart	inventory-only	
 plugins/rust_api/lib/rust_api.dart	inventory-only	
@@ -262,31 +265,33 @@ plugins/rust_api/lib/src/rust/api/window.dart	generated-inventory
 plugins/rust_api/lib/src/rust/frb_generated.dart	generated-inventory	
 plugins/rust_api/lib/src/rust/frb_generated.io.dart	generated-inventory	
 plugins/rust_api/lib/src/rust/frb_generated.web.dart	generated-inventory	
-plugins/rust_api/lib/src/tray/tray.dart	inventory-only	
 plugins/rust_api/lib/src/tray/tray_capabilities.dart	inventory-only	
 plugins/rust_api/lib/src/tray/tray_codec.dart	inventory-only	
 plugins/rust_api/lib/src/tray/tray_event.dart	inventory-only	
 plugins/rust_api/lib/src/tray/tray_menu.dart	inventory-only	
 plugins/rust_api/lib/src/tray/tray_spec.dart	inventory-only	
+plugins/rust_api/lib/src/tray/tray.dart	inventory-only	
 plugins/rust_api/lib/tray.dart	inventory-only	
 plugins/rust_api/lib/window.dart	inventory-only	
+plugins/rust_api/LICENSE	dependency-license-inventory	
 plugins/rust_api/pubspec.yaml	inventory-only	
+plugins/rust_api/README.md	inventory-only	
 plugins/rust_api/rust/.gitignore	inventory-only	
 plugins/rust_api/rust/Cargo.lock	dependency-license-inventory	
-plugins/rust_api/rust/Cargo.toml	manual-full	
-plugins/rust_api/rust/rust-toolchain.toml	manual-full	
+plugins/rust_api/rust/Cargo.toml	manual-full	Complete manual source read
+plugins/rust_api/rust/rust-toolchain.toml	manual-full	Complete manual source read
 plugins/rust_api/rust/src/api/charset.rs	inventory-only	
 plugins/rust_api/rust/src/api/device.rs	inventory-only	
 plugins/rust_api/rust/src/api/editor.rs	inventory-only	
 plugins/rust_api/rust/src/api/fonts.rs	inventory-only	
 plugins/rust_api/rust/src/api/hotkey.rs	inventory-only	
-plugins/rust_api/rust/src/api/init.rs	manual-full	
-plugins/rust_api/rust/src/api/ipc.rs	manual-full	
-plugins/rust_api/rust/src/api/launch.rs	manual-full	
+plugins/rust_api/rust/src/api/init.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/api/ipc.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/api/launch.rs	manual-full	Complete manual source read
 plugins/rust_api/rust/src/api/link.rs	inventory-only	
 plugins/rust_api/rust/src/api/mod.rs	inventory-only	
-plugins/rust_api/rust/src/api/network.rs	manual-full	
-plugins/rust_api/rust/src/api/proxy.rs	manual-full	
+plugins/rust_api/rust/src/api/network.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/api/proxy.rs	manual-full	Complete manual source read
 plugins/rust_api/rust/src/api/script.rs	inventory-only	
 plugins/rust_api/rust/src/api/tray.rs	inventory-only	
 plugins/rust_api/rust/src/api/wifi.rs	inventory-only	
@@ -308,33 +313,33 @@ plugins/rust_api/rust/src/hotkey/mod.rs	inventory-only
 plugins/rust_api/rust/src/hotkey/owner.rs	inventory-only	
 plugins/rust_api/rust/src/hotkey/service.rs	inventory-only	
 plugins/rust_api/rust/src/hotkey/unsupported.rs	inventory-only	
-plugins/rust_api/rust/src/ipc/access.rs	manual-full	
-plugins/rust_api/rust/src/ipc/frame.rs	manual-full	
-plugins/rust_api/rust/src/ipc/mod.rs	manual-full	
-plugins/rust_api/rust/src/ipc/outbox.rs	manual-full	
-plugins/rust_api/rust/src/ipc/server.rs	manual-full	
-plugins/rust_api/rust/src/ipc/unsupported.rs	manual-full	
-plugins/rust_api/rust/src/launch/entries.rs	manual-full	
-plugins/rust_api/rust/src/launch/linux.rs	manual-full	
-plugins/rust_api/rust/src/launch/macos.rs	manual-full	
-plugins/rust_api/rust/src/launch/mod.rs	manual-full	
-plugins/rust_api/rust/src/launch/windows.rs	manual-full	
+plugins/rust_api/rust/src/ipc/access.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/ipc/frame.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/ipc/mod.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/ipc/outbox.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/ipc/server.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/ipc/unsupported.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/launch/entries.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/launch/linux.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/launch/macos.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/launch/mod.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/launch/windows.rs	manual-full	Complete manual source read
 plugins/rust_api/rust/src/lib.rs	inventory-only	
-plugins/rust_api/rust/src/network/linux.rs	manual-full	
-plugins/rust_api/rust/src/network/macos.rs	manual-full	
-plugins/rust_api/rust/src/network/mod.rs	manual-full	
-plugins/rust_api/rust/src/network/netlink.rs	manual-full	
-plugins/rust_api/rust/src/network/procfs.rs	manual-full	
-plugins/rust_api/rust/src/network/windows.rs	manual-full	
-plugins/rust_api/rust/src/proxy/command.rs	manual-full	
-plugins/rust_api/rust/src/proxy/linux.rs	manual-full	
-plugins/rust_api/rust/src/proxy/macos.rs	manual-full	
-plugins/rust_api/rust/src/proxy/mod.rs	manual-full	
-plugins/rust_api/rust/src/proxy/pac.rs	manual-full	
-plugins/rust_api/rust/src/proxy/windows.rs	manual-full	
-plugins/rust_api/rust/src/proxy/wininet.rs	manual-full	
-plugins/rust_api/rust/src/script/console.rs	manual-full	
-plugins/rust_api/rust/src/script/mod.rs	manual-full	
+plugins/rust_api/rust/src/network/linux.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/network/macos.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/network/mod.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/network/netlink.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/network/procfs.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/network/windows.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/proxy/command.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/proxy/linux.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/proxy/macos.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/proxy/mod.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/proxy/pac.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/proxy/windows.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/proxy/wininet.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/script/console.rs	manual-full	Complete manual source read
+plugins/rust_api/rust/src/script/mod.rs	manual-full	Complete manual source read
 plugins/rust_api/rust/src/tray/linux.rs	inventory-only	
 plugins/rust_api/rust/src/tray/macos/menu.rs	inventory-only	
 plugins/rust_api/rust/src/tray/macos/mod.rs	inventory-only	
@@ -366,24 +371,24 @@ plugins/rust_api/rust/tests/fixtures/profile_script.js	inventory-only
 plugins/rust_api/test_driver/integration_test.dart	inventory-only	
 plugins/setup/.gitignore	inventory-only	
 plugins/setup/analysis_options.yaml	inventory-only	
-plugins/setup/hook/build.dart	manual-full	
+plugins/setup/hook/build.dart	manual-full	Complete manual source read
 plugins/setup/pubspec.yaml	inventory-only	
 plugins/setup/setup_hooks/analysis_options.yaml	inventory-only	
 plugins/setup/setup_hooks/lib/setup_hooks.dart	inventory-only	
-plugins/setup/setup_hooks/lib/src/build.dart	manual-full	
 plugins/setup/setup_hooks/lib/src/build_cache.dart	inventory-only	
-plugins/setup/setup_hooks/lib/src/core_builder.dart	manual-full	
+plugins/setup/setup_hooks/lib/src/build.dart	manual-full	Complete manual source read
+plugins/setup/setup_hooks/lib/src/core_builder.dart	manual-full	Complete manual source read
 plugins/setup/setup_hooks/lib/src/error.dart	inventory-only	
 plugins/setup/setup_hooks/lib/src/fingerprint.dart	inventory-only	
-plugins/setup/setup_hooks/lib/src/go_builder.dart	manual-full	
+plugins/setup/setup_hooks/lib/src/go_builder.dart	manual-full	Complete manual source read
 plugins/setup/setup_hooks/lib/src/logging.dart	inventory-only	
-plugins/setup/setup_hooks/lib/src/options.dart	manual-full	
+plugins/setup/setup_hooks/lib/src/options.dart	manual-full	Complete manual source read
 plugins/setup/setup_hooks/lib/src/path_remap.dart	inventory-only	
-plugins/setup/setup_hooks/lib/src/rust_builder.dart	manual-full	
+plugins/setup/setup_hooks/lib/src/rust_builder.dart	manual-full	Complete manual source read
 plugins/setup/setup_hooks/lib/src/target.dart	inventory-only	
 plugins/setup/setup_hooks/lib/src/util.dart	inventory-only	
 plugins/setup/setup_hooks/pubspec.lock	dependency-license-inventory	
-plugins/setup/setup_hooks/pubspec.yaml	manual-full	
+plugins/setup/setup_hooks/pubspec.yaml	manual-full	Complete manual source read
 plugins/setup/setup_hooks/test/build_cache_test.dart	inventory-only	
 plugins/setup/setup_hooks/test/core_builder_test.dart	inventory-only	
 plugins/setup/setup_hooks/test/fingerprint_test.dart	inventory-only	
@@ -393,28 +398,30 @@ plugins/setup/setup_hooks/test/target_test.dart	inventory-only
 plugins/setup/setup_hooks/test/util_test.dart	inventory-only	
 plugins/setup/setup_hooks/test/windows_cache_test.dart	inventory-only	
 pubspec.lock	dependency-license-inventory	
-pubspec.yaml	manual-full	
+pubspec.yaml	manual-full	Complete manual source read
+services/helper/build.rs	manual-full	Complete manual source read
 services/helper/Cargo.lock	dependency-license-inventory	
-services/helper/Cargo.toml	manual-full	
-services/helper/build.rs	manual-full	
-services/helper/src/main.rs	manual-full	
-services/helper/src/service/hub.rs	manual-full	
-services/helper/src/service/linux.rs	manual-full	
-services/helper/src/service/mod.rs	manual-full	
-services/helper/src/service/owner.rs	manual-full	
-services/helper/src/service/peer.rs	manual-full	
-services/helper/src/service/windows.rs	manual-full	
+services/helper/Cargo.toml	manual-full	Complete manual source read
+services/helper/src/main.rs	manual-full	Complete manual source read
+services/helper/src/service/hub.rs	manual-full	Complete manual source read
+services/helper/src/service/linux.rs	manual-full	Complete manual source read
+services/helper/src/service/mod.rs	manual-full	Complete manual source read
+services/helper/src/service/owner.rs	manual-full	Complete manual source read
+services/helper/src/service/peer.rs	manual-full	Complete manual source read
+services/helper/src/service/windows.rs	manual-full	Complete manual source read
+tool/apply_core_patches_test.go	manual-full	Added during audit; complete source read
+tool/apply_core_patches.go	manual-full	Added during audit; complete source read
 tool/build_site.sh	inventory-only	
 tool/bump_version.sh	inventory-only	
 tool/changelog.dart	inventory-only	
 tool/check_coverage.dart	inventory-only	
-tool/check_plugins.sh	manual-full	
+tool/check_plugins.sh	manual-full	Complete manual source read
 tool/doctor.sh	inventory-only	
 tool/generate_status_icons.dart	inventory-only	
-tool/hooks/comment_density.sh	inventory-only	
 tool/hooks/comment_density_test.sh	inventory-only	
-tool/hooks/commit_msg.sh	inventory-only	
+tool/hooks/comment_density.sh	inventory-only	
 tool/hooks/commit_msg_test.sh	inventory-only	
+tool/hooks/commit_msg.sh	inventory-only	
 tool/hooks/test.sh	inventory-only	
 tool/package.dart	inventory-only	
 tool/release.sh	inventory-only	
@@ -427,18 +434,18 @@ tool/src/changelog/render.dart	inventory-only
 tool/src/changelog/verify.dart	inventory-only	
 tool/src/icons/ico.dart	inventory-only	
 tool/src/package/android.dart	inventory-only	
-tool/src/package/context.dart	manual-full	
+tool/src/package/context.dart	manual-full	Complete manual source read
 tool/src/package/linux.dart	manual-partial	manual lines 1-250 only
 tool/src/package/macos.dart	inventory-only	
 tool/src/package/manifest.dart	inventory-only	
-tool/src/package/steps.dart	manual-full	
+tool/src/package/steps.dart	manual-full	Complete manual source read
 tool/src/package/tools.dart	inventory-only	
 tool/src/package/version.dart	inventory-only	
-tool/src/package/windows.dart	manual-full	
+tool/src/package/windows.dart	manual-full	Complete manual source read
 tool/src/strip_rs_feature.dart	inventory-only	
 tool/strip_check.sh	inventory-only	
 tool/strip_rs_feature.dart	inventory-only	
-tool/test.dart	manual-full	
+tool/test.dart	manual-full	Complete manual source read
 tool/vps2vpn_icons.py	inventory-only	
 tool/worktrees.sh	inventory-only	
 windows/.gitignore	inventory-only	
@@ -450,16 +457,16 @@ windows/flutter/generated_plugin_registrant.h	generated-inventory
 windows/flutter/generated_plugins.cmake	generated-inventory	
 windows/legal/NOTICE.txt	dependency-license-inventory	
 windows/packaging/exe/ChineseSimplified.isl	inventory-only	
-windows/packaging/exe/inno_setup.iss	manual-full	
+windows/packaging/exe/inno_setup.iss	manual-full	Complete manual source read
 windows/packaging/exe/make_config.yaml	inventory-only	
 windows/runner/CMakeLists.txt	inventory-only	
-windows/runner/Runner.rc	inventory-only	
 windows/runner/flutter_window.cpp	inventory-only	
 windows/runner/flutter_window.h	inventory-only	
 windows/runner/main.cpp	inventory-only	
 windows/runner/resource.h	inventory-only	
 windows/runner/resources/app_icon.ico	binary-asset-inventory	
 windows/runner/runner.exe.manifest	inventory-only	
+windows/runner/Runner.rc	inventory-only	
 windows/runner/rust_api.h	inventory-only	
 windows/runner/utils.cpp	inventory-only	
 windows/runner/utils.h	inventory-only	

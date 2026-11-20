@@ -60,15 +60,43 @@ URL编辑原来仅把copyWith(new URL)传入下载；它现在先保存用户明
 
 九个受控Future回归经过实际Dio下载路径、模型保存与文件IO，验证最新URL/元数据、删除后不复活文件、改源/同源双刷新乱序、有效/失效错误、owner销毁、暂存后撤销和发布失败清理。该机制是单进程发布顺序保护，不是文件+数据库的跨进程/断电原子事务，也不声称验证了脚本内容的可信性。
 
+### D08 — 设置页在离页后读取 WidgetRef，异步按钮错误未被收集（中）
+
+位置：`lib/vps2vpn/mine.dart:28–58, 90–124, 388–396, 577–591`。剪贴板读取跨越 await 后未先检查 mounted，页面已经移除时仍会 setState/ref.read；刷新全部和单条订阅的 VoidCallback 丢弃失败 Future。设置页还重复使用未经保护的 expire×1000 和 int 上传+下载。
+
+修复在读取剪贴板后先确认页面存活，使用已有 globalState.safeRun 接收剪贴板、刷新、文件导入及复制命令的异常。订阅卡使用共同 expireDate/usage 边界并以 double 求和显示流量。五项 widget 回归覆盖空/有效迟到 Clipboard 响应、平台拒绝读取、两个刷新入口和极端日期/流量；没有执行真实导入、系统代理或退出操作。
+
+### D09 — YAML alias 图在转普通 Map/List 时指数复制（高，配置导入资源耗尽）
+
+位置：`lib/common/yaml.dart:21–47`；live 调用为 `lib/providers/state/custom_import.dart:78–89`。固定 yaml3.1.4 已拒绝自引用集合，但合法非循环 alias 返回共享 YamlNode；项目转换器会在每次引用及每个 merge 源重新递归复制，几十层双引用的小文档便可产生指数级工作和内存。仅限制下载字节不能防止该展开。
+
+修复先保留 YamlNode 图，以 identity 集合与迭代遍历计算唯一输入权重，再对含 alias 的 DAG 进行 memoized 展开估算。预算为 max(16 MiB, 唯一图估算体积×16)，饱和加法避免恶意图计数溢出；自身递归转换前限制深度256。没有给无 alias 大文档设固定条数/大小上限，普通 alias 仍产生独立副本，merge 优先级保持原样。权重是工程估算，不是 Dart VM 精确内存计量。
+
+九项回归包含 list/merge 指数图、正常副本隔离、深链、上游循环拒绝、MITM格式检测与实际自定义配置导入错误映射，以及无 alias 超8MiB标量。上游扫描器本身及其他直接使用 loadYaml 的入口并未因此完成统一输入治理。MITM 启用受 rsFeature=false 限制，而自定义配置导入无需该开关。
+
+### D10 — 持久化选项形成自环/双环时代理状态递归不终止（中）
+
+位置：`lib/common/compute.dart:107–129`；`lib/providers/state/proxies.dart:224–252`。selectedMap 来自当前 Profile 的持久状态。Selector 已检查成员，但 URLTest/Fallback 在 now 尚空时会直接采用旧 selectedMap；非成员自选能让递归状态解析不断返回同一组。未知成员集合、异常组状态和很深的有效链也不能依赖 Core 的正常图校验来保证 Dart 调用栈安全。
+
+修复使用迭代+visited，存在成员快照时确认下一跳归属。非法选择或环返回既有空 proxyName 约定，现行测速调度会跳过空目标；有效链仍保留最终节点、group 标记和对应 testUrl。沿用现有按列表缓存的组索引，每次沿链至多访问一个组一次，没有每层重建索引。四项回归覆盖 computed 旧选项、自环、双环和一万层有效链。
+
+### D11 — Protobuf长度回绕与gRPC解压预算复用（中，当前MITM能力未启用）
+
+位置：`lib/common/mitm_protobuf.dart:68–117,129–192`。原varint读到第十字节仍接受超过uint64的高位；长度即使仍为正数，bodyStart+length也可能回绕为负数并交给sublistView抛RangeError。gRPC累计计数只接纳成功解码的帧，超过上限后被丢弃的帧可让后续帧重复解压到8MiB边界。
+
+修复限制第十字节有效位，先以剩余长度比较再相加；解压器返回实际已处理的输出字节，即使该帧最后失败/超限也消耗body预算。预算耗尽后不再为后续压缩帧创建解压器，而保留原始字节的hex及上限说明。合法uint64最大值、普通gRPC帧和trailer行为保留；截断模式仍可返回已完成字段。
+
+新增四个整数/截断边界回归，并调整原有gzip测试：旧测试明确期望超限失败帧之后仍能重新解压小帧，现在按body累计预算显示后续压缩帧的原始内容。这是有意收紧解码工作边界，不能把它解释成公网VPN流量已完成MITM验收。rsFeature=false及Core stub的范围限制仍成立，也不声称对每种损坏zlib输入的CPU成本作了形式证明。
+
 ## 验证与限制
 
-本分工新增26个专项case：test/database/audit_restore_test.dart 6项；test/models/audit_data_models_test.dart 8项；test/models/references_test.dart追加3项；test/providers/script_update_test.dart 9项。已有相关测试也按PR CI运行。测试代码已上传MCP，执行结果应以本PR最后代码提交对应的Actions为准；编写报告时这批最新Dart代码尚待合并后的统一代码生成与CI，不把其他提交通过数算作本次验证。
+本分工目前新增48个专项case：test/database/audit_restore_test.dart 6项；test/models/audit_data_models_test.dart 8项；test/models/references_test.dart追加3项；test/providers/script_update_test.dart 9项；test/vps2vpn/mine_audit_test.dart 5项；test/common/audit_yaml_test.dart 9项；test/common/audit_compute_test.dart 4项；test/common/audit_protobuf_test.dart 4项，并修正一个既有gRPC预算测试的期望。已有相关测试也按PR CI运行。测试代码已上传MCP，执行结果应以本PR最后代码提交对应的Actions为准；编写报告时这批最新Dart代码尚待合并后的统一代码生成与CI，不把其他提交通过数算作本次验证。
 
 建议在锁定依赖和真实代码生成后执行：
 
 ```sh
 dart run build_runner build --delete-conflicting-outputs
-flutter test test/database/audit_restore_test.dart test/models/audit_data_models_test.dart test/models/references_test.dart test/providers/script_update_test.dart
+flutter test test/database/audit_restore_test.dart test/models/audit_data_models_test.dart test/models/references_test.dart test/providers/script_update_test.dart test/vps2vpn/mine_audit_test.dart test/common/audit_yaml_test.dart test/common/audit_compute_test.dart test/common/audit_protobuf_test.dart test/common/mitm_body_test.dart
 flutter test
 flutter analyze
 ```
@@ -109,10 +137,42 @@ flutter analyze
 | `lib/providers/actions/scripts.dart` | 45 | `1e1caa3b41585f69640eb2c10ce9fa9851c62e7e` | 下载、删除、编辑、状态发布与更新指示器；D07。 |
 | `lib/views/config/scripts.dart` | 400 | `2a81395dbc0469831b4200e80d2051c1ff081c38` | 创建/导入/保存/URL编辑/删除全流程；URL编辑改为先保存显式意图，D07。 |
 
+### 后续全文扩审（当前检查点）
+
+下列文件按 PR head f514021658fcbefba75a5392b04f609db7b71cf4 完整读取。行数与 blob 指该检查点，不冒充基线；其中其他分工也完整检查的文件在总表应去重。此表目前 24 个文件、7271 行；后续新增阅读会继续补入。
+
+| 文件 | 已读版本行数 | 已读Git blob SHA |
+| --- | ---: | --- |
+| `lib/vps2vpn/mine.dart` | 715 | `4bb07f12fbce06a98067dccf47fb99966e36810e` |
+| `lib/common/num.dart` | 67 | `e78b97d70b1879b3cfeed64d06536c01c8bc06eb` |
+| `lib/common/yaml.dart` | 48 | `8b7688578debe09662beb805990fd3634b87b40f` |
+| `lib/common/compute.dart` | 163 | `c65f984b1cef92a636fdacfa50be25536e0613a7` |
+| `lib/common/mitm_module.dart` | 3026 | `49611cec4c916936cf6a870b748e41ad37a6296f` |
+| `lib/providers/mitm.dart` | 533 | `e215270c8fb66e1f62d201877c04a6cda78baac2` |
+| `lib/providers/state/proxies.dart` | 275 | `79555c894ca81b65e3a15dab628cb3f3beb95c89` |
+| `lib/providers/core.dart` | 7 | `16f730b3ec7185342a47772585e0d126d89dc0d9` |
+| `lib/common/protocol.dart` | 111 | `4b6d8c2ad1cda5ee582c465c5afd5af1fa3a1fa9` |
+| `lib/common/provider_reader.dart` | 3 | `efd13a21fb943500789e31bfc5fdd70d84e32ff6` |
+| `lib/common/task_pool.dart` | 36 | `e87c8f51aaecf869ced8b47b625d41f5f3cf05a4` |
+| `lib/common/lock.dart` | 48 | `9fccd0bff12ab2cf9bec892f3c7e3a33aaeac220` |
+| `lib/common/javascript.dart` | 84 | `bb122dd9a810bfd89f9d71d1c12e8fc8da1e5f0d` |
+| `lib/common/mitm_body.dart` | 309 | `f5da486c87ec040738b3f4a04c7f3efff449ed1c` |
+| `lib/common/mitm_protobuf.dart` | 271 | `187917ccd379d37ae8cf79d83f1ed8f22e692f9f` |
+| `lib/common/mitm_network.dart` | 282 | `8d48231429e2a947a86eb0c3346d0ce4b39e10b1` |
+| `lib/common/mitm_requirement.dart` | 189 | `c1bc964daf418a6e23af41e61eba038b58d53e35` |
+| `lib/common/app_ports.dart` | 48 | `bc6029bcecc2e9001109e91747342b2d9e53a1f0` |
+| `lib/common/boot_guard.dart` | 106 | `dae7cb0c5bb484f725f8cd243b4f8b747eb33293` |
+| `lib/common/boot_record.dart` | 224 | `66baeba5c508a7abc3da7f9be2a83e03f69856d1` |
+| `lib/common/cidr.dart` | 186 | `715b7b14f499a13db0d7b99dc71c4844c3dc96ee` |
+| `lib/common/function.dart` | 161 | `4e9cf51b47be1c0b9377b15e35e4c19170d83a5a` |
+| `lib/common/future.dart` | 115 | `dda204940480eda05c4ce13c03d467e998a21352` |
+| `lib/common/indexing.dart` | 264 | `72c052eb29caec7ef13e2039eb1ab641cb28a439` |
+
+MITM module 全文覆盖了 Surge/Loon/Quantumult X/Stash 解析、参数替换、脚本/资源映射、rule provider、网络覆盖、requirement 和跨模块合并。其自身资源basename约束来自平台分工，继续保留；本次确认的深层展开问题在共同 YAML 边界修复。MITM export/trust、请求与WebDAV等由平台分工全文覆盖，此处不把仅取回的副本计作全文阅读。
 ### 交叉追踪与独立复核范围
 
 - lib/models/profile.dart在本分工只阅读SubscriptionInfo及调用点，全文审阅归网络分工；lib/providers/state/custom.dart和actions/profiles.dart只追踪DNS/emptyFallback引用约束；lib/providers/database.dart只追踪Scripts状态写入契约。它们虽取回了完整内容，不能因此在本分工标全文阅读。
-- 原有test/models/references_test.dart已全文阅读并新增回归。DAO coverage/generated_contract等大测试只读相关段，实际运行由统一CI完成。新增三个专项测试文件均全文编写复核。
+- 原有test/models/references_test.dart已全文阅读并新增回归。DAO coverage/generated_contract等大测试只读相关段，实际运行由统一CI完成。新增专项测试文件均全文编写复核；原有 test/common/compute_test.dart 与 test/common/mitm_body_test.dart 也已全文阅读。
 - 独立全文复核主审新增lib/common/icon_file_service.dart（blob d6c752e487beffd150a93880bb7f001fe0c91a46）及修改后lib/widgets/icon.dart（blob e1b1742837e7c838ab6adb960c2226bb4cf1128b），未另改这两个文件。确认有限响应读取、截止时间、客户端关闭、旧缓存读取、缓存字节/条目数边界，不把单响应限制解释成全进程并行解码内存上界。
 - 固定Drift/mihomo上游只阅读与异常/协议契约有关的实现，未审计整个第三方依赖。
 
@@ -128,3 +188,5 @@ flutter analyze
 - [Microsoft WinINet绕过列表与通配符](https://learn.microsoft.com/en-us/windows/win32/wininet/enabling-internet-functionality)
 - [Dart DateTime有效范围](https://api.dart.dev/dart-core/DateTime-class.html)
 - [固定mihomo DNS解析实现](https://github.com/chen08209/Clash.Meta/blob/5b453f80dbcee6b3ecfb0415bcace24a48c88707/config/config.go)
+
+补充协议依据：[yaml3.1.4 Loader alias identity/循环拒绝](https://github.com/dart-lang/tools/blob/yaml-v3.1.4/pkgs/yaml/lib/src/loader.dart)、[YamlNode节点视图](https://github.com/dart-lang/tools/blob/yaml-v3.1.4/pkgs/yaml/lib/src/yaml_node.dart)、[Protobuf wire encoding](https://protobuf.dev/programming-guides/encoding/)、[Dart RawZLibFilter](https://api.dart.dev/dart-io/RawZLibFilter-class.html)。

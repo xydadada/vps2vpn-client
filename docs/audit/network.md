@@ -2,7 +2,7 @@
 
 审计基线：`5860a5ba2ab6001869586561fccb56309db6c3e1`。审计日期：2026-11-20。关联 [客户端 PR #2](https://github.com/xydadada/vps2vpn-client/pull/2)。服务端修改及原生平台修改分别见本次审计的其他章节。
 
-本章记录确认的问题、修复依据、验证证据以及没有完成的覆盖。代码位置以函数名为稳定定位，行号对应本章初次生成时的修复版本；后续格式化可能移动行号。完整逐文件台账见 [network-coverage.csv](network-coverage.csv)，不能把“执行过测试”视为“逐行人工审查过”。
+本章记录确认的问题、修复依据、验证证据以及没有完成的覆盖。当前验证快照更新至 `f5140216` 的 CI；后续补充的锁文件、UI 和新增边界测试仍需以 PR 最新检查为准。代码位置以函数名为稳定定位，行号对应本章初次生成时的修复版本；后续格式化可能移动行号。完整逐文件台账见 [network-coverage.csv](network-coverage.csv)，不能把“执行过测试”视为“逐行人工审查过”。
 
 ## 1. 架构与跨仓库数据流
 
@@ -110,7 +110,7 @@
 
 文件写入、校验、复制任一阶段异常时，旧实现会留下临时节点凭据。将完整流程放入 try/finally，保证清理临时文件；成功仍更新 lastUpdateDate。
 
-**回归：** 校验返回错误、validator 抛异常、成功保存，验证临时文件被删除且失败不覆盖现有 profile。订阅并发更新的过时发布问题见后续事项，不能把此清理修复当作原子发布保证。
+**回归：** 校验返回错误、validator 抛异常、成功保存，验证临时文件被删除且失败不覆盖现有 profile。过时下载及本地编辑的发布所有权另由 N14 修复；清理和原子发布是两项不同的保证。
 
 ### N11 — 低：Windows 复制的 PowerShell 代理设置命令无效
 
@@ -130,6 +130,75 @@
 
 补丁仅针对一个固定上游文件，原 Git blob 为 `b1659cd085d278193a94ed860e3bfd9a8721d95e`，修后为 `edae0d6beff38ebf3df994da317a4fac7d6944c1`。统一应用工具验证 gitlink、子模块 HEAD 及文件原/修 hash，允许幂等的已修状态，未知漂移应拒绝；构建与 CI 接入由平台章节记录。没有偷偷改变 gitlink。更新上游时必须重新审查或移除此补丁。
 
+
+### N13 — 高：Android CoreLib 的重叠 start、stop、close 可完成到过时实例
+
+**位置：** `lib/core/lib.dart:_enqueue/start/_start/stop/restart/close/startListener/stopListener/_send`；回归 `test/core/lib_test.dart`。
+
+旧实现用一个共享 Completer 表示连接：两个尚未完成的 start 可重复完成它；stop 或 close 早于 service.init、共享状态同步、listener 启动完成时，迟到的任务可能重新启动已经关闭的实例。初始化中途异常可能遗漏 shutdown；shutdown 失败后若过早清除所有权，下一次操作也无法重试释放。等待旧连接 gate 的 RPC 还可能在新实例启动后误发给新连接。
+
+修复用同一异步队列串行管理实例与 listener 命令，同时在用户发出 stop、restart、close 时立即推进 generation，让正在等待异步结果的旧 start 失效。相同 generation 的并发 start 合并；每个关键 await 后检查 generation，失败或取消的初始化由 finally 清理。shutdown 失败保留“仍需清理”的状态，后续 stop 或显式 close 可以重试。RPC 捕获自己的 gate，拒绝已关闭或被替换的 gate。
+
+Android 的 service.start 返回“已接受命令”，不是“已经建立 TUN”；原生 run-intent 仲裁器会撤销旧 token。Dart 因此也记录本实例尚未确认 running 的 listener start：close 遇到这种未完成启动时，在队列内发 stop 后再 shutdown。**已经运行、或启动前就存在的 Android VPN 仍按既有设计 detach，不因关闭 Flutter UI 无条件停止。** 这一点与原生平台章节的权限请求/撤销回归配套。
+
+**回归：** 同代 start 合并；stop/restart 与阻塞 init/sync 交错；close 后不能重新启动；失败 shutdown 与 close 可重试；旧 gate RPC 不发送；Core listener 回包或 native start 接受迟到时取消；已运行 VPN close 只 detach；接受但还未 running 的启动 close 会撤销。未将 fake service 测试等同于 Android 真机 TUN 验证。
+
+### N14 — 高：过时订阅下载可覆盖新配置、恢复已删除行或撤销用户编辑
+
+**位置：** `lib/models/profile.dart:update/saveFile`；`lib/providers/actions/profiles.dart:_claimProfileWrite/_updateProfile/saveProfileFile/updateMissingProfile/putProfile/deleteProfile`；`lib/providers/actions/setup.dart:_setupConfig`；`lib/views/profiles/edit.dart:_handleConfirm`。
+
+原先动作层仅在下载后检查行是否存在，但模型已经复制 bytes 到正式配置文件；编辑 URL、删除、并发刷新或本地替换文件时，过时内容会先落盘。初始动作还会把调用者旧 snapshot put 回数据库，覆盖新 URL 或重建已删除行。Setup 对缺失文件的自动下载绕开了动作层检查，因此不能只修“手动刷新”入口。
+
+现在同一 profile 的下载、缺失文件修复和本地编辑共享操作 token。每次发布检查 provider 存活、token、现存行、类型、URL 和 age key；用户 put/delete 取消旧操作。过时异常不再报告到新行；当前操作错误仍向调用者传播。成功只将本次内容元数据或编辑字段合并到最新行，保留下载期间更新的选择状态。
+
+配置先在临时文件中校验，再复制到目标目录的独立 staging 文件；最终所有权检查和单次同步 metadata rename 在同一个 Dart 事件回合内完成。大文件写入与复制保持异步。staging 与目标位于同一文件系统，不预先删除目标；替换失败时旧文件仍在，finally 清理本次 staging 和校验文件。Windows 的替换语义依赖 Dart 的 MoveFileExW 实现，仍需真机占用/权限场景验证。
+
+编辑 URL 立即保存新来源，再延迟刷新；延迟动作按 id 读取当前行。Setup 仅在文件缺失时使用相同动作路径，并关闭递归 reapply；等待结束后重新读取当前选中 profile，避免将已经切换或删除的旧行作为下一次 setup。
+
+**回归：** `profile_file_test.dart` 覆盖校验错误/异常、取消、旧验证最后完成、目标替换失败及临时清理；`profile_update_test.dart` 的 13 个场景覆盖新 URL、删除、重叠下载、过时/当前异常、缺失文件修复与显式刷新交错、本地/远程互相取代、保留选择以及同 URL 编辑使旧请求失效；编辑页回归验证新 URL 在延迟刷新之前入库。网络采用受控 Dio adapter，保存与 CoreController 校验路径实际执行。
+
+### N15 — 中：桌面连接等待超时后没有取消底层订阅
+
+**位置：** `lib/core/desktop/transport.dart:waitUntilConnected`。
+
+对 `firstWhere` 返回的 Future 加 timeout 只结束等待者，不会取消仍在监听的 StreamSubscription；长期不连接或不断重试会留下等待者，直到以后某个连接事件到来。
+
+将 timeout 放在筛选后的 stream 上，再取 first。超时错误令 first 取消自己的上游订阅；普通连接和关闭语义保持。已有 `test/core/desktop/transport_test.dart` 覆盖连接、超时及断开路径；没有为这一机制额外加入只检查实现文字的测试。
+
+### N16 — 中：订阅/会员时间和大数值可使界面异常或错误显示用量
+
+**位置：** `lib/models/profile.dart:SubscriptionInfo.formHString/fromJson/expireDate/usage`；`lib/vps2vpn/panel.dart:VpsMember/VpsAiStatus`；共用边界函数及 UI 使用者见数据层和 UI 审计章节。
+
+任意服务器或恢复数据中的 expire 值直接乘 1000 并构造 DateTime，可能溢出或超出显示支持的年份；上传和下载计数先用 int 相加也可能溢出。会员 numeric 转换对非有限 double 调用 toInt，以及将超大 quota 乘 GiB 后 round，都会使本来可显示的账户结果失败。
+
+数据层共用 `unixSecondsOrZero`/`dateTimeFromUnixSeconds` 在转换前验证有限性、非负性以及最高 9999 年边界，非法输入视为未知。SubscriptionInfo 的 JSON、响应头和直接 getter 都使用该边界；生成文件由真实 build_runner 更新。用量先转 double 再求和。会员 byte counter 拒绝负数/NaN/Infinity，并界定在 int64 范围；`used` 返回有限 double，`quotaBytes` 同时保护 JSON 和直接构造场景，乘法溢出或非法配额返回已有的无有效配额状态。UI 使用 getter，无需重复 round 或未经验证的日期构造。
+
+**回归：** 数据层 `audit_data_models_test.dart`、`panel_test.dart` 的非法时间输入以及 `member_bounds_test.dart` 的 NaN/±Infinity/负数、最大整数双计数、1e100 计数、1e308 quota、直接构造场景。设置页和账户展示的 widget 回归由相关 UI 章节记录。
+
+### N17 — 高：实际依赖扫描发现 7 个可达符号级安全公告
+
+**位置：** `core/go.mod`、`core/go.sum`。首次证据：CI dependency-audit job `136235432718`（已读取完整 job 日志，后续可点击验证记录见下表）。“符号可达”是 govulncheck 的保守静态结果，不等于已经复现了可利用攻击。
+
+| 模块 | 原版本 → 选择版本 | 公告与依据 |
+| --- | --- | --- |
+| andybalholm/brotli | 1.1.1 → 1.2.7 | [GO-2026-6888](https://pkg.go.dev/vuln/GO-2026-6888)，恶意解压数据可拒绝服务；同时核对 Go vuln 数据库和上游修复版本，不夸大成 RCE |
+| klauspost/compress | 1.17.9 → 1.20.2 | [GO-2026-6865](https://pkg.go.dev/vuln/GO-2026-6865)，fse/huff0 边界 panic；扫描 trace 涉及压缩相关接口 |
+| golang.org/x/net | 0.59.0 → 0.62.0 | [GO-2026-6617](https://pkg.go.dev/vuln/GO-2026-6617)、[6612](https://pkg.go.dev/vuln/GO-2026-6612)、[6611](https://pkg.go.dev/vuln/GO-2026-6611)、[6610](https://pkg.go.dev/vuln/GO-2026-6610)、[6603](https://pkg.go.dev/vuln/GO-2026-6603)：HTTP/2 并发、流控、CPU/内存和转发边界；0.62 还覆盖较新的 HTML [6860](https://pkg.go.dev/vuln/GO-2026-6860)/[6866](https://pkg.go.dev/vuln/GO-2026-6866) |
+| insomniacslk/dhcp | 2025-01-09 伪版本 → 2026-07-19 c76316d4aa82 | 后续仅 module-level 的 [GO-2026-6237](https://pkg.go.dev/vuln/GO-2026-6237)：IPv4 payload 不足 UDP 头时可能产生负长度；当前扫描未导入该受影响 package，仍选择已修版本 |
+| golang.org/x/crypto | 0.57.0 → 0.58.0（resolver）→ 0.58.1-0.20261009181718-2f1f834330b2 | 后续仅 module-level 的 [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932)：openpgp 已不维护；上游将其拆出根模块，本程序扫描未导入它。此升级不是宣称修好了 OpenPGP 协议 |
+
+x/net 的 HTTP/2 trace 包括 `updateListeners → listener.PatchInboundListeners → http2.Server.ServeConn` 及连接/transport 接口；Brotli/compress 的若干 trace 穿过 interface 和 Error 方法，不能据此把每一条都解释为某个外部输入的已证明利用路径。官方 OSV、修复 commit 及目标 go.mod 均已逐项检查，所需 Go 版本不高于当前 1.27.4。
+
+第一轮三项升级在 `f5140216` 的真实 `go mod tidy` 工作树已通过 Core tests、vet、Android static、race；govulncheck 报 **0 符号漏洞、0 导入 package 漏洞、2 module-only 公告**。其实际 resolver diff 被逐行应用回固定基线，并校验输出 Git blob 与 CI 报出的 index 一致：go.mod `3d98ca16…`、go.sum `bb406d47…`。随后两项 module-only pin 已补交，新的 go.sum 和最终扫描仍需由后续 CI 生成及确认。没有改 mihomo gitlink，没有猜测或手编 h1 校验和。
+
+### N18 — 中：Core stderr 按 OS 分片直接解码可抛出未处理异常
+
+**位置：** `lib/core/desktop/launcher.dart:DirectCoreLauncher.start`；回归 `test/core/desktop/launcher_test.dart`。
+
+OS 的 byte stream 分片不保证 UTF-8 字符完整，旧代码对每个 chunk 调用 utf8.decode。包含中文节点名或诊断的合法文本在字符中间分片时会 FormatException；坏字节也会变成未处理 stream callback 异常。
+
+改用有状态 `Utf8Decoder(allowMalformed: true)` stream，跨 chunk 拼接多字节字符，非 UTF-8 诊断只显示替代字符。回归通过 fake process 的真实 launcher 路径发送“中”的分片和 0xff，验证日志以及仍可确认停止租约；没有启动真实 Core 或修改主机网络。
+
 ## 3. 已追踪并排除的疑似问题
 
 ### Hysteria2 的 insecure=1 不等于忽略服务器 pin
@@ -142,7 +211,7 @@
 
 ### 对平台修复的独立复核
 
-复核 PAC 请求槽位、绝对读取期限与 helper 失败清理时，额外发现写入 `write_all` 可因部分进度重置超时，以及 stderr 线程创建 panic 发生在 child 托管之前。已反馈并复核平台修订：读写共用绝对 deadline；逐次部分写重算剩余时间；child 在任何可失败的后续动作前托管；stderr 使用可返回错误的 Builder::spawn。平台章节提供其具体测试与最终 blob。
+复核 PAC 请求槽位、绝对读取期限与 helper 失败清理时，额外发现写入 `write_all` 可因部分进度重置超时，以及 stderr 线程创建 panic 发生在 child 托管之前。已反馈并复核平台修订：读写共用绝对 deadline；逐次部分写重算剩余时间；child 在任何可失败的后续动作前托管；stderr 使用可返回错误的 Builder::spawn。平台章节提供其具体测试与最终 blob。另已全文独立复核补丁应用工具的固定 gitlink/HEAD、原/修 source hash、补丁本体 hash、目录锁和幂等测试；Dio 5.11.1 的 handleResponseStream 证实取消 token 会关闭响应并取消 source，即使声明超限 body 尚未被消费。WebDAV 的跨 origin PUT 拒绝、foreign 401 不采纳 Digest 状态，以及 Android SSID best-matching physical network 的主线程单选状态也完成独立复核。
 
 ## 4. 验证证据与限制
 
@@ -152,7 +221,12 @@
 | 初始 PR head `a8746045` 的 Core tests | 成功 | [job 136220373713](https://github.com/xydadada/vps2vpn-client/actions/runs/44716274559/job/136220373713) |
 | 同一 job 的 Go static checks / Android static checks | 两项成功 | 精确命令以 workflow/log 为准 |
 | 同一 job 的 Core race checks | **失败** | 实际发现 N12；不是环境失败，不做忽略 |
-| 首轮 Flutter tooling gate | 失败后修复入口 | Node 将目录当模块导致 MODULE_NOT_FOUND，Flutter分析/测试尚未开始；后续已交平台修正 |
+| 首轮 Flutter tooling gate | 失败后修复入口 | Node 将目录当模块导致 MODULE_NOT_FOUND，后续由平台修正 |
+| 第三轮 Flutter 编译 | 发现并修正本次重建的 callback cascade 编译错误 | panel TLS arrow callback 使后续 cascade 绑定到 bool；改为 block 后后续分析为零 error/零 warning。没有把未编译的测试记为通过 |
+| `946c37c9` Go / race | 全部成功 | [job 136236398990](https://github.com/xydadada/vps2vpn-client/actions/runs/44720964478/job/136236398990)：Core 5.326s，race 6.726s；patch tooling/幂等应用/vet/Android static 同时成功 |
+| `f5140216` 升级依赖后的 Core / race | 实际 resolver 工作树全部成功 | [job 136238759083](https://github.com/xydadada/vps2vpn-client/actions/runs/44721647657/job/136238759083)：Core 5.378s，race 6.633s；job 红色来自待回写的 lockfile diff，非测试失败 |
+| `f5140216` Go 漏洞扫描 | 0 reachable symbols，0 imported packages；2 module-only | [job 136238758716](https://github.com/xydadada/vps2vpn-client/actions/runs/44721647657/job/136238758716)，后续两项 pin 已交；该 job 的 Rust 部分另有失败，不能写作整个依赖 gate 通过 |
+| 完整 Flutter / Linux / Android 构建 | 尚未全部收敛 | 已有部分测试实际运行；字体规范、锁文件、平台构建依赖等由 PR CI 暴露后修复。Linux native hook 当前日志裁剪了底层错误，未证实根因前不写为仅缺 sum |
 | 新增 TLS、alias budget、controller 顺序、Core 生命周期等后续测试 | 以 PR 最新独立 CI gates 为准 | 本章不能将尚未运行的测试写为通过 |
 
 本地执行环境后来失联，无法继续运行 Flutter、格式化器或 shell。此后从固定基线重新获取源文件，通过 GitHub MCP 创建可审查 blobs，由 PR CI 进行真实构建与测试。后续审计报告的总体验证表应记录**最新提交**的 CI 结果，不能沿用早期测试成功作为最终证明。
@@ -161,7 +235,7 @@
 
 ## 5. 覆盖台账与未完成范围
 
-本子任务已完整阅读全部 **44 个自有 Go 生产源文件**，包括 Android build-tag 文件、mobile wrapper、TUN、IPC、规则、探测和持久化路径；第三方模块不包含在这个数字中。初次台账中另有 31 个 Dart 生产文件完整阅读、8 个文件明确标为重点片段阅读，19 个 Go 测试文件主要依赖自动化执行及片段检查。准确逐文件状态在 CSV，后续新增阅读会更新台账。
+本子任务已完整阅读全部 **44 个自有 Go 生产源文件**，包括 Android build-tag 文件、mobile wrapper、TUN、IPC、规则、探测和持久化路径；第三方模块不包含在这个数字中。台账现有 **53 个 Dart 生产源文件**完整阅读，其中 **lib/core 的 17 个自有 Dart 文件全部全文阅读**。另有明确标为重点片段、自动化加选读、生成文件及仅 inventory 的项目；19 个 Go 测试文件主要依赖自动化执行及片段检查。独立复核平台 owned 文件也单独注明来源，没有把获取过文件等同于逐行审查。准确逐文件状态在 CSV。
 
 其他 Dart common/providers/models/database 文件中，仍有仅完成 inventory、没有由本子任务逐行深读的文件。其他审计者可能在平台或 UI 章节覆盖它们，但不能自动将这些文件计为本章完整人工审查。Generated 文件按 generator-owned 标记，不手工改生成内容。Go module lock 数据不是依赖全量漏洞审计。
 
@@ -169,10 +243,10 @@
 
 ## 6. 后续事项
 
-1. **Android CoreLib 生命周期竞态已确认，正在修复与增加 fake-Service 回归。** 两个 in-flight start 可能重复完成 Completer；close 早于 init 完成时可能结束后仍启动。最终 PR 必须以补充修复和测试状态为准。
-2. **订阅更新的过时发布窗口已确认。** ProfilesAction 在下载后才检查 latest row，但 Profile.update 已先复制配置文件；并发 URL 变化/删除可能先发布过时 bytes。应把 publication guard 或串行化放进保存边界，并保证失败清理；仅检查最终 metadata 不够。
-3. **仅 REALITY 自签名面板、不同反向代理证书、首次 HTTP 信任引导**见 N01，安全失败仍是兼容性限制。
-4. 规则更新 rename、配置文件写入仍需 Windows 真机权限/杀毒软件占用场景验证；Linux loopback tests 不覆盖全部文件系统行为。
-5. `pickPort` 的探测与最终 listener bind 之间仍有操作系统级 TOCTOU；应依赖最终 bind 错误处理，不能宣称预探测保证端口永远可用。
-6. 动态 timer 的用户切换、暂停/恢复及报告状态在真实应用中的长期行为仍需验证。已有原生调用一旦发出不能撤销。
-7. 桌面 transport 的连接等待取消、备份资源路径和其他下载上限仍在相关章节继续检查；未验证的怀疑不列为已修缺陷。
+1. **最终 CI 仍必须跟随最后提交。** 不能把 `f5140216` 的已解析工作树通过，写成后续所有 UI、依赖和新增边界测试已经验证；锁文件回写、格式化和 generator diff 都需收敛到提交内容。
+2. **仅 REALITY 自签名面板、不同反向代理证书、首次 HTTP 信任引导**见 N01，安全失败仍是兼容性限制；需要安全的面板 pin 分发设计。
+3. 规则更新和配置原子替换仍需 Windows 真机权限、杀毒软件占用及磁盘故障场景验证；Linux 文件与 loopback 测试不覆盖全部文件系统行为。
+4. `pickPort` 的探测与最终 listener bind 之间仍有操作系统级 TOCTOU，应依赖最终 bind 错误处理。
+5. 动态 timer 的切换、暂停/恢复、Wi-Fi/cellular/default network 改变及后台运行需要真实应用长时间验证。已有原生命令一旦发出不能撤回；本修复阻止后续过时动作并通过 token/队列收敛状态。
+6. Dart YAML 展开、脚本和 MITM 资源的过时发布与路径边界、备份恢复等由数据层/平台章节继续覆盖，不能将本章的 profile 修复自动推广为所有资源都已处理。
+7. 未进行真实吞吐、长时间负载、功耗或整条互联网故障切换 benchmark；没有给出未经测量的性能提升百分比。

@@ -1,3 +1,6 @@
+import 'dart:collection';
+import 'dart:math' as math;
+
 import 'package:fl_clash/common/yaml_writer.dart';
 import 'package:yaml/yaml.dart';
 
@@ -19,7 +22,93 @@ class Yaml {
 final yaml = Yaml();
 
 /// Applies `<<` merge keys as mihomo does; package:yaml keeps them as keys.
-Object? loadPlainYaml(String content) => _plainYaml(loadYaml(content));
+Object? loadPlainYaml(String content) {
+  final node = loadYamlNode(content);
+  _checkPlainYamlGraph(node);
+  return _plainYaml(node.value);
+}
+
+/// Alias nodes share their targets in package:yaml, but the plain conversion
+/// below intentionally makes independent copies. Check the DAG before copying,
+/// including merge sources and map keys, so a small document cannot require an
+/// exponential amount of work or memory.
+void _checkPlainYamlGraph(YamlNode root) {
+  const maxDepth = 256;
+  const minExpansionBudget = 16 << 20;
+  final seen = HashSet<YamlNode>.identity();
+  final pending = <(YamlNode, int)>[(root, 0)];
+  var originalWeight = 0;
+  var hasAliases = false;
+  while (pending.isNotEmpty) {
+    final (node, depth) = pending.removeLast();
+    if (depth > maxDepth) {
+      throw const FormatException('YAML nesting is too deep');
+    }
+    if (!seen.add(node)) {
+      hasAliases = true;
+      continue;
+    }
+    originalWeight += _yamlNodeWeight(node);
+    for (final child in _yamlNodeChildren(node)) {
+      pending.add((child, depth + 1));
+    }
+  }
+  // Ordinary large documents do not have an absolute node-count limit.
+  if (!hasAliases) return;
+  final budget = math.max(minExpansionBudget, originalWeight * 16);
+  final weights = HashMap<YamlNode, int>.identity();
+  final heights = HashMap<YamlNode, int>.identity();
+  final active = HashSet<YamlNode>.identity();
+  final stack = <(YamlNode, bool)>[(root, false)];
+  while (stack.isNotEmpty) {
+    final (node, complete) = stack.removeLast();
+    if (weights.containsKey(node)) continue;
+    if (!complete) {
+      if (!active.add(node)) {
+        throw const FormatException('Recursive YAML aliases are not supported');
+      }
+      stack.add((node, true));
+      for (final child in _yamlNodeChildren(node)) {
+        if (!weights.containsKey(child)) stack.add((child, false));
+      }
+      continue;
+    }
+    var weight = _yamlNodeWeight(node);
+    var height = 0;
+    for (final child in _yamlNodeChildren(node)) {
+      height = math.max(height, heights[child]! + 1);
+      // Saturate before addition; malicious DAGs can exceed int64's range.
+      final childWeight = weights[child]!;
+      weight = childWeight > budget - weight ? budget + 1 : weight + childWeight;
+    }
+    if (height > maxDepth) {
+      throw const FormatException('YAML nesting is too deep');
+    }
+    heights[node] = height;
+    weights[node] = weight;
+    active.remove(node);
+  }
+  if (weights[root]! > budget) {
+    throw const FormatException('YAML aliases expand beyond the supported size');
+  }
+}
+
+// A conservative estimate, not a claim about the VM's exact allocation size.
+// Count UTF-16 code units without allocating another encoded copy of a scalar.
+int _yamlNodeWeight(YamlNode node) =>
+    32 + (node.value is String ? (node.value as String).length * 2 : 0);
+
+Iterable<YamlNode> _yamlNodeChildren(YamlNode node) sync* {
+  switch (node) {
+    case YamlMap():
+      for (final entry in node.nodes.entries) {
+        yield entry.key as YamlNode;
+        yield entry.value;
+      }
+    case YamlList():
+      yield* node.nodes;
+  }
+}
 
 Object? _plainYaml(Object? node) => switch (node) {
   YamlMap() => _plainYamlMap(node),

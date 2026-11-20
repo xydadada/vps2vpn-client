@@ -1,0 +1,23 @@
+// Flutter's included Gradle build has its own plugin repositories. Keep the
+// workaround scoped to that build, without editing the SDK or global Gradle
+// configuration. Use a dedicated GRADLE_USER_HOME; see the adjacent README.
+gradle.beforeSettings { settings ->
+    def flutterRoot = System.getenv('FLUTTER_ROOT')
+    if (flutterRoot == null || flutterRoot.trim().isEmpty()) {
+        return
+    }
+    def flutterBuild = new File(
+        flutterRoot, 'packages/flutter_tools/gradle'
+    ).canonicalFile
+    if (settings.settingsDir.canonicalFile != flutterBuild) {
+        return
+    }
+    settings.pluginManagement.repositories {
+        // Resolve Kotlin artifacts directly instead of relying on the Plugin
+        // Portal's Maven Central mirror. The Portal still supplies its markers.
+        mavenCentral()
+        google()
+        gradlePluginPortal()
+    }
+    println('vps2vpn: official plugin repositories enabled for Flutter Gradle build')
+}

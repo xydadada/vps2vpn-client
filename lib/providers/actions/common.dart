@@ -240,8 +240,7 @@ class CommonAction extends _$CommonAction {
         onReceiveProgress: (received, total) {
           // Every chunk would otherwise rebuild the status on its own frame.
           final step = total > 0 ? total / 100 : 1 << 20;
-          if (!ref.mounted ||
-              (received - shown < step && received != total)) {
+          if (!ref.mounted || (received - shown < step && received != total)) {
             return;
           }
           shown = received;
@@ -329,7 +328,10 @@ class CommonAction extends _$CommonAction {
         }
         return;
       }
-      final started = windows?.runas(download.path, windowsUpdateArguments(pid));
+      final started = windows?.runas(
+        download.path,
+        windowsUpdateArguments(pid),
+      );
       if (started == true && ref.mounted) {
         await ref.read(systemActionProvider.notifier).handleExit();
       } else if (started == false && ref.mounted) {

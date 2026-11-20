@@ -102,7 +102,8 @@ class SubscriptionInfoDetailView extends StatelessWidget {
   Widget build(BuildContext context) {
     final appLocalizations = context.appLocalizations;
     final used =
-        subscriptionInfo.upload.toDouble() + subscriptionInfo.download.toDouble();
+        subscriptionInfo.upload.toDouble() +
+        subscriptionInfo.download.toDouble();
     final expire =
         subscriptionInfo.expireDate?.show ?? appLocalizations.infiniteTime;
     return SelectionArea(

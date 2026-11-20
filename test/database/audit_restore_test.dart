@@ -80,7 +80,10 @@ void main() {
     );
 
     expect(await backupCounts(), List.filled(9, 0));
-    expect(await database.customSelect('PRAGMA foreign_key_check').get(), isEmpty);
+    expect(
+      await database.customSelect('PRAGMA foreign_key_check').get(),
+      isEmpty,
+    );
   });
 
   test('an empty compatible restore leaves existing records intact', () async {
@@ -120,21 +123,32 @@ void main() {
     expect(rows.single.definition, kept.definition);
   });
 
-  test('script bulk insert never commits a partially enumerated input', () async {
-    final kept = Script(id: 1, label: 'Kept', lastUpdateTime: DateTime.utc(2026));
-    final incoming = kept.copyWith(id: 2, label: 'Partial');
-    await database.scripts.put(kept.toCompanion());
+  test(
+    'script bulk insert never commits a partially enumerated input',
+    () async {
+      final kept = Script(
+        id: 1,
+        label: 'Kept',
+        lastUpdateTime: DateTime.utc(2026),
+      );
+      final incoming = kept.copyWith(id: 2, label: 'Partial');
+      await database.scripts.put(kept.toCompanion());
 
-    await expectLater(
-      database.scriptsDao.putAll(_failAfter(incoming.toCompanion())),
-      throwsStateError,
-    );
+      await expectLater(
+        database.scriptsDao.putAll(_failAfter(incoming.toCompanion())),
+        throwsStateError,
+      );
 
-    expect(await database.scriptsDao.query().get(), [kept]);
-  });
+      expect(await database.scriptsDao.query().get(), [kept]);
+    },
+  );
 
   test('script replacement reports an input failure to its caller', () async {
-    final kept = Script(id: 1, label: 'Kept', lastUpdateTime: DateTime.utc(2026));
+    final kept = Script(
+      id: 1,
+      label: 'Kept',
+      lastUpdateTime: DateTime.utc(2026),
+    );
     await database.scripts.put(kept.toCompanion());
 
     await expectLater(

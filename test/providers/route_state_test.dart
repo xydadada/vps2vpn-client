@@ -371,6 +371,80 @@ void main() {
       },
     );
 
+    test('a delayed watch reply cannot replace a newer route event', () async {
+      final reply = Completer<RouteSnapshot>();
+      when(() => core.watchRoute(true)).thenAnswer((_) => reply.future);
+      final container = build();
+      final tracker = trackerOf(container)..attach();
+      await pumpEventQueue();
+
+      tracker.applySnapshot(
+        const RouteSnapshot(coreEpoch: 5, routeVersion: 8, running: true),
+      );
+      reply.complete(_snapshot);
+      await pumpEventQueue();
+
+      expect(stateOf(container).coreEpoch, 5);
+      expect(stateOf(container).routeVersion, 8);
+      expect(stateOf(container).proxied, isTrue);
+      expect(stateOf(container).live, isTrue);
+    });
+
+    test('an older event cannot roll back a synced route', () async {
+      final container = build();
+      final tracker = trackerOf(container)..attach();
+      await pumpEventQueue();
+      tracker.applySnapshot(
+        const RouteSnapshot(coreEpoch: 4, routeVersion: 7, running: true),
+      );
+
+      tracker.applySnapshot(
+        const RouteSnapshot(coreEpoch: 4, routeVersion: 6),
+      );
+      tracker.applySnapshot(
+        const RouteSnapshot(coreEpoch: 3, routeVersion: 9),
+      );
+
+      expect(stateOf(container).coreEpoch, 4);
+      expect(stateOf(container).routeVersion, 7);
+      expect(stateOf(container).proxied, isTrue);
+    });
+
+    test('a replacement Core can restart its counters after disconnect', () async {
+      final container = build();
+      trackerOf(container).attach();
+      await pumpEventQueue();
+      container.read(coreStatusProvider.notifier).value =
+          CoreStatus.disconnected;
+      await pumpEventQueue();
+      when(() => core.watchRoute(true)).thenAnswer(
+        (_) async => const RouteSnapshot(coreEpoch: 1, routeVersion: 1),
+      );
+
+      container.read(coreStatusProvider.notifier).value = CoreStatus.connected;
+      await pumpEventQueue();
+
+      expect(stateOf(container).coreEpoch, 1);
+      expect(stateOf(container).routeVersion, 1);
+      expect(stateOf(container).synced, isTrue);
+      expect(stateOf(container).live, isTrue);
+    });
+
+    test('a queued event after detach does not mark the route live', () async {
+      final container = build();
+      final tracker = trackerOf(container)..attach();
+      await pumpEventQueue();
+      tracker.detach();
+      await pumpEventQueue();
+
+      tracker.applySnapshot(
+        const RouteSnapshot(coreEpoch: 4, routeVersion: 2, running: true),
+      );
+
+      expect(stateOf(container).coreEpoch, 4);
+      expect(stateOf(container).live, isFalse);
+    });
+
     test('a network change moves only the host epoch', () {
       final container = build();
 

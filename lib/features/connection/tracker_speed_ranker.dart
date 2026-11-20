@@ -133,6 +133,9 @@ class _Sample {
       rankSpeed: previous.rankSpeeds[index],
     );
     final elapsedMicros = nowMicros - last.atMicros;
+    if (elapsedMicros < 0) {
+      return _Sample.first(trackerInfo, nowMicros);
+    }
     if (elapsedMicros < _minSampleGapMicros) {
       return last;
     }

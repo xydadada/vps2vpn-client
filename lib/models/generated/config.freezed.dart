@@ -1864,7 +1864,7 @@ as String,
 /// @nodoc
 mixin _$NetworkProps {
 
- bool get systemProxy; List<String> get bypassDomain; bool get pacMode; String get pacScript; bool get bypassPrivateRoute; bool get appendSystemDns; AuthenticationProps get authentication;
+ bool get systemProxy;@JsonKey(fromJson: _bypassDomainFromJson) List<String> get bypassDomain; bool get pacMode; String get pacScript; bool get bypassPrivateRoute; bool get appendSystemDns; AuthenticationProps get authentication;
 /// Create a copy of NetworkProps
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1902,7 +1902,7 @@ abstract mixin class $NetworkPropsCopyWith<$Res>  {
   factory $NetworkPropsCopyWith(NetworkProps value, $Res Function(NetworkProps) _then) = _$NetworkPropsCopyWithImpl;
 @useResult
 $Res call({
- bool systemProxy, List<String> bypassDomain, bool pacMode, String pacScript, bool bypassPrivateRoute, bool appendSystemDns, AuthenticationProps authentication
+ bool systemProxy,@JsonKey(fromJson: _bypassDomainFromJson) List<String> bypassDomain, bool pacMode, String pacScript, bool bypassPrivateRoute, bool appendSystemDns, AuthenticationProps authentication
 });
 
 
@@ -2022,7 +2022,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool systemProxy,  List<String> bypassDomain,  bool pacMode,  String pacScript,  bool bypassPrivateRoute,  bool appendSystemDns,  AuthenticationProps authentication)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool systemProxy, @JsonKey(fromJson: _bypassDomainFromJson)  List<String> bypassDomain,  bool pacMode,  String pacScript,  bool bypassPrivateRoute,  bool appendSystemDns,  AuthenticationProps authentication)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _NetworkProps() when $default != null:
 return $default(_that.systemProxy,_that.bypassDomain,_that.pacMode,_that.pacScript,_that.bypassPrivateRoute,_that.appendSystemDns,_that.authentication);case _:
@@ -2043,7 +2043,7 @@ return $default(_that.systemProxy,_that.bypassDomain,_that.pacMode,_that.pacScri
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool systemProxy,  List<String> bypassDomain,  bool pacMode,  String pacScript,  bool bypassPrivateRoute,  bool appendSystemDns,  AuthenticationProps authentication)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool systemProxy, @JsonKey(fromJson: _bypassDomainFromJson)  List<String> bypassDomain,  bool pacMode,  String pacScript,  bool bypassPrivateRoute,  bool appendSystemDns,  AuthenticationProps authentication)  $default,) {final _that = this;
 switch (_that) {
 case _NetworkProps():
 return $default(_that.systemProxy,_that.bypassDomain,_that.pacMode,_that.pacScript,_that.bypassPrivateRoute,_that.appendSystemDns,_that.authentication);case _:
@@ -2063,7 +2063,7 @@ return $default(_that.systemProxy,_that.bypassDomain,_that.pacMode,_that.pacScri
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool systemProxy,  List<String> bypassDomain,  bool pacMode,  String pacScript,  bool bypassPrivateRoute,  bool appendSystemDns,  AuthenticationProps authentication)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool systemProxy, @JsonKey(fromJson: _bypassDomainFromJson)  List<String> bypassDomain,  bool pacMode,  String pacScript,  bool bypassPrivateRoute,  bool appendSystemDns,  AuthenticationProps authentication)?  $default,) {final _that = this;
 switch (_that) {
 case _NetworkProps() when $default != null:
 return $default(_that.systemProxy,_that.bypassDomain,_that.pacMode,_that.pacScript,_that.bypassPrivateRoute,_that.appendSystemDns,_that.authentication);case _:
@@ -2078,12 +2078,12 @@ return $default(_that.systemProxy,_that.bypassDomain,_that.pacMode,_that.pacScri
 @JsonSerializable()
 
 class _NetworkProps implements NetworkProps {
-  const _NetworkProps({this.systemProxy = true,  List<String> bypassDomain = defaultBypassDomain, this.pacMode = false, this.pacScript = defaultPacScript, this.bypassPrivateRoute = true, this.appendSystemDns = false, this.authentication = defaultAuthenticationProps}): _bypassDomain = bypassDomain;
+  const _NetworkProps({this.systemProxy = true, @JsonKey(fromJson: _bypassDomainFromJson)  List<String> bypassDomain = defaultBypassDomain, this.pacMode = false, this.pacScript = defaultPacScript, this.bypassPrivateRoute = true, this.appendSystemDns = false, this.authentication = defaultAuthenticationProps}): _bypassDomain = bypassDomain;
   factory _NetworkProps.fromJson(Map<String, dynamic> json) => _$NetworkPropsFromJson(json);
 
 @override@JsonKey() final  bool systemProxy;
  final  List<String> _bypassDomain;
-@override@JsonKey() List<String> get bypassDomain {
+@override@JsonKey(fromJson: _bypassDomainFromJson) List<String> get bypassDomain {
   if (_bypassDomain is EqualUnmodifiableListView) return _bypassDomain;
   // ignore: implicit_dynamic_type
   return EqualUnmodifiableListView(_bypassDomain);
@@ -2130,7 +2130,7 @@ abstract mixin class _$NetworkPropsCopyWith<$Res> implements $NetworkPropsCopyWi
   factory _$NetworkPropsCopyWith(_NetworkProps value, $Res Function(_NetworkProps) _then) = __$NetworkPropsCopyWithImpl;
 @override @useResult
 $Res call({
- bool systemProxy, List<String> bypassDomain, bool pacMode, String pacScript, bool bypassPrivateRoute, bool appendSystemDns, AuthenticationProps authentication
+ bool systemProxy,@JsonKey(fromJson: _bypassDomainFromJson) List<String> bypassDomain, bool pacMode, String pacScript, bool bypassPrivateRoute, bool appendSystemDns, AuthenticationProps authentication
 });
 
 

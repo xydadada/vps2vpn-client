@@ -163,7 +163,8 @@ class ProfilesAction extends _$ProfilesAction {
     _updates[source.id] = token;
     return (
       isCurrent: () {
-        if (!ref.mounted || !identical(_updates[source.id], token)) return false;
+        if (!ref.mounted || !identical(_updates[source.id], token))
+          return false;
         final latest = ref.read(profilesProvider).getProfile(source.id);
         return latest != null &&
             latest.type == source.type &&
@@ -189,16 +190,18 @@ class ProfilesAction extends _$ProfilesAction {
       );
       if (!claim.isCurrent()) return false;
       final latest = ref.read(profilesProvider).getProfile(profile.id)!;
-      ref.read(profilesProvider.notifier).put(
-        latest.copyWith(
-          label: profile.label,
-          url: profile.url,
-          ageSecretKey: profile.ageSecretKey,
-          autoUpdate: profile.autoUpdate,
-          autoUpdateDuration: profile.autoUpdateDuration,
-          lastUpdateDate: saved.lastUpdateDate,
-        ),
-      );
+      ref
+          .read(profilesProvider.notifier)
+          .put(
+            latest.copyWith(
+              label: profile.label,
+              url: profile.url,
+              ageSecretKey: profile.ageSecretKey,
+              autoUpdate: profile.autoUpdate,
+              autoUpdateDuration: profile.autoUpdateDuration,
+              lastUpdateDate: saved.lastUpdateDate,
+            ),
+          );
       return true;
     } catch (_) {
       if (claim.isCurrent()) rethrow;
@@ -216,10 +219,8 @@ class ProfilesAction extends _$ProfilesAction {
     await _updateProfile(profile, reapply: false);
   }
 
-  Future<void> updateProfile(
-    Profile profile, {
-    bool showLoading = false,
-  }) => _updateProfile(profile, showLoading: showLoading);
+  Future<void> updateProfile(Profile profile, {bool showLoading = false}) =>
+      _updateProfile(profile, showLoading: showLoading);
 
   Future<void> _updateProfile(
     Profile profile, {

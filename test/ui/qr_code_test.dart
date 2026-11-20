@@ -374,7 +374,11 @@ final class _Decoded {
     for (var pad = 0xEC; bit < capacity; pad ^= 0xEC ^ 0x11) {
       expect(take(8), pad, reason: 'pad codeword');
     }
-    expect(eci, anyOf(isNull, 26), reason: 'supported character interpretation');
+    expect(
+      eci,
+      anyOf(isNull, 26),
+      reason: 'supported character interpretation',
+    );
     return (
       eci: eci,
       text: eci == 26 ? utf8.decode(bytes) : latin1.decode(bytes),
@@ -442,12 +446,15 @@ void main() {
       expect(decoded.payload.text, text);
     });
 
-    test('mixed Latin-1 and Unicode characters use one UTF-8 interpretation', () {
-      const text = 'café 配置 🌐';
-      final decoded = _Decoded.of(QrMatrix.encode(text)!);
-      expect(decoded.payload.eci, 26);
-      expect(decoded.payload.text, text);
-    });
+    test(
+      'mixed Latin-1 and Unicode characters use one UTF-8 interpretation',
+      () {
+        const text = 'café 配置 🌐';
+        final decoded = _Decoded.of(QrMatrix.encode(text)!);
+        expect(decoded.payload.eci, 26);
+        expect(decoded.payload.text, text);
+      },
+    );
 
     test('mask selection is deterministic for the same data', () {
       final masks = <int>{};

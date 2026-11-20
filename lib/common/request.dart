@@ -83,10 +83,7 @@ class Request {
         );
   }
 
-  Future<Response<Uint8List>> _downloadLimitedBytes(
-    String url,
-    int maxBytes,
-  ) {
+  Future<Response<Uint8List>> _downloadLimitedBytes(String url, int maxBytes) {
     if (maxBytes < 0) {
       throw ArgumentError.value(maxBytes, 'maxBytes');
     }
@@ -113,7 +110,9 @@ class Request {
         if (body != null) {
           await for (final chunk in body.stream) {
             if (chunk.length > maxBytes - bytes.length) {
-              throw const FileSystemException('Download exceeds the size limit');
+              throw const FileSystemException(
+                'Download exceeds the size limit',
+              );
             }
             bytes.add(chunk);
           }

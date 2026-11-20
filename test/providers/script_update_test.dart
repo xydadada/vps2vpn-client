@@ -136,45 +136,59 @@ void main() {
 
   List<Script> scripts() => container.read(scriptsProvider).value ?? [];
 
-  test('a refresh reads the stored source and preserves later metadata', () async {
-    final action = container.read(scriptsActionProvider.notifier);
-    final edited = script.copyWith(url: 'https://example.com/new');
-    action.putScript(edited);
-    final pending = action.updateScript(script);
-    final download = await downloads.next();
-    expect(download.options.uri.path, '/new');
-    container.read(scriptsProvider.notifier).put(
-      edited.copyWith(label: 'Renamed', order: 7),
-    );
-    download.complete('new script');
-    await pending;
+  test(
+    'a refresh reads the stored source and preserves later metadata',
+    () async {
+      final action = container.read(scriptsActionProvider.notifier);
+      final edited = script.copyWith(url: 'https://example.com/new');
+      action.putScript(edited);
+      final pending = action.updateScript(script);
+      final download = await downloads.next();
+      expect(download.options.uri.path, '/new');
+      container
+          .read(scriptsProvider.notifier)
+          .put(edited.copyWith(label: 'Renamed', order: 7));
+      download.complete('new script');
+      await pending;
 
-    expect(scripts().single.url, edited.url);
-    expect(scripts().single.label, 'Renamed');
-    expect(scripts().single.order, 7);
-    expect(scripts().single.lastUpdateTime.isAfter(script.lastUpdateTime), isTrue);
-    expect(await savedFile.readAsString(), 'new script');
-    expect(savedFile.parent.listSync().map((entry) => entry.path), [savedFile.path]);
-  });
+      expect(scripts().single.url, edited.url);
+      expect(scripts().single.label, 'Renamed');
+      expect(scripts().single.order, 7);
+      expect(
+        scripts().single.lastUpdateTime.isAfter(script.lastUpdateTime),
+        isTrue,
+      );
+      expect(await savedFile.readAsString(), 'new script');
+      expect(savedFile.parent.listSync().map((entry) => entry.path), [
+        savedFile.path,
+      ]);
+    },
+  );
 
-  test('deleting during a download cannot recreate a script or its file', () async {
-    final action = container.read(scriptsActionProvider.notifier);
-    final pending = action.updateScript(script);
-    final download = await downloads.next();
-    action.deleteScript(script.id);
-    await savedFile.delete();
-    download.complete('obsolete script');
-    await pending;
+  test(
+    'deleting during a download cannot recreate a script or its file',
+    () async {
+      final action = container.read(scriptsActionProvider.notifier);
+      final pending = action.updateScript(script);
+      final download = await downloads.next();
+      action.deleteScript(script.id);
+      await savedFile.delete();
+      download.complete('obsolete script');
+      await pending;
 
-    expect(scripts(), isEmpty);
-    expect(await savedFile.exists(), isFalse);
-  });
+      expect(scripts(), isEmpty);
+      expect(await savedFile.exists(), isFalse);
+    },
+  );
 
   test('an edited source wins when an older download finishes last', () async {
     final action = container.read(scriptsActionProvider.notifier);
     final older = action.updateScript(script);
     final oldDownload = await downloads.next();
-    final edited = script.copyWith(url: 'https://example.com/new', label: 'Edited');
+    final edited = script.copyWith(
+      url: 'https://example.com/new',
+      label: 'Edited',
+    );
     action.putScript(edited);
     final newer = action.updateScript(edited);
     final newDownload = await downloads.next();
@@ -188,47 +202,60 @@ void main() {
     expect(await savedFile.readAsString(), 'new source');
   });
 
-  test('the latest refresh wins even when both requests use the same URL', () async {
-    final action = container.read(scriptsActionProvider.notifier);
-    final older = action.updateScript(script);
-    final oldDownload = await downloads.next();
-    final newer = action.updateScript(script);
-    (await downloads.next()).complete('newer response');
-    await newer;
-    oldDownload.complete('older response');
-    await older;
+  test(
+    'the latest refresh wins even when both requests use the same URL',
+    () async {
+      final action = container.read(scriptsActionProvider.notifier);
+      final older = action.updateScript(script);
+      final oldDownload = await downloads.next();
+      final newer = action.updateScript(script);
+      (await downloads.next()).complete('newer response');
+      await newer;
+      oldDownload.complete('older response');
+      await older;
 
-    expect(await savedFile.readAsString(), 'newer response');
-    expect(scripts(), hasLength(1));
-  });
+      expect(await savedFile.readAsString(), 'newer response');
+      expect(scripts(), hasLength(1));
+    },
+  );
 
-  test('a failed edited URL stays saved and preserves the previous file', () async {
-    final action = container.read(scriptsActionProvider.notifier);
-    final edited = script.copyWith(url: 'https://example.com/new');
-    action.putScript(edited);
-    final pending = action.updateScript(edited);
-    final outcome = expectLater(pending, throwsA(isA<DioException>()));
-    (await downloads.next()).response.completeError(const SocketException('offline'));
-    await outcome;
+  test(
+    'a failed edited URL stays saved and preserves the previous file',
+    () async {
+      final action = container.read(scriptsActionProvider.notifier);
+      final edited = script.copyWith(url: 'https://example.com/new');
+      action.putScript(edited);
+      final pending = action.updateScript(edited);
+      final outcome = expectLater(pending, throwsA(isA<DioException>()));
+      (await downloads.next()).response.completeError(
+        const SocketException('offline'),
+      );
+      await outcome;
 
-    expect(scripts().single, edited);
-    expect(await savedFile.readAsString(), 'existing script');
-  });
+      expect(scripts().single, edited);
+      expect(await savedFile.readAsString(), 'existing script');
+    },
+  );
 
-  test('errors from a removed script do not affect a later operation', () async {
-    final action = container.read(scriptsActionProvider.notifier);
-    final pending = action.updateScript(script);
-    final download = await downloads.next();
-    action.deleteScript(script.id);
-    download.response.completeError(const SocketException('offline'));
-    await pending;
+  test(
+    'errors from a removed script do not affect a later operation',
+    () async {
+      final action = container.read(scriptsActionProvider.notifier);
+      final pending = action.updateScript(script);
+      final download = await downloads.next();
+      action.deleteScript(script.id);
+      download.response.completeError(const SocketException('offline'));
+      await pending;
 
-    expect(scripts(), isEmpty);
-    expect(await savedFile.readAsString(), 'existing script');
-  });
+      expect(scripts(), isEmpty);
+      expect(await savedFile.readAsString(), 'existing script');
+    },
+  );
 
   test('disposing the owner while downloading prevents publication', () async {
-    final pending = container.read(scriptsActionProvider.notifier).updateScript(script);
+    final pending = container
+        .read(scriptsActionProvider.notifier)
+        .updateScript(script);
     final download = await downloads.next();
     container.dispose();
     disposed = true;
@@ -238,32 +265,43 @@ void main() {
     expect(await savedFile.readAsString(), 'existing script');
   });
 
-  test('revocation after staging leaves old bytes and no staging directory', () async {
-    var checks = 0;
-    final updated = await script.save(
-      'must not publish',
-      shouldCommit: () => ++checks == 1,
-    );
+  test(
+    'revocation after staging leaves old bytes and no staging directory',
+    () async {
+      var checks = 0;
+      final updated = await script.save(
+        'must not publish',
+        shouldCommit: () => ++checks == 1,
+      );
 
-    expect(checks, 2);
-    expect(updated, script);
-    expect(await savedFile.readAsString(), 'existing script');
-    expect(savedFile.parent.listSync().map((entry) => entry.path), [savedFile.path]);
-  });
+      expect(checks, 2);
+      expect(updated, script);
+      expect(await savedFile.readAsString(), 'existing script');
+      expect(savedFile.parent.listSync().map((entry) => entry.path), [
+        savedFile.path,
+      ]);
+    },
+  );
 
-  test('a publication failure removes staging without deleting the target', () async {
-    final blocked = script.copyWith(id: 2);
-    final target = Directory(await blocked.path);
-    await target.create();
-    final marker = File.fromUri(target.uri.resolve('keep'));
-    await marker.writeAsString('keep');
+  test(
+    'a publication failure removes staging without deleting the target',
+    () async {
+      final blocked = script.copyWith(id: 2);
+      final target = Directory(await blocked.path);
+      await target.create();
+      final marker = File.fromUri(target.uri.resolve('keep'));
+      await marker.writeAsString('keep');
 
-    await expectLater(blocked.save('replacement'), throwsA(isA<FileSystemException>()));
+      await expectLater(
+        blocked.save('replacement'),
+        throwsA(isA<FileSystemException>()),
+      );
 
-    expect(await marker.readAsString(), 'keep');
-    expect(
-      savedFile.parent.listSync().map((entry) => entry.path).toSet(),
-      {savedFile.path, target.path},
-    );
-  });
+      expect(await marker.readAsString(), 'keep');
+      expect(savedFile.parent.listSync().map((entry) => entry.path).toSet(), {
+        savedFile.path,
+        target.path,
+      });
+    },
+  );
 }

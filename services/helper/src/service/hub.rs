@@ -9,10 +9,6 @@ use std::fs::{File, OpenOptions};
     not(target_os = "linux")
 ))]
 use std::future::pending;
-#[cfg(not(any(
-    all(feature = "windows-service", target_os = "windows"),
-    target_os = "linux"
-)))]
 use std::future::Future;
 use std::io::{BufRead, Error, Read};
 #[cfg(windows)]
@@ -24,6 +20,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use std::{io, thread};
+use tokio_stream::{Stream, StreamExt};
 use warp::http::StatusCode;
 use warp::{Filter, Rejection, Reply};
 #[cfg(windows)]
@@ -857,6 +854,48 @@ pub(super) fn release_managed_core_on_shutdown() {
     }
 }
 
+/// Keep OS peer admission in the incoming stream while using Hyper 1's
+/// maintained HTTP/1 implementation. The helper protocol has no HTTP/2 or
+/// upgrade endpoints. A watcher is registered before spawning each connection
+/// so shutdown also waits for tasks that have not been polled yet.
+pub(super) async fn serve_incoming_until<I, IO, F>(incoming: I, shutdown: F)
+where
+    I: Stream<Item = io::Result<IO>>,
+    IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    F: Future<Output = ()> + Send + 'static,
+{
+    let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+    let mut incoming = Box::pin(incoming);
+    tokio::pin!(shutdown);
+    loop {
+        let next = tokio::select! {
+            biased;
+            _ = &mut shutdown => break,
+            next = incoming.next() => next,
+        };
+        let stream = match next {
+            Some(Ok(stream)) => stream,
+            Some(Err(error)) => {
+                log_message(format!("Helper could not accept a connection: {error}"));
+                continue;
+            }
+            None => break,
+        };
+        let service =
+            hyper_util::service::TowerToHyperService::new(warp::service(routes()));
+        let connection = hyper::server::conn::http1::Builder::new()
+            .serve_connection(hyper_util::rt::TokioIo::new(stream), service);
+        let watcher = graceful.watcher();
+        tokio::spawn(async move {
+            if let Err(error) = watcher.watch(connection).await {
+                log_message(format!("Helper connection failed: {error}"));
+            }
+        });
+    }
+    drop(incoming);
+    graceful.shutdown().await;
+}
+
 #[cfg(all(
     not(all(feature = "windows-service", target_os = "windows")),
     not(target_os = "linux")
@@ -876,11 +915,11 @@ where
 {
     ensure_core_sha256_configured()?;
 
-    let (_, server) = warp::serve(routes())
-        .try_bind_with_graceful_shutdown(([127, 0, 0, 1], LISTEN_PORT), shutdown)
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, LISTEN_PORT))
+        .await
         .map_err(|error| anyhow::anyhow!("bind helper server: {error}"))?;
     on_started()?;
-    server.await;
+    serve_incoming_until(tokio_stream::wrappers::TcpListenerStream::new(listener), shutdown).await;
     release_managed_core_on_shutdown();
 
     Ok(())
@@ -890,6 +929,41 @@ where
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[tokio::test]
+    async fn hyper_one_adapter_preserves_routes_and_stops_after_shutdown() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        for (request, expected) in [
+            (
+                "GET /logs HTTP/1.1\r\nHost: vps2vpnHelperService\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200",
+            ),
+            (
+                "GET /logs HTTP/1.1\r\nHost: vps2vpnHelperService\r\nOrigin: https://attacker.test\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 403",
+            ),
+        ] {
+            let (mut client, server) = tokio::io::duplex(16 * 1024);
+            let (stop, stopped) = tokio::sync::oneshot::channel();
+            let incoming = tokio_stream::iter([Ok(server)]).chain(tokio_stream::pending());
+            let serving = tokio::spawn(serve_incoming_until(incoming, async move {
+                let _ = stopped.await;
+            }));
+            client.write_all(request.as_bytes()).await.unwrap();
+            let mut response = String::new();
+            tokio::time::timeout(Duration::from_secs(2), client.read_to_string(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(response.starts_with(expected), "{response}");
+            stop.send(()).unwrap();
+            tokio::time::timeout(Duration::from_secs(2), serving)
+                .await
+                .unwrap()
+                .unwrap();
+        }
+    }
 
     static PROCESS_STATE: Mutex<()> = Mutex::new(());
 

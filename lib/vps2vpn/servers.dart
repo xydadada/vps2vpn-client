@@ -47,7 +47,12 @@ final _autoTested = <String>{};
 void vpsAutoTestOnce(WidgetRef ref, Group group) {
   if (group.name.isEmpty || group.all.isEmpty) return;
   if (!_autoTested.add(group.name)) return;
+  final context = ref.context;
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) {
+      _autoTested.remove(group.name);
+      return;
+    }
     ref
         .read(proxiesActionProvider.notifier)
         .delayTest(group.all, group.testUrl);
@@ -75,7 +80,11 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     if (group.name.isEmpty || group.all.isEmpty) return;
     if (!_autoTested.add(group.name)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _test(group);
+      if (!mounted) {
+        _autoTested.remove(group.name);
+        return;
+      }
+      _test(group);
     });
   }
 
@@ -121,7 +130,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                   hasProfile
                       ? tr(context, '暂无可选节点', 'No nodes to choose')
                       : tr(context, '尚未导入订阅', 'No subscription yet'),
-                  style: vpsText(p, size: 17, weight: FontWeight.w700),
+                  style: vpsText(context, size: 17, weight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -131,7 +140,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                     'Import a subscription in Settings and its nodes appear here',
                   ),
                   textAlign: TextAlign.center,
-                  style: vpsText(p, size: 13.5, color: p.soft),
+                  style: vpsText(context, size: 13.5, color: p.soft),
                 ),
                 if (!hasProfile) ...[
                   const SizedBox(height: 18),
@@ -294,7 +303,7 @@ class _GroupTab extends StatelessWidget {
         child: Text(
           label,
           style: vpsText(
-            p,
+            context,
             size: 13.5,
             weight: selected ? FontWeight.w600 : FontWeight.w500,
             color: selected ? p.text : p.soft,
@@ -366,7 +375,7 @@ class _ProxyCard extends ConsumerWidget {
                         friendlyLineName(context, proxy.name),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: vpsText(p, size: 14, weight: FontWeight.w600),
+                        style: vpsText(context, size: 14, weight: FontWeight.w600),
                       ),
                     ),
                     if (fastest) ...[
@@ -385,7 +394,7 @@ class _ProxyCard extends ConsumerWidget {
                         child: Text(
                           tr(context, '最快', 'Fastest'),
                           style: vpsText(
-                            p,
+                            context,
                             size: 10.5,
                             weight: FontWeight.w600,
                             color: p.good,
@@ -413,7 +422,7 @@ class _ProxyCard extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: vpsText(
-                    p,
+                    context,
                     size: 12,
                     color: proxy.name == vpsSmartGroupName ? p.accent : p.soft,
                   ),
@@ -425,7 +434,7 @@ class _ProxyCard extends ConsumerWidget {
           Text(
             delayText,
             style: vpsText(
-              p,
+              context,
               size: 12.5,
               weight: FontWeight.w600,
               color: delayColor,

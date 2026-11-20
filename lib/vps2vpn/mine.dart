@@ -1,8 +1,6 @@
 // vps2vpn "Me": your subscriptions, look and language, and the door to
 // advanced mode.
 
-import 'dart:math' as math;
-
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -26,36 +24,39 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
   String? _note;
 
   Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    // A plain URL, a share link, or a clash://install-config?url=… wrapper
-    // (what many panels hand out) all come down to one subscription link.
-    final link = profileUrlFromQrCodes([data?.text]);
-    if (link == null) {
-      setState(
-        () => _note = tr(
-          context,
-          '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
-          'No subscription link on the clipboard. Copy it from the deploy tool first.',
-        ),
-      );
-      return;
-    }
-    setState(() => _note = null);
-    final before = ref.read(profilesProvider).length;
-    await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
-    if (!mounted) return;
-    if (ref.read(profilesProvider).length > before) {
-      // Added: the next step is connecting, which lives on Home.
-      vpsTab.value = vpsTabHome;
-    } else {
-      setState(
-        () => _note = tr(
-          context,
-          '导入失败：请确认链接完整且服务器在线后重试。',
-          'Not added. Check the link is complete and the server is running.',
-        ),
-      );
-    }
+    await globalState.safeRun(() async {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (!mounted) return;
+      // A plain URL, a share link, or a clash://install-config?url=… wrapper
+      // (what many panels hand out) all come down to one subscription link.
+      final link = profileUrlFromQrCodes([data?.text]);
+      if (link == null) {
+        setState(
+          () => _note = tr(
+            context,
+            '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
+            'No subscription link on the clipboard. Copy it from the deploy tool first.',
+          ),
+        );
+        return;
+      }
+      setState(() => _note = null);
+      final before = ref.read(profilesProvider).length;
+      await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
+      if (!mounted) return;
+      if (ref.read(profilesProvider).length > before) {
+        // Added: the next step is connecting, which lives on Home.
+        vpsTab.value = vpsTabHome;
+      } else {
+        setState(
+          () => _note = tr(
+            context,
+            '导入失败：请确认链接完整且服务器在线后重试。',
+            'Not added. Check the link is complete and the server is running.',
+          ),
+        );
+      }
+    });
   }
 
   @override
@@ -88,9 +89,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
           trailing: profiles.isEmpty
               ? null
               : VpsPressable(
-                  onTap: () => ref
-                      .read(profilesActionProvider.notifier)
-                      .updateProfiles(),
+                  onTap: () => globalState.safeRun(
+                    () => ref
+                        .read(profilesActionProvider.notifier)
+                        .updateProfiles(),
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -99,7 +102,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                       Text(
                         tr(context, '全部更新', 'Update all'),
                         style: vpsText(
-                          p,
+                          context,
                           size: 13,
                           weight: FontWeight.w700,
                           color: p.accent,
@@ -119,9 +122,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               selected: profile.id == currentId,
               onTap: () => ref.read(currentProfileIdProvider.notifier).value =
                   profile.id,
-              onUpdate: () => ref
-                  .read(profilesActionProvider.notifier)
-                  .updateProfile(profile, showLoading: true),
+              onUpdate: () => globalState.safeRun(
+                () => ref
+                    .read(profilesActionProvider.notifier)
+                    .updateProfile(profile, showLoading: true),
+              ),
             ),
           ),
         VpsCard(
@@ -133,7 +138,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 profiles.isEmpty
                     ? tr(context, '导入订阅', 'Import a subscription')
                     : tr(context, '导入更多订阅', 'Import another'),
-                style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                style: vpsText(context, size: 14.5, weight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
@@ -142,7 +147,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   '从剪贴板读取订阅链接，或导入本地配置文件',
                   'Read a link from the clipboard, or import a local config file',
                 ),
-                style: vpsText(p, size: 13, color: p.soft),
+                style: vpsText(context, size: 13, color: p.soft),
               ),
               const SizedBox(height: 14),
               Wrap(
@@ -158,15 +163,17 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   VpsButton(
                     label: tr(context, '本地文件', 'Local file'),
                     icon: VpsIcon.file,
-                    onTap: () => ref
-                        .read(profilesActionProvider.notifier)
-                        .addProfileFormFile(),
+                    onTap: () => globalState.safeRun(
+                      () => ref
+                          .read(profilesActionProvider.notifier)
+                          .addProfileFormFile(),
+                    ),
                   ),
                 ],
               ),
               if (_note != null) ...[
                 const SizedBox(height: 10),
-                Text(_note!, style: vpsText(p, size: 12.5, color: p.warn)),
+                Text(_note!, style: vpsText(context, size: 12.5, color: p.warn)),
               ],
             ],
           ),
@@ -311,12 +318,12 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   children: [
                     Text(
                       'vps2vpn  v${globalState.packageInfo.version}',
-                      style: vpsText(p, size: 15, weight: FontWeight.w700),
+                      style: vpsText(context, size: 15, weight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       tr(context, '你的私有网络客户端', 'Your private network client'),
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(context, size: 12.5, color: p.soft),
                     ),
                   ],
                 ),
@@ -345,7 +352,7 @@ class _LegalLineState extends State<_LegalLine> {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final style = vpsText(p, size: 11, color: p.muted, height: 1.6);
+    final style = vpsText(context, size: 11, color: p.muted, height: 1.6);
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 8),
       child: Column(
@@ -393,11 +400,13 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
   String? _copied;
 
   Future<void> _copy(String key, String text) async {
-    await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
-    setState(() => _copied = key);
-    await Future<void>.delayed(const Duration(seconds: 2));
-    if (mounted && _copied == key) setState(() => _copied = null);
+    await globalState.safeRun(() async {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      setState(() => _copied = key);
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (mounted && _copied == key) setState(() => _copied = null);
+    });
   }
 
   @override
@@ -536,7 +545,7 @@ class _ChoiceRow extends StatelessWidget {
           child: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+            style: vpsText(context, size: 14.5, weight: FontWeight.w500),
           ),
         ),
       ],
@@ -578,12 +587,12 @@ class _ProfileCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
     final sub = profile.subscriptionInfo;
-    final used = sub == null ? 0 : sub.upload + sub.download;
+    final used = sub == null ? 0.0 : sub.upload.toDouble() + sub.download.toDouble();
     final total = sub?.total ?? 0;
-    final ratio = total > 0 ? math.min(1.0, used / total) : 0.0;
+    final ratio = sub?.usage ?? 0.0;
     String? expire;
-    if (sub != null && sub.expire > 0) {
-      final d = DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000);
+    final d = sub?.expireDate;
+    if (d != null) {
       expire = tr(
         context,
         '${d.year}-${_two(d.month)}-${_two(d.day)} 到期',
@@ -625,7 +634,7 @@ class _ProfileCard extends ConsumerWidget {
                       profile.realLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(context, size: 14.5, weight: FontWeight.w600),
                     ),
                     Text(
                       [
@@ -638,7 +647,7 @@ class _ProfileCard extends ConsumerWidget {
                           ),
                       ].join(' · '),
                       style: vpsText(
-                        p,
+                        context,
                         size: 12.5,
                         color: selected ? p.accent : p.soft,
                       ),
@@ -688,11 +697,11 @@ class _ProfileCard extends ConsumerWidget {
                       '已用 ${used.traffic.show} / ${total.traffic.show}',
                       '${used.traffic.show} of ${total.traffic.show} used',
                     ),
-                    style: vpsText(p, size: 12.5, color: p.soft),
+                    style: vpsText(context, size: 12.5, color: p.soft),
                   ),
                 const Spacer(),
                 if (expire != null)
-                  Text(expire, style: vpsText(p, size: 12.5, color: p.soft)),
+                  Text(expire, style: vpsText(context, size: 12.5, color: p.soft)),
               ],
             ),
           ],

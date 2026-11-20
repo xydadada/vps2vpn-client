@@ -22,7 +22,6 @@ Future<void> _pump(WidgetTester tester, Widget icon) {
 }
 
 void main() {
-
   testWidgets('invalid base64 uses the fallback without a network request', (
     tester,
   ) async {

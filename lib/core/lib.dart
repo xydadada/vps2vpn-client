@@ -42,11 +42,12 @@ class CoreLib extends CoreHandlerInterface {
     return _instance!;
   }
 
-  Future<T> _enqueue<T>(
-    Future<T> Function() operation,
-  ) {
+  Future<T> _enqueue<T>(Future<T> Function() operation) {
     final result = _lifecycleTail.then((_) => operation());
-    _lifecycleTail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    _lifecycleTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
     return result;
   }
 
@@ -163,10 +164,13 @@ class CoreLib extends CoreHandlerInterface {
     final operation = _enqueue(() => _stop(revision));
     _closeOperation = operation;
     unawaited(
-      operation.then<void>((_) {}, onError: (Object _, StackTrace _) {
-        // Keep ownership when shutdown fails, and allow an explicit retry.
-        if (identical(_closeOperation, operation)) _closeOperation = null;
-      }),
+      operation.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {
+          // Keep ownership when shutdown fails, and allow an explicit retry.
+          if (identical(_closeOperation, operation)) _closeOperation = null;
+        },
+      ),
     );
     return operation;
   }
@@ -177,8 +181,7 @@ class CoreLib extends CoreHandlerInterface {
   Future<void> startListener() {
     final revision = ++_listenerRevision;
     final generation = _startGeneration;
-    bool current() =>
-        revision == _listenerRevision && _startWanted(generation);
+    bool current() => revision == _listenerRevision && _startWanted(generation);
     void checkCurrent() {
       if (!current() || !_initialized || !_connectedCompleter.isCompleted) {
         throw const CoreMethodException(
@@ -187,6 +190,7 @@ class CoreLib extends CoreHandlerInterface {
         );
       }
     }
+
     return _enqueue(() async {
       checkCurrent();
       final service = _service!;
@@ -283,8 +287,12 @@ class CoreLib extends CoreHandlerInterface {
     }
     final connection = _connectedCompleter;
     try {
-      final connected = await connection.future.timeout(coreConnectionWaitDuration);
-      if (!connected || _closed || !identical(connection, _connectedCompleter)) {
+      final connected = await connection.future.timeout(
+        coreConnectionWaitDuration,
+      );
+      if (!connected ||
+          _closed ||
+          !identical(connection, _connectedCompleter)) {
         throw const CoreMethodException(
           code: 'core_unavailable',
           message: 'Core connection was superseded',

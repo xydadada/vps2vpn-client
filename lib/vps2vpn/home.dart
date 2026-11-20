@@ -112,7 +112,7 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '代理模式', 'Proxy mode'),
-                        style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(context, size: 14.5, weight: FontWeight.w600),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -149,7 +149,7 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '接管方式', 'Takeover'),
-                        style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(context, size: 14.5, weight: FontWeight.w600),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -317,7 +317,7 @@ class _HeroState extends ConsumerState<_Hero> {
                 Text(
                   status,
                   style: vpsText(
-                    p,
+                    context,
                     size: 12.5,
                     weight: FontWeight.w500,
                     color: p.soft,
@@ -333,7 +333,7 @@ class _HeroState extends ConsumerState<_Hero> {
                 title,
                 key: ValueKey(title),
                 style: vpsText(
-                  p,
+                  context,
                   size: wide ? 34 : 28,
                   weight: FontWeight.w600,
                   spacing: -0.6,
@@ -345,7 +345,7 @@ class _HeroState extends ConsumerState<_Hero> {
             Text(
               sub,
               textAlign: wide ? TextAlign.start : TextAlign.center,
-              style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
+              style: vpsText(context, size: 13.5, color: p.soft, height: 1.5),
             ),
           ],
         );
@@ -389,7 +389,7 @@ class _HeroState extends ConsumerState<_Hero> {
                       Text(
                         k,
                         style: vpsText(
-                          p,
+                          context,
                           size: 11.5,
                           color: p.muted,
                           weight: FontWeight.w500,
@@ -402,7 +402,7 @@ class _HeroState extends ConsumerState<_Hero> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: vpsText(
-                          p,
+                          context,
                           size: 13.5,
                           weight: FontWeight.w500,
                           tabular: true,
@@ -668,7 +668,7 @@ class _PowerRingState extends State<_PowerRing>
                   Text(
                     widget.label,
                     style: vpsText(
-                      p,
+                      context,
                       size: 13,
                       weight: FontWeight.w600,
                       color: widget.on ? const Color(0xFFFFFFFF) : p.text,
@@ -777,13 +777,15 @@ class _Stats extends ConsumerWidget {
     String? left;
     String? expire;
     if (sub != null && sub.total > 0) {
-      final remain = math.max(0, sub.total - sub.upload - sub.download);
+      final remain = math.max(
+        0.0,
+        sub.total.toDouble() - sub.upload.toDouble() - sub.download.toDouble(),
+      );
       left = remain.traffic.show;
     }
-    if (sub != null && sub.expire > 0) {
-      final days = DateTime.fromMillisecondsSinceEpoch(
-        sub.expire * 1000,
-      ).difference(DateTime.now()).inDays;
+    final expireDate = sub?.expireDate;
+    if (expireDate != null) {
+      final days = expireDate.difference(DateTime.now()).inDays;
       expire = days >= 0
           ? tr(context, '还剩 $days 天', '$days days left')
           : tr(context, '已到期', 'Expired');
@@ -817,7 +819,7 @@ class _Stats extends ConsumerWidget {
       _Stat(
         icon: VpsIcon.sparkle,
         label: tr(context, '本次流量', 'This session'),
-        value: (total.up + total.down).traffic.show,
+        value: (total.up.toDouble() + total.down.toDouble()).traffic.show,
       ),
       if (left != null || expire != null)
         _Stat(
@@ -926,7 +928,7 @@ class _Stat extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: vpsText(
-                        p,
+                        context,
                         size: 12,
                         color: p.soft,
                         weight: FontWeight.w500,
@@ -941,7 +943,7 @@ class _Stat extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: vpsText(
-                  p,
+                  context,
                   size: 21,
                   weight: FontWeight.w600,
                   spacing: -0.4,
@@ -953,7 +955,7 @@ class _Stat extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     foot!,
-                    style: vpsText(p, size: 11.5, color: p.muted),
+                    style: vpsText(context, size: 11.5, color: p.muted),
                   ),
                 ),
             ],
@@ -1095,7 +1097,7 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                   children: [
                     Text(
                       tr(context, 'AI 服务可用性', 'AI availability'),
-                      style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(context, size: 14.5, weight: FontWeight.w600),
                     ),
                     Text(
                       ref.watch(isStartProvider)
@@ -1105,7 +1107,7 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                               '未连接 · 当前为直连结果',
                               'Not connected · direct results',
                             ),
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(context, size: 12.5, color: p.soft),
                     ),
                   ],
                 ),

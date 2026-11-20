@@ -53,9 +53,9 @@ class ScriptsAction extends _$ScriptsAction {
         return;
       }
       final latest = ref.read(scriptsProvider).value!.get(current.id)!;
-      ref.read(scriptsProvider.notifier).put(
-        latest.copyWith(lastUpdateTime: updated.lastUpdateTime),
-      );
+      ref
+          .read(scriptsProvider.notifier)
+          .put(latest.copyWith(lastUpdateTime: updated.lastUpdateTime));
       _applyIfInUse(current.id);
     } catch (_) {
       if (shouldCommit()) {

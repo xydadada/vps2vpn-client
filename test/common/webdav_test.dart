@@ -58,71 +58,83 @@ void main() {
     });
   }
 
-  test('an upload keeps its method and bytes on a same-origin redirect', () async {
-    var calls = 0;
-    final adapter = _ScriptedAdapter((_) {
-      calls++;
-      return calls == 1
-          ? ResponseBody.fromString(
-              '',
-              307,
-              headers: {
-                'location': ['/moved/backup.zip'],
-              },
-            )
-          : ResponseBody.fromString('', 201);
-    });
-    final transport = DAVTransport(
-      uri: 'https://origin.example/base',
-      user: 'user',
-      password: 'pass',
-      dio: _dioWith(adapter),
-    );
+  test(
+    'an upload keeps its method and bytes on a same-origin redirect',
+    () async {
+      var calls = 0;
+      final adapter = _ScriptedAdapter((_) {
+        calls++;
+        return calls == 1
+            ? ResponseBody.fromString(
+                '',
+                307,
+                headers: {
+                  'location': ['/moved/backup.zip'],
+                },
+              )
+            : ResponseBody.fromString('', 201);
+      });
+      final transport = DAVTransport(
+        uri: 'https://origin.example/base',
+        user: 'user',
+        password: 'pass',
+        dio: _dioWith(adapter),
+      );
 
-    await transport.put('backup.zip', [1, 2, 3]);
+      await transport.put('backup.zip', [1, 2, 3]);
 
-    expect(adapter.requests, hasLength(2));
-    expect(adapter.requests.last.method, 'PUT');
-    expect(adapter.requests.last.data, [1, 2, 3]);
-    expect(adapter.requests.last.uri.path, '/moved/backup.zip');
-    expect(adapter.requests.last.headers, contains('authorization'));
-  });
+      expect(adapter.requests, hasLength(2));
+      expect(adapter.requests.last.method, 'PUT');
+      expect(adapter.requests.last.data, [1, 2, 3]);
+      expect(adapter.requests.last.uri.path, '/moved/backup.zip');
+      expect(adapter.requests.last.headers, contains('authorization'));
+    },
+  );
 
-  test('a foreign challenge never replaces the origin authentication', () async {
-    var calls = 0;
-    final adapter = _ScriptedAdapter((_) {
-      calls++;
-      return switch (calls) {
-        1 => ResponseBody.fromString(
-          '',
-          302,
-          headers: {
-            'location': ['https://other.example/probe'],
-          },
-        ),
-        2 => ResponseBody.fromString(
-          '',
-          401,
-          headers: {
-            'www-authenticate': ['Digest realm="foreign", nonce="other"'],
-          },
-        ),
-        _ => ResponseBody.fromString('', 204),
-      };
-    });
-    final transport = DAVTransport(
-      uri: 'https://origin.example/base',
-      user: 'user',
-      password: 'pass',
-      dio: _dioWith(adapter),
-    );
+  test(
+    'a foreign challenge never replaces the origin authentication',
+    () async {
+      var calls = 0;
+      final adapter = _ScriptedAdapter((_) {
+        calls++;
+        return switch (calls) {
+          1 => ResponseBody.fromString(
+            '',
+            302,
+            headers: {
+              'location': ['https://other.example/probe'],
+            },
+          ),
+          2 => ResponseBody.fromString(
+            '',
+            401,
+            headers: {
+              'www-authenticate': ['Digest realm="foreign", nonce="other"'],
+            },
+          ),
+          _ => ResponseBody.fromString('', 204),
+        };
+      });
+      final transport = DAVTransport(
+        uri: 'https://origin.example/base',
+        user: 'user',
+        password: 'pass',
+        dio: _dioWith(adapter),
+      );
 
-    await expectLater(transport.options('probe'), throwsA(isA<DAVException>()));
-    await transport.options('probe');
+      await expectLater(
+        transport.options('probe'),
+        throwsA(isA<DAVException>()),
+      );
+      await transport.options('probe');
 
-    expect(adapter.requests, hasLength(3));
-    expect(adapter.requests.last.headers['authorization'], startsWith('Basic '));
-  });
+      expect(adapter.requests, hasLength(3));
+      expect(
+        adapter.requests.last.headers['authorization'],
+        startsWith('Basic '),
+      );
+    },
+  );
 
   test(
     'redirect to a different origin drops the Authorization header',

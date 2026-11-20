@@ -33,11 +33,10 @@ class GoBuilder {
   String get _outputPath => p.join(rootDir, config.outputDir);
 
   Future<BuildExecution> build(Target target) async {
-    await runCommandStream(
-      'go',
-      ['run', p.join(rootDir, 'tool', 'apply_core_patches.go')],
-      workingDirectory: rootDir,
-    );
+    await runCommandStream('go', [
+      'run',
+      p.join(rootDir, 'tool', 'apply_core_patches.go'),
+    ], workingDirectory: rootDir);
     final outDir = p.join(_outputPath, target.platformDir);
     ensureDir(outDir);
 
@@ -150,7 +149,12 @@ class GoBuilder {
     inputs.addAll(harnessInputs);
     inputs.addAll([
       p.join(rootDir, 'tool', 'apply_core_patches.go'),
-      p.join(rootDir, 'tool', 'patches', 'clash-meta-controller-lifecycle.patch'),
+      p.join(
+        rootDir,
+        'tool',
+        'patches',
+        'clash-meta-controller-lifecycle.patch',
+      ),
     ]);
 
     builder.addFiles(inputs);

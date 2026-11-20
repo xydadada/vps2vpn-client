@@ -31,11 +31,7 @@ DOMAIN-SET,list.conf,REJECT
     for (final name in unsafeNames) {
       final parsed = parseMitmModule(
         source,
-        resources: {
-          'body.json': name,
-          'script.js': name,
-          'list.conf': name,
-        },
+        resources: {'body.json': name, 'script.js': name, 'list.conf': name},
       );
       expect(parsed.mapLocal, isEmpty, reason: name);
       expect(parsed.script, isEmpty, reason: name);

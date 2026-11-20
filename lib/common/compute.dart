@@ -112,20 +112,27 @@ SelectedProxyState getRealSelectedProxyState(
   required Map<String, String> selectedMap,
 }) {
   if (state.proxyName.isEmpty) return state;
-  final group = groups.getGroup(state.proxyName);
-  final newState = state.copyWith(group: true);
-  if (group == null) return newState;
-  final currentSelectedName = group.getCurrentSelectedName(
-    selectedMap[newState.proxyName] ?? '',
-  );
-  if (currentSelectedName.isEmpty) {
-    return newState;
+  var current = state.copyWith(group: true);
+  final visited = <String>{};
+  while (true) {
+    if (!visited.add(current.proxyName)) {
+      return current.copyWith(proxyName: '', testUrl: null);
+    }
+    final group = groups.getGroup(current.proxyName);
+    if (group == null) return current;
+    final selected = group.getCurrentSelectedName(
+      selectedMap[current.proxyName] ?? '',
+    );
+    if (selected.isEmpty) return current;
+    // Saved selections can outlive group membership, and computed groups may
+    // not have published a current choice yet. Do not follow an unrelated
+    // group (or a self-reference) from persisted UI state.
+    if (group.all.isNotEmpty &&
+        !group.all.any((proxy) => proxy.name == selected)) {
+      return current.copyWith(proxyName: '', testUrl: null);
+    }
+    current = current.copyWith(proxyName: selected, testUrl: group.testUrl);
   }
-  return getRealSelectedProxyState(
-    newState.copyWith(proxyName: currentSelectedName, testUrl: group.testUrl),
-    groups: groups,
-    selectedMap: selectedMap,
-  );
 }
 
 SelectedProxyState computeRealSelectedProxyState(

@@ -214,13 +214,20 @@ class RouteTracker extends _$RouteTracker {
   void resync() => _subscribe();
 
   void applySnapshot(RouteSnapshot snapshot) {
+    // Events and RPC replies use independent delivery paths. Within one
+    // connected Core, neither counter may move backwards. A disconnect drops
+    // synced so a replacement process can start its counters again.
+    if (state.synced &&
+        (snapshot.coreEpoch < state.coreEpoch ||
+            snapshot.routeVersion < state.routeVersion)) {
+      return;
+    }
     state = state.copyWith(
       coreEpoch: snapshot.coreEpoch,
       routeVersion: snapshot.routeVersion,
       proxied: ref.read(safeModeProvider) ? null : snapshot.running,
       hostEpoch: state.synced ? state.hostEpoch : state.hostEpoch + 1,
       synced: true,
-      live: true,
     );
   }
 
@@ -283,6 +290,9 @@ class RouteTracker extends _$RouteTracker {
       if (snapshot != null) {
         _failures = 0;
         applySnapshot(snapshot);
+        // Receiving an event is not a subscription acknowledgement. Only the
+        // current watch reply may make the tracker live after attach/resume.
+        state = state.copyWith(live: true);
       } else if (!_resubscribe) {
         _retryLater();
       }

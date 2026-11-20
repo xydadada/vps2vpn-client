@@ -27,11 +27,7 @@ const _defaultBypassDomainPrefix = [
   '172.19.*',
 ];
 
-const _defaultBypassDomainSuffix = [
-  '172.30.*',
-  '172.31.*',
-  '192.168.*',
-];
+const _defaultBypassDomainSuffix = ['172.30.*', '172.31.*', '192.168.*'];
 
 const defaultBypassDomain = [
   ..._defaultBypassDomainPrefix,

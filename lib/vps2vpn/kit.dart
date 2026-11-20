@@ -5,6 +5,7 @@
 import 'dart:math' as math;
 
 import 'package:prism_ui/prism_ui.dart' show BuildContextExtension;
+import 'package:prism_ui/typography.dart';
 import 'package:flutter/widgets.dart';
 
 const vpsCoral = Color(0xFFFF6F61);
@@ -140,21 +141,28 @@ String tr(BuildContext context, String zh, String en) =>
     vpsZh(context) ? zh : en;
 
 TextStyle vpsText(
-  VpsPalette p, {
+  BuildContext context, {
   double size = 14,
   FontWeight weight = FontWeight.w400,
   Color? color,
   double? height,
   double? spacing,
   bool tabular = false,
-}) => TextStyle(
-  fontSize: size,
-  fontWeight: weight,
-  color: color ?? p.text,
-  height: height,
-  letterSpacing: spacing,
-  fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
-);
+}) {
+  final inherited = DefaultTextStyle.of(context).style;
+  return AppTextStyle.custom(
+    context,
+    size: size,
+    leading: size * (height ?? inherited.height ?? kTextHeightNone),
+    weight: weight,
+  ).copyWith(
+    color: color ?? VpsPalette.of(context).text,
+    letterSpacing: spacing ?? inherited.letterSpacing,
+    fontFeatures: tabular
+        ? const [FontFeature.tabularFigures()]
+        : inherited.fontFeatures,
+  );
+}
 
 /// The rounded surface every block sits on: glass in dark, paper in light.
 class VpsCard extends StatelessWidget {
@@ -276,7 +284,7 @@ class VpsButton extends StatelessWidget {
             ],
             Text(
               label,
-              style: vpsText(p, size: 13.5, weight: FontWeight.w600, color: fg),
+              style: vpsText(context, size: 13.5, weight: FontWeight.w600, color: fg),
             ),
           ],
         ),
@@ -419,7 +427,7 @@ class VpsSegmented<T> extends StatelessWidget {
                           child: Text(
                             labelOf(item),
                             style: vpsText(
-                              p,
+                              context,
                               size: 13.5,
                               weight: item == value
                                   ? FontWeight.w600
@@ -470,7 +478,7 @@ class VpsChip extends StatelessWidget {
           const SizedBox(width: 7),
           Text(
             label,
-            style: vpsText(p, size: 12, weight: FontWeight.w500, color: p.text),
+            style: vpsText(context, size: 12, weight: FontWeight.w500, color: p.text),
           ),
         ],
       ),
@@ -884,7 +892,7 @@ class VpsSectionTitle extends StatelessWidget {
             child: Text(
               text,
               style: vpsText(
-                p,
+                context,
                 size: 12.5,
                 weight: FontWeight.w500,
                 color: p.soft,
@@ -943,14 +951,14 @@ class VpsRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+                  style: vpsText(context, size: 14.5, weight: FontWeight.w500),
                 ),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       subtitle!,
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(context, size: 12.5, color: p.soft),
                     ),
                   ),
               ],
@@ -1013,12 +1021,12 @@ class VpsInfoTip extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
                       title!,
-                      style: vpsText(p, size: 13, weight: FontWeight.w700),
+                      style: vpsText(context, size: 13, weight: FontWeight.w700),
                     ),
                   ),
                 Text(
                   message,
-                  style: vpsText(p, size: 12.5, color: p.soft, height: 1.5),
+                  style: vpsText(context, size: 12.5, color: p.soft, height: 1.5),
                 ),
               ],
             ),
@@ -1046,7 +1054,7 @@ class VpsInfoTip extends StatelessWidget {
           child: Text(
             '?',
             style: vpsText(
-              p,
+              context,
               size: 10.5,
               weight: FontWeight.w700,
               color: p.soft,

@@ -8,7 +8,6 @@ import '../helpers/test_app.dart';
 import '../helpers/host_scaffold.dart';
 
 void main() {
-
   testWidgets('invalid expiry cannot crash summary or detail views', (
     tester,
   ) async {
@@ -28,10 +27,7 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull, reason: '$expiry');
-      expect(
-        find.text(currentAppLocalizations.infiniteTime),
-        findsWidgets,
-      );
+      expect(find.text(currentAppLocalizations.infiniteTime), findsWidgets);
     }
   });
   testWidgets('hides expiry when both values do not fit', (tester) async {

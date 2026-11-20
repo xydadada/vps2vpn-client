@@ -66,12 +66,12 @@ String? mitmGrpcText(
       out.writeln(latin1.decode(frame).trim());
     } else {
       final compressed = flag & 1 != 0;
-      final (message, overLimit) = compressed
+      final (message, overLimit, processedBytes) = compressed
           ? _gunzip(frame, mitmGrpcInflateLimit - inflated)
-          : (frame, false);
-      if (compressed) {
-        inflated += message?.length ?? 0;
-      }
+          : (frame, false, 0);
+      // Discarding an oversized or malformed frame does not undo its work.
+      // Charge every output chunk so later frames cannot restart the budget.
+      inflated += processedBytes;
       if (overLimit && overLimitNote != null) {
         out.writeln(overLimitNote);
       }
@@ -87,8 +87,10 @@ String? mitmGrpcText(
 }
 
 /// No bytes for a frame that is not gzip or inflates past [limit], which the
-/// second field tells.
-(Uint8List?, bool) _gunzip(Uint8List frame, int limit) {
+/// second field tells. The third counts output already processed, even when
+/// the frame is rejected.
+(Uint8List?, bool, int) _gunzip(Uint8List frame, int limit) {
+  if (limit <= 0) return (null, true, 0);
   final filter = RawZLibFilter.inflateFilter();
   final out = BytesBuilder(copy: false);
   bool drain({bool end = false}) {
@@ -107,12 +109,14 @@ String? mitmGrpcText(
   try {
     filter.process(frame, 0, frame.length);
     if (!drain()) {
-      return (null, true);
+      return (null, true, out.length);
     }
     filter.process(const [], 0, 0);
-    return drain(end: true) ? (out.takeBytes(), false) : (null, true);
+    if (!drain(end: true)) return (null, true, out.length);
+    final processedBytes = out.length;
+    return (out.takeBytes(), false, processedBytes);
   } on FormatException {
-    return (null, false);
+    return (null, false, out.length);
   }
 }
 
@@ -130,6 +134,7 @@ List<_Field>? _parse(
     var value = 0;
     for (var shift = 0, at = offset; shift < 70 && at < end; shift += 7, at++) {
       final byte = bytes[at];
+      if (shift == 63 && byte > 1) return null;
       value |= (byte & 0x7f) << shift;
       if (byte & 0x80 == 0) {
         return (value, at + 1);
@@ -184,10 +189,11 @@ List<_Field>? _parse(
           return stopped();
         }
         final bodyStart = length.$2;
-        final bodyEnd = bodyStart + length.$1;
-        if (length.$1 < 0 || bodyEnd > end) {
+        // Compare before adding: an otherwise valid int64 length can wrap.
+        if (length.$1 < 0 || length.$1 > end - bodyStart) {
           return stopped();
         }
+        final bodyEnd = bodyStart + length.$1;
         offset = bodyEnd;
         fields.add(_lengthDelimited(bytes, number, bodyStart, bodyEnd, depth));
       case 5:

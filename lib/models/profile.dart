@@ -54,10 +54,9 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
 }
 
 extension SubscriptionInfoExt on SubscriptionInfo {
-  double? get usage =>
-      total > 0
-          ? ((upload.toDouble() + download.toDouble()) / total).clamp(0.0, 1.0)
-          : null;
+  double? get usage => total > 0
+      ? ((upload.toDouble() + download.toDouble()) / total).clamp(0.0, 1.0)
+      : null;
 
   DateTime? get expireDate => dateTimeFromUnixSeconds(expire);
 }

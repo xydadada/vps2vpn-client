@@ -61,7 +61,8 @@ class _IconBytesCache {
 
   void remove(String key) {
     if (_entries.containsKey(key)) {
-      _bytes -= (_entries.remove(key)?.lengthInBytes ?? 0) + key.length * 2 + 64;
+      _bytes -=
+          (_entries.remove(key)?.lengthInBytes ?? 0) + key.length * 2 + 64;
     }
   }
 }

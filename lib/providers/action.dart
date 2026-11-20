@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart' show CancelToken, DioException;
 import 'package:fl_clash/common/app_data.dart';

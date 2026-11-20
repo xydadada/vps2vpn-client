@@ -143,7 +143,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                         '未连接 · 以下为直连检测结果',
                         'Not connected · results below are direct',
                       ),
-                      style: vpsText(p, size: 13.5),
+                      style: vpsText(context, size: 13.5),
                     ),
                   ),
                 ],
@@ -160,7 +160,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                   Text(
                     tr(context, '出口', 'Exit'),
                     style: vpsText(
-                      p,
+                      context,
                       size: 13,
                       color: p.soft,
                       weight: FontWeight.w600,
@@ -174,7 +174,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                               : '—')
                         : countryName(context, info.countryCode),
                     style: vpsText(
-                      p,
+                      context,
                       size: 26,
                       weight: FontWeight.w600,
                       spacing: -0.5,
@@ -190,7 +190,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                           Text(
                             _showIp ? info.ip : _mask(info.ip),
                             style: vpsText(
-                              p,
+                              context,
                               size: 14,
                               weight: FontWeight.w600,
                               color: p.soft,
@@ -202,7 +202,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                                 ? tr(context, '隐藏', 'Hide')
                                 : tr(context, '显示', 'Show'),
                             style: vpsText(
-                              p,
+                              context,
                               size: 13,
                               weight: FontWeight.w700,
                               color: p.accent,
@@ -223,7 +223,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                         ? tr(context, '可访问（检测中…）', 'Reachable (checking…)')
                         : tr(context, '可访问', 'Reachable'),
                     style: vpsText(
-                      p,
+                      context,
                       size: 13,
                       color: p.soft,
                       weight: FontWeight.w600,
@@ -236,7 +236,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                         TextSpan(
                           text: '$working',
                           style: vpsText(
-                            p,
+                            context,
                             size: 26,
                             weight: FontWeight.w600,
                             color: p.text,
@@ -246,7 +246,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                         TextSpan(
                           text: ' / ${_all.length}',
                           style: vpsText(
-                            p,
+                            context,
                             size: 18,
                             weight: FontWeight.w700,
                             color: p.soft,
@@ -370,7 +370,7 @@ class _ServiceLine extends StatelessWidget {
           Expanded(
             child: Text(
               target.label,
-              style: vpsText(p, size: 14, weight: FontWeight.w500),
+              style: vpsText(context, size: 14, weight: FontWeight.w500),
             ),
           ),
           if (region != null && region.isNotEmpty)
@@ -378,7 +378,7 @@ class _ServiceLine extends StatelessWidget {
               padding: const EdgeInsets.only(right: 10),
               child: Text(
                 region.toUpperCase(),
-                style: vpsText(p, size: 12.5, color: p.soft),
+                style: vpsText(context, size: 12.5, color: p.soft),
               ),
             ),
           VpsChip(label: statusText(context, entry), color: color),

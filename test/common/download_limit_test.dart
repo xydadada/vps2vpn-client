@@ -33,27 +33,33 @@ void main() {
     return request;
   }
 
-  test('a bounded download accepts its exact byte limit and metadata', () async {
-    final request = serving(
-      () => ResponseBody.fromBytes(
-        [1, 2, 3, 4],
-        200,
-        headers: {
-          'content-length': ['4'],
-          'content-disposition': ['attachment; filename="resource.js"'],
-        },
-      ),
-    );
+  test(
+    'a bounded download accepts its exact byte limit and metadata',
+    () async {
+      final request = serving(
+        () => ResponseBody.fromBytes(
+          [1, 2, 3, 4],
+          200,
+          headers: {
+            'content-length': ['4'],
+            'content-disposition': ['attachment; filename="resource.js"'],
+          },
+        ),
+      );
 
-    final response = await request.getFileResponseForUrl(
-      'https://example.invalid/resource',
-      maxBytes: 4,
-    );
+      final response = await request.getFileResponseForUrl(
+        'https://example.invalid/resource',
+        maxBytes: 4,
+      );
 
-    expect(response.data, [1, 2, 3, 4]);
-    expect(response.statusCode, 200);
-    expect(response.headers.value('content-disposition'), contains('resource.js'));
-  });
+      expect(response.data, [1, 2, 3, 4]);
+      expect(response.statusCode, 200);
+      expect(
+        response.headers.value('content-disposition'),
+        contains('resource.js'),
+      );
+    },
+  );
 
   test('a chunked oversized body is canceled before it is returned', () async {
     var closed = false;
@@ -79,29 +85,32 @@ void main() {
     expect(closed, isTrue);
   });
 
-  test('an oversized declared length is rejected without collecting it', () async {
-    var closed = false;
-    final request = serving(
-      () => ResponseBody.fromBytes(
-        [1],
-        200,
-        headers: {
-          'content-length': ['1000000'],
-        },
-        onClose: () => closed = true,
-      ),
-    );
+  test(
+    'an oversized declared length is rejected without collecting it',
+    () async {
+      var closed = false;
+      final request = serving(
+        () => ResponseBody.fromBytes(
+          [1],
+          200,
+          headers: {
+            'content-length': ['1000000'],
+          },
+          onClose: () => closed = true,
+        ),
+      );
 
-    await expectLater(
-      request.getFileResponseForUrl(
-        'https://example.invalid/declared',
-        maxBytes: 4,
-      ),
-      throwsA(isA<FileSystemException>()),
-    );
-    await pumpEventQueue();
-    expect(closed, isTrue);
-  });
+      await expectLater(
+        request.getFileResponseForUrl(
+          'https://example.invalid/declared',
+          maxBytes: 4,
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      await pumpEventQueue();
+      expect(closed, isTrue);
+    },
+  );
 
   testWidgets('the byte limit keeps the deadline through a stalled body', (
     tester,

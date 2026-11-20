@@ -224,8 +224,7 @@ void main() {
       ],
     );
     final url = find.byWidgetPredicate(
-      (widget) =>
-          widget is TextField && widget.controller?.text == profile.url,
+      (widget) => widget is TextField && widget.controller?.text == profile.url,
     );
     await tester.enterText(url, 'https://new.example.com/sub');
     await tester.tap(find.byTooltip('Save'));

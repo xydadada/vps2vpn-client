@@ -46,28 +46,31 @@ void main() {
     expect(_bypasses('localhost'), isTrue);
   });
 
-  test('exact saved defaults migrate without changing custom bypass policy', () {
-    expect(
-      NetworkProps.fromJson({'bypassDomain': _legacyBypass}).bypassDomain,
-      defaultBypassDomain,
-    );
-    expect(
-      NetworkProps.fromJson({
-        'bypassDomain': [..._legacyBypass, windowsLocalBypass],
-      }).bypassDomain,
-      [...defaultBypassDomain, windowsLocalBypass],
-    );
-    const custom = ['172.2*', 'internal.example'];
-    expect(
-      NetworkProps.fromJson({'bypassDomain': custom}).bypassDomain,
-      custom,
-    );
-    final reordered = _legacyBypass.reversed.toList();
-    expect(
-      NetworkProps.fromJson({'bypassDomain': reordered}).bypassDomain,
-      reordered,
-    );
-  });
+  test(
+    'exact saved defaults migrate without changing custom bypass policy',
+    () {
+      expect(
+        NetworkProps.fromJson({'bypassDomain': _legacyBypass}).bypassDomain,
+        defaultBypassDomain,
+      );
+      expect(
+        NetworkProps.fromJson({
+          'bypassDomain': [..._legacyBypass, windowsLocalBypass],
+        }).bypassDomain,
+        [...defaultBypassDomain, windowsLocalBypass],
+      );
+      const custom = ['172.2*', 'internal.example'];
+      expect(
+        NetworkProps.fromJson({'bypassDomain': custom}).bypassDomain,
+        custom,
+      );
+      final reordered = _legacyBypass.reversed.toList();
+      expect(
+        NetworkProps.fromJson({'bypassDomain': reordered}).bypassDomain,
+        reordered,
+      );
+    },
+  );
 
   test('timestamp normalization rejects invalid values before arithmetic', () {
     for (final value in <Object?>[
@@ -116,47 +119,51 @@ void main() {
     );
   });
 
-  test('subscription header dates cannot crash the view with extreme values', () {
-    for (final raw in [
-      '-1',
-      'NaN',
-      'Infinity',
-      '1e100',
-      '9223372036854775807',
-      '${maxDisplayUnixSeconds + 1}',
-    ]) {
-      final info = SubscriptionInfo.formHString('upload=3; expire=$raw');
-      expect(info.upload, 3);
-      expect(info.expire, 0, reason: raw);
-      expect(info.expireDate, isNull, reason: raw);
-    }
-    expect(
-      SubscriptionInfo.formHString(
-        'expire=$maxDisplayUnixSeconds',
-      ).expire,
-      maxDisplayUnixSeconds,
-    );
-  });
+  test(
+    'subscription header dates cannot crash the view with extreme values',
+    () {
+      for (final raw in [
+        '-1',
+        'NaN',
+        'Infinity',
+        '1e100',
+        '9223372036854775807',
+        '${maxDisplayUnixSeconds + 1}',
+      ]) {
+        final info = SubscriptionInfo.formHString('upload=3; expire=$raw');
+        expect(info.upload, 3);
+        expect(info.expire, 0, reason: raw);
+        expect(info.expireDate, isNull, reason: raw);
+      }
+      expect(
+        SubscriptionInfo.formHString('expire=$maxDisplayUnixSeconds').expire,
+        maxDisplayUnixSeconds,
+      );
+    },
+  );
 
-  test('restored subscription JSON validates dates independently of headers', () {
-    for (final value in <Object?>[
-      -1,
-      double.nan,
-      double.infinity,
-      '1e100',
-      9223372036854775807,
-      maxDisplayUnixSeconds + 1,
-    ]) {
-      final info = SubscriptionInfo.fromJson({'expire': value, 'total': 42});
-      expect(info.total, 42);
-      expect(info.expire, 0, reason: '$value');
-      expect(info.expireDate, isNull, reason: '$value');
-    }
-    expect(
-      SubscriptionInfo.fromJson({'expire': maxDisplayUnixSeconds}).expire,
-      maxDisplayUnixSeconds,
-    );
-  });
+  test(
+    'restored subscription JSON validates dates independently of headers',
+    () {
+      for (final value in <Object?>[
+        -1,
+        double.nan,
+        double.infinity,
+        '1e100',
+        9223372036854775807,
+        maxDisplayUnixSeconds + 1,
+      ]) {
+        final info = SubscriptionInfo.fromJson({'expire': value, 'total': 42});
+        expect(info.total, 42);
+        expect(info.expire, 0, reason: '$value');
+        expect(info.expireDate, isNull, reason: '$value');
+      }
+      expect(
+        SubscriptionInfo.fromJson({'expire': maxDisplayUnixSeconds}).expire,
+        maxDisplayUnixSeconds,
+      );
+    },
+  );
 
   test('large subscription counters do not overflow before division', () {
     const maximum = 9223372036854775807;

@@ -300,6 +300,7 @@ void main() {
         cleanups++;
         await clearUpdateDownloads();
       }
+
       request.releaseDio.httpClientAdapter = _ReleaseAdapter(
         sums: '$digest  ./$asset\n',
         asset: () => ResponseBody.fromBytes(package, 200),
@@ -310,7 +311,9 @@ void main() {
         () => container.read(updateDownloadStateProvider) is UpdateReady,
       );
 
-      await container.read(commonActionProvider.notifier).clearIdleUpdateDownloads();
+      await container
+          .read(commonActionProvider.notifier)
+          .clearIdleUpdateDownloads();
 
       expect(cleanups, 1);
       expect(container.read(updateDownloadStateProvider), isA<UpdateReady>());
@@ -318,100 +321,107 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
     });
 
-    testWidgets('cancellation holds the operation until old files are removed', (
-      tester,
-    ) async {
-      final cleanupStarted = Completer<void>();
-      final cleanupRelease = Completer<void>();
-      addTearDown(() {
-        if (!cleanupRelease.isCompleted) cleanupRelease.complete();
-      });
-      var cleanups = 0;
-      Future<void> cleanup() async {
-        cleanups++;
-        if (cleanups == 2) {
-          cleanupStarted.complete();
-          await cleanupRelease.future;
+    testWidgets(
+      'cancellation holds the operation until old files are removed',
+      (tester) async {
+        final cleanupStarted = Completer<void>();
+        final cleanupRelease = Completer<void>();
+        addTearDown(() {
+          if (!cleanupRelease.isCompleted) cleanupRelease.complete();
+        });
+        var cleanups = 0;
+        Future<void> cleanup() async {
+          cleanups++;
+          if (cleanups == 2) {
+            cleanupStarted.complete();
+            await cleanupRelease.future;
+          }
+          await clearUpdateDownloads();
         }
-        await clearUpdateDownloads();
-      }
-      final body = StreamController<Uint8List>();
-      addTearDown(body.close);
-      request.releaseDio.httpClientAdapter = _ReleaseAdapter(
-        sums: '$digest  ./$asset\n',
-        asset: () => ResponseBody(body.stream, 200),
-      );
 
-      final container = await startUpdate(tester, clearDownloads: cleanup);
-      await settleUntil(
-        tester,
-        () => File('${home.path}/update/$asset').existsSync(),
-      );
-      final action = container.read(commonActionProvider.notifier);
-      action.cancelUpdateDownload();
-      await settleUntil(tester, () => cleanupStarted.isCompleted);
+        final body = StreamController<Uint8List>();
+        addTearDown(body.close);
+        request.releaseDio.httpClientAdapter = _ReleaseAdapter(
+          sums: '$digest  ./$asset\n',
+          asset: () => ResponseBody(body.stream, 200),
+        );
 
-      expect(cleanupStarted.isCompleted, isTrue);
-      expect(container.read(updateDownloadStateProvider), isA<UpdateDownloading>());
-      await action.testUpdateDownload();
-      await action.clearIdleUpdateDownloads();
-      expect(cleanups, 2);
+        final container = await startUpdate(tester, clearDownloads: cleanup);
+        await settleUntil(
+          tester,
+          () => File('${home.path}/update/$asset').existsSync(),
+        );
+        final action = container.read(commonActionProvider.notifier);
+        action.cancelUpdateDownload();
+        await settleUntil(tester, () => cleanupStarted.isCompleted);
 
-      cleanupRelease.complete();
-      await settleUntil(
-        tester,
-        () => container.read(updateDownloadStateProvider) == null,
-      );
-      expect(File('${home.path}/update/$asset').existsSync(), isFalse);
-      expect(shows('Update failed'), isFalse);
-    });
+        expect(cleanupStarted.isCompleted, isTrue);
+        expect(
+          container.read(updateDownloadStateProvider),
+          isA<UpdateDownloading>(),
+        );
+        await action.testUpdateDownload();
+        await action.clearIdleUpdateDownloads();
+        expect(cleanups, 2);
 
-    testWidgets('discard keeps its download reserved through asynchronous cleanup', (
-      tester,
-    ) async {
-      final cleanupStarted = Completer<void>();
-      final cleanupRelease = Completer<void>();
-      addTearDown(() {
-        if (!cleanupRelease.isCompleted) cleanupRelease.complete();
-      });
-      var cleanups = 0;
-      Future<void> cleanup() async {
-        cleanups++;
-        if (cleanups == 2) {
-          cleanupStarted.complete();
-          await cleanupRelease.future;
+        cleanupRelease.complete();
+        await settleUntil(
+          tester,
+          () => container.read(updateDownloadStateProvider) == null,
+        );
+        expect(File('${home.path}/update/$asset').existsSync(), isFalse);
+        expect(shows('Update failed'), isFalse);
+      },
+    );
+
+    testWidgets(
+      'discard keeps its download reserved through asynchronous cleanup',
+      (tester) async {
+        final cleanupStarted = Completer<void>();
+        final cleanupRelease = Completer<void>();
+        addTearDown(() {
+          if (!cleanupRelease.isCompleted) cleanupRelease.complete();
+        });
+        var cleanups = 0;
+        Future<void> cleanup() async {
+          cleanups++;
+          if (cleanups == 2) {
+            cleanupStarted.complete();
+            await cleanupRelease.future;
+          }
+          await clearUpdateDownloads();
         }
-        await clearUpdateDownloads();
-      }
-      request.releaseDio.httpClientAdapter = _ReleaseAdapter(
-        sums: '$digest  ./$asset\n',
-        asset: () => ResponseBody.fromBytes(package, 200),
-      );
 
-      final container = await startUpdate(tester, clearDownloads: cleanup);
-      await settleUntil(
-        tester,
-        () => container.read(updateDownloadStateProvider) is UpdateReady,
-      );
-      final action = container.read(commonActionProvider.notifier);
-      late Future<void> discard;
-      await tester.runAsync(() async {
-        discard = action.discardUpdate();
-      });
-      await tester.pump();
-      expect(cleanupStarted.isCompleted, isTrue);
-      expect(container.read(updateDownloadStateProvider), isA<UpdateReady>());
+        request.releaseDio.httpClientAdapter = _ReleaseAdapter(
+          sums: '$digest  ./$asset\n',
+          asset: () => ResponseBody.fromBytes(package, 200),
+        );
 
-      await action.discardUpdate();
-      await action.testUpdateDownload();
-      expect(cleanups, 2);
+        final container = await startUpdate(tester, clearDownloads: cleanup);
+        await settleUntil(
+          tester,
+          () => container.read(updateDownloadStateProvider) is UpdateReady,
+        );
+        final action = container.read(commonActionProvider.notifier);
+        late Future<void> discard;
+        await tester.runAsync(() async {
+          discard = action.discardUpdate();
+        });
+        await tester.pump();
+        expect(cleanupStarted.isCompleted, isTrue);
+        expect(container.read(updateDownloadStateProvider), isA<UpdateReady>());
 
-      cleanupRelease.complete();
-      await tester.runAsync(() => discard);
-      expect(container.read(updateDownloadStateProvider), isNull);
-      expect(File('${home.path}/update/$asset').existsSync(), isFalse);
-      await tester.pump(const Duration(seconds: 10));
-    });
+        await action.discardUpdate();
+        await action.testUpdateDownload();
+        expect(cleanups, 2);
+
+        cleanupRelease.complete();
+        await tester.runAsync(() => discard);
+        expect(container.read(updateDownloadStateProvider), isNull);
+        expect(File('${home.path}/update/$asset').existsSync(), isFalse);
+        await tester.pump(const Duration(seconds: 10));
+      },
+    );
 
     testWidgets('cancelling the download reports nothing', (tester) async {
       final partial = '${home.path}/update/$asset';

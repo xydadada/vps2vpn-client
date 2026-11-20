@@ -174,7 +174,6 @@ void main() {
       expect(renamed.renamedProxies({'New, Proxy;1': 'Old'}), overrides);
     });
 
-
     test('rename uses the same decoded fragment as the core', () {
       const encoded = '1.1.1.1#Old%26ecs%3D1.2.3.4%2F24';
       expect(dnsServerProxies(encoded), ['Old']);

@@ -164,9 +164,20 @@ class VpsMember {
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
-  int get used => usedUp + usedDown;
+  double get used => _int(usedUp).toDouble() + _int(usedDown).toDouble();
 
-  static int _int(Object? v) => v is num ? v.toInt() : 0;
+  /// Zero keeps the existing unlimited/unknown quota presentation. Validate
+  /// here as well as at JSON decoding because callers can construct a member.
+  double get quotaBytes {
+    final bytes = quotaGb * (1024 * 1024 * 1024);
+    return bytes.isFinite && bytes > 0 ? bytes : 0;
+  }
+
+  static int _int(Object? value) {
+    if (value is! num || !value.isFinite || value <= 0) return 0;
+    const maxCount = 0x7fffffffffffffff;
+    return value >= maxCount ? maxCount : value.toInt();
+  }
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
     final quota = json['quota_eff'] ?? json['quota_gb'];
@@ -179,7 +190,9 @@ class VpsMember {
       },
       usedUp: _int(json['used_up']),
       usedDown: _int(json['used_down']),
-      quotaGb: quota is num ? quota.toDouble() : 0,
+      quotaGb: quota is num && quota.isFinite && quota > 0
+          ? quota.toDouble()
+          : 0,
       expireAt: dateTimeFromUnixSeconds(json['expire_at']),
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
@@ -202,18 +215,21 @@ HttpClient _client(
   String? proxyCredentials,
   Set<String> certificatePins = const {},
 }) {
-  final c = HttpClient(
-    context: certificatePins.isEmpty
-        ? null
-        : SecurityContext(withTrustedRoots: false),
-  )
-    ..badCertificateCallback = (certificate, host, port) {
-      return host.toLowerCase() == url.host.toLowerCase() &&
-          port == url.port &&
-          certificatePins.contains(sha256.convert(certificate.der).toString());
-    }
-    ..connectionTimeout = const Duration(seconds: 6)
-    ..idleTimeout = const Duration(seconds: 2);
+  final c =
+      HttpClient(
+          context: certificatePins.isEmpty
+              ? null
+              : SecurityContext(withTrustedRoots: false),
+        )
+        ..badCertificateCallback = (certificate, host, port) {
+          return host.toLowerCase() == url.host.toLowerCase() &&
+              port == url.port &&
+              certificatePins.contains(
+                sha256.convert(certificate.der).toString(),
+              );
+        }
+        ..connectionTimeout = const Duration(seconds: 6)
+        ..idleTimeout = const Duration(seconds: 2);
   c.findProxy = (_) =>
       proxyPort == null ? 'DIRECT' : 'PROXY 127.0.0.1:$proxyPort';
   final credentials = proxyCredentials;

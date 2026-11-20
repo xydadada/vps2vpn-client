@@ -798,10 +798,7 @@ extension ScriptExt on Script {
 
   Future<String?> get content async => readTextFileTask(await path);
 
-  Future<Script> save(
-    String content, {
-    bool Function()? shouldCommit,
-  }) async {
+  Future<Script> save(String content, {bool Function()? shouldCommit}) async {
     if (shouldCommit?.call() == false) {
       return this;
     }

@@ -1,5 +1,5 @@
 use crate::service::hub::{
-    ensure_core_sha256_configured, log_message, release_managed_core_on_shutdown, routes,
+    ensure_core_sha256_configured, log_message, release_managed_core_on_shutdown, serve_incoming_until,
 };
 
 use anyhow::{bail, Context, Result};
@@ -298,9 +298,7 @@ fn run_service() -> Result<()> {
             }
         };
         let incoming = AuthorizedIncoming::bind(owner)?;
-        warp::serve(routes())
-            .serve_incoming_with_graceful_shutdown(incoming, shutdown)
-            .await;
+        serve_incoming_until(incoming, shutdown).await;
         release_managed_core_on_shutdown();
         Ok(())
     })
