@@ -929,11 +929,11 @@ where
 {
     ensure_core_sha256_configured()?;
 
-    let (_, server) = warp::serve(routes())
-        .try_bind_with_graceful_shutdown(([127, 0, 0, 1], LISTEN_PORT), shutdown)
+    let listener = tokio::net::TcpListener::bind(([127, 0, 0, 1], LISTEN_PORT))
+        .await
         .map_err(|error| anyhow::anyhow!("bind helper server: {error}"))?;
     on_started()?;
-    server.await;
+    warp::serve(routes()).incoming(listener).graceful(shutdown).run().await;
     release_managed_core_on_shutdown();
 
     Ok(())
