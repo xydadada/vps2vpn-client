@@ -177,3 +177,15 @@ Windows 回归用系统 API 从 SDDL 构造真实安全描述符，覆盖受保�
 曾怀疑 interface.dart RPC 参数日志泄漏；完整追到 handleWatch 后确认该路径同时受 kDebugMode 与 const watchExecution=false 限制，当前代码不可达，因此撤回该候选，没有把它列为已修漏洞，也没有添加无法触发的虚假回归。
 
 原生 IPC 复核没有新增已证实缺陷：Unix 连接同时限制 socket mode 与 peer UID，帧在分配前校验 64 MiB 上限，outbox 对待发送字节实施预算并在断开清空，关闭由 select 取消 receive/transmit。Windows 跨账户 named pipe 的实际访问和设备电源暂停仍需要平台专项测试，不能以源代码检查断言所有故障情形均已验证。
+
+### CC-14：Linux 自动启动把可执行路径当作未转义的 Exec 命令（中）
+
+基线 plugins/rust_api/rust/src/launch/linux.rs:18-28 直接写 Exec={executable}；lib/common/launch.dart 传入真实 Platform.resolvedExecutable。包含空格、引号、反斜杠、美元符、反引号或百分号的合法安装路径可能被拆成参数或误当 field code，导致登录后无法启动。包含换行的值还会破坏 desktop 文件的键边界。这一缺陷由调用链和格式要求确认，未在桌面会话执行自动登录复现。
+
+修改按 [freedesktop Exec 规则](https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html) 先构造完整双引号参数，再按 [desktop string 规则](https://specifications.freedesktop.org/desktop-entry/latest/value-types.html) 转义值；字面百分号写为 %%；换行、回车、Tab 保持为值内的转义序列，display name 同样处理。规范禁止的等号路径、空路径和不能表示的控制字符返回失败，不覆盖此前条目。
+
+旧 isEnabled 仅判断文件存在，会把坏的旧 Exec 当成已启用，使升级无法自动修复。现在读取本应用 Desktop Entry 的 Exec，兼容旧版可用的简单未引用路径和新版转义形式；错误命令或明确禁用的条目返回 false，让现有 updateStatus(true) 重写。文件位置及按 id 命名不变，禁用操作仍可以删除旧的坏条目，不要求路径先通过编码。
+
+新增回归覆盖双层转义、空格/引号/反斜杠/美元符/反引号/百分号、换行键边界、旧条目迁移、禁用和重复 Exec、无效输入保留旧文件。Linux 专项测试使用项目已有 glib-sys 的真实 GKeyFile 与 g_shell_parse_argv 解析器验证只产生一个可执行参数；不启动该命令、不修改真实自动启动目录。百分号断言明确位于 field-code 展开之前，不声称该测试运行了桌面会话。等待包含本提交的 native CI 验证。
+
+Windows Run 字符串未引用的候选尚未完成实际解析兼容性验证，因此没有把它列为确认问题，也未修改其行为。
