@@ -119,6 +119,7 @@ void main() {
     );
     disposed = false;
     globalState.container = container;
+    container.listen(scriptsProvider, (_, _) {});
     await container.read(scriptsProvider.future);
     savedFile = File(await script.path);
     await savedFile.parent.create(recursive: true);

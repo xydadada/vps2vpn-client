@@ -122,9 +122,10 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
       });
       return;
     }
-    final current =
-        ref.read(profilesProvider).getProfile(widget.profile.id) ??
-        widget.profile;
+    final current = ref.read(profilesProvider).getProfile(widget.profile.id);
+    if (current == null) {
+      return;
+    }
     final interval = int.tryParse(_autoUpdateDurationController.text);
     var profile = current.copyWith(
       url: _urlController.text,
@@ -146,6 +147,9 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
           title: appLocalizations.tip,
           message: TextSpan(text: appLocalizations.profileHasUpdate),
         );
+        if (!mounted) {
+          return;
+        }
         if (res == true) {
           profile = profile.copyWith(autoUpdate: false);
         }
@@ -180,12 +184,18 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   }
 
   Future<void> _handleSaveEdit(BuildContext context, Uint8List data) async {
-    final issue = await globalState.safeRun(
-      () => ref
-          .read(profilesActionProvider.notifier)
-          .validateConfigWithData(data),
+    final validation = await globalState.safeRun(
+      () async => (
+        issue: await ref
+            .read(profilesActionProvider.notifier)
+            .validateConfigWithData(data),
+      ),
       silence: false,
     );
+    if (validation == null) {
+      return;
+    }
+    final issue = validation.issue;
     if (issue != null) {
       unawaited(
         dialogs.showAlert(
@@ -248,10 +258,11 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   }
 
   Future<void> _uploadProfileFile() async {
-    final platformFile = await globalState.safeRun(picker.pickerFile);
-    if (platformFile == null) return;
-    final fileData = await platformFile.readBytes();
-    if (!mounted) {
+    final fileData = await globalState.safeRun(() async {
+      final platformFile = await picker.pickerFile();
+      return await platformFile?.readBytes();
+    });
+    if (fileData == null || !mounted) {
       return;
     }
     setState(() {
@@ -269,12 +280,13 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
       title: appLocalizations.tip,
       message: TextSpan(text: appLocalizations.fileIsUpdate),
     );
+    if (!mounted) {
+      return;
+    }
     if (res == true) {
       unawaited(_handleConfirm());
     } else {
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+      Navigator.of(context).pop();
     }
   }
 
@@ -398,10 +410,14 @@ Future<void> renameProfile(
       validator: (value) => validateProfileName(appLocalizations, value),
     ),
   );
-  if (label == null || label == profile.label) {
+  if (label == null || !context.mounted) {
     return;
   }
-  profilesAction.putProfile(profile.copyWith(label: label));
+  final latest = ref.read(profilesProvider).getProfile(profile.id);
+  if (latest == null || label == latest.label) {
+    return;
+  }
+  profilesAction.putProfile(latest.copyWith(label: label));
 }
 
 class _ProfileNameField extends StatelessWidget {

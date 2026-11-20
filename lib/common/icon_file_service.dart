@@ -14,13 +14,16 @@ Future<Uint8List> readIconBytes(
   int maxBytes = maxIconBytes,
   Duration timeout = _iconTimeout,
 }) async {
+  if (declaredLength != null && declaredLength > maxBytes) {
+    // StreamIterator is lazy until moveNext. Cancel a real subscription here
+    // so a response rejected from its headers still releases the source.
+    await source.listen(null).cancel();
+    throw const FormatException('Icon exceeds the byte limit');
+  }
   final iterator = StreamIterator(source);
   final clock = Stopwatch()..start();
   final bytes = BytesBuilder(copy: false);
   try {
-    if (declaredLength != null && declaredLength > maxBytes) {
-      throw const FormatException('Icon exceeds the byte limit');
-    }
     while (true) {
       final remaining = timeout - clock.elapsed;
       if (remaining <= Duration.zero) {

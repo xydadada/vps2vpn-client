@@ -26,7 +26,7 @@ void main() {
   Future<void> seedBackupTables() async {
     await database.restore(
       const [Profile(id: 1, autoUpdateDuration: Duration.zero)],
-      [Script(id: 2, label: 'Kept', lastUpdateTime: DateTime.utc(2026))],
+      [Script(id: 2, label: 'Kept', lastUpdateTime: DateTime(2026))],
       const [Rule(id: 3, profileId: 1, content: 'example.com')],
       const [DisabledRule(profileId: 1, ruleId: 3)],
       const [
@@ -46,7 +46,7 @@ void main() {
         ProxyDialer(profileId: 1, proxyId: 6, target: 'DIRECT'),
       ],
       mitmModules: [
-        MitmModule(id: 7, name: 'Kept', lastUpdateTime: DateTime.utc(2026)),
+        MitmModule(id: 7, name: 'Kept', lastUpdateTime: DateTime(2026)),
       ],
     );
   }
@@ -129,7 +129,7 @@ void main() {
       final kept = Script(
         id: 1,
         label: 'Kept',
-        lastUpdateTime: DateTime.utc(2026),
+        lastUpdateTime: DateTime(2026),
       );
       final incoming = kept.copyWith(id: 2, label: 'Partial');
       await database.scripts.put(kept.toCompanion());
@@ -147,7 +147,7 @@ void main() {
     final kept = Script(
       id: 1,
       label: 'Kept',
-      lastUpdateTime: DateTime.utc(2026),
+      lastUpdateTime: DateTime(2026),
     );
     await database.scripts.put(kept.toCompanion());
 

@@ -120,6 +120,9 @@ void main() {
       ],
     );
     globalState.container = container;
+    // The application config/UI retains this auto-dispose provider. Keep the
+    // selected profile alive while the controlled download waits, too.
+    container.listen(currentProfileIdProvider, (_, _) {});
     savedFile = await profile.file;
     await savedFile.writeAsString('existing profile');
     originalAdapter = request.downloadDio.httpClientAdapter;

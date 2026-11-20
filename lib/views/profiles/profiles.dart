@@ -363,7 +363,7 @@ class ProfileItem extends ConsumerWidget {
   String _subtitle(BuildContext context) {
     final info = _subscriptionInfo;
     if (info != null && info.usage != null) {
-      final used = info.upload + info.download;
+      final used = info.upload.toDouble() + info.download.toDouble();
       return '${used.traffic.show} / ${info.total.traffic.show}';
     }
     final appLocalizations = context.appLocalizations;

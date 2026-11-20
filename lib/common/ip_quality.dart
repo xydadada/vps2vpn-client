@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -126,6 +127,7 @@ class _Lookup {
     if (_inFlight > 0) {
       return;
     }
+    cancelToken.cancel();
     final fallback = _fallback;
     if (fallback != null) {
       _completer.complete(fallback);
@@ -136,6 +138,9 @@ class _Lookup {
   }
 }
 
+// These sources return small IP metadata documents, not configuration files.
+const _maxResponseBytes = 1 << 20;
+
 Future<_Answer> _query(
   Dio dio,
   IpQualitySource source,
@@ -143,28 +148,60 @@ Future<_Answer> _query(
   CancelToken cancelToken,
   Duration timeout,
 ) async {
-  final response = await dio
-      .get<String>(
-        _urlOf(source, ip),
-        cancelToken: cancelToken,
-        options: Options(
-          responseType: ResponseType.plain,
-          validateStatus: (_) => true,
-        ),
-      )
-      .timeout(timeout);
-  if (response.statusCode == HttpStatus.tooManyRequests) {
-    throw const _SourceFailure(IpQualitySourceStatus.rateLimited);
+  final requestCancel = CancelToken();
+  if (cancelToken.isCancelled) {
+    requestCancel.cancel();
+  } else {
+    unawaited(cancelToken.whenCancel.then((_) => requestCancel.cancel()));
   }
-  if (response.statusCode != HttpStatus.ok) {
-    throw const _SourceFailure(IpQualitySourceStatus.failed);
+  Future<_Answer> receive() async {
+    final response = await dio.get<ResponseBody>(
+      _urlOf(source, ip),
+      cancelToken: requestCancel,
+      options: Options(
+        responseType: ResponseType.stream,
+        validateStatus: (_) => true,
+      ),
+    );
+    if (response.statusCode == HttpStatus.tooManyRequests) {
+      throw const _SourceFailure(IpQualitySourceStatus.rateLimited);
+    }
+    if (response.statusCode != HttpStatus.ok) {
+      throw const _SourceFailure(IpQualitySourceStatus.failed);
+    }
+    final body = response.data;
+    final declared = body?.contentLength ?? -1;
+    if (body == null || declared > _maxResponseBytes) {
+      throw const _SourceFailure(IpQualitySourceStatus.failed);
+    }
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in body.stream) {
+      if (chunk.length > _maxResponseBytes - bytes.length) {
+        throw const _SourceFailure(IpQualitySourceStatus.failed);
+      }
+      bytes.add(chunk);
+    }
+    final json = jsonDecode(utf8.decode(bytes.takeBytes())) as Map<String, dynamic>;
+    final answer = _parse(source, ip, json);
+    if (answer == null) {
+      throw const _SourceFailure(IpQualitySourceStatus.noType);
+    }
+    return answer;
   }
-  final json = jsonDecode(response.data ?? '') as Map<String, dynamic>;
-  final answer = _parse(source, ip, json);
-  if (answer == null) {
-    throw const _SourceFailure(IpQualitySourceStatus.noType);
+
+  try {
+    return await receive().timeout(
+      timeout,
+      onTimeout: () {
+        requestCancel.cancel();
+        throw TimeoutException('IP quality source timed out', timeout);
+      },
+    );
+  } finally {
+    // Future.timeout alone does not stop a request, and a rejected response
+    // may still be streaming. Stop this source without cancelling its rivals.
+    requestCancel.cancel();
   }
-  return answer;
 }
 
 IpQualitySourceStatus _statusOf(Object error) {

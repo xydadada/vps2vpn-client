@@ -14,6 +14,15 @@ class _DelayTestTarget {
 
 typedef _DelayTestBatch = ({List<Proxy> proxies, String? testUrl});
 
+class _ProxySelectionLane {
+  _ProxySelectionLane(this.profileId, this.confirmedName);
+
+  final int? profileId;
+  String confirmedName;
+  Object? latest;
+  Future<void> pending = Future<void>.value();
+}
+
 class _DelayTestJob {
   _DelayTestJob(Iterable<String> keys, this.timeout) : held = keys.toSet();
 
@@ -39,13 +48,18 @@ class ProxiesAction extends _$ProxiesAction {
 
   Timer? _delayFlushTimer;
 
-  final Map<String, String> _pendingSelectedRollback = {};
+  final Map<String, _ProxySelectionLane> _selections = {};
 
   @override
   void build() {
-    ref.onDispose(() => _delayFlushTimer?.cancel());
+    ref.onDispose(() {
+      _delayFlushTimer?.cancel();
+      _invalidateSelections();
+    });
+    ref.listen(currentProfileIdProvider, (_, _) => _invalidateSelections());
     ref.listen(coreStatusProvider, (_, next) {
       if (next != CoreStatus.connected) {
+        _invalidateSelections();
         cancelDelayTests();
       }
     });
@@ -91,21 +105,51 @@ class ProxiesAction extends _$ProxiesAction {
     debouncer.call(FunctionTag.updateGroups, updateGroups, duration: duration);
   }
 
-  void changeProxyDebounce(String groupName, String proxyName) {
-    _pendingSelectedRollback.putIfAbsent(
-      groupName,
-      () => _currentSelectedName(groupName),
-    );
+  void _invalidateSelections() {
+    for (final groupName in _selections.keys) {
+      debouncer.cancel((FunctionTag.changeProxy, groupName));
+    }
+    _selections.clear();
+  }
+
+  (_ProxySelectionLane, Object) _selectIntent(
+    String groupName,
+    String proxyName,
+  ) {
+    final profileId = ref.read(currentProfileIdProvider);
+    var lane = _selections[groupName];
+    if (lane == null || lane.profileId != profileId) {
+      lane = _ProxySelectionLane(profileId, _currentSelectedName(groupName));
+      _selections[groupName] = lane;
+    }
+    final token = Object();
+    lane.latest = token;
     ref
         .read(profilesActionProvider.notifier)
         .updateCurrentSelectedMap(groupName, proxyName);
-    debouncer.call((FunctionTag.changeProxy, groupName), (
-      String groupName,
-      String proxyName,
-    ) async {
-      await changeProxy(groupName: groupName, proxyName: proxyName);
-      updateGroupsDebounce();
-    }, args: [groupName, proxyName]);
+    return (lane, token);
+  }
+
+  bool _ownsSelection(String groupName, _ProxySelectionLane lane) =>
+      ref.mounted &&
+      identical(_selections[groupName], lane) &&
+      ref.read(currentProfileIdProvider) == lane.profileId &&
+      (lane.profileId == null || ref.read(currentProfileProvider) != null);
+
+  bool _isSelectionCurrent(
+    String groupName,
+    _ProxySelectionLane lane,
+    Object token,
+  ) => _ownsSelection(groupName, lane) && identical(lane.latest, token);
+
+  void changeProxyDebounce(String groupName, String proxyName) {
+    final (lane, token) = _selectIntent(groupName, proxyName);
+    debouncer.call((FunctionTag.changeProxy, groupName), () async {
+      await _queueSelection(groupName, proxyName, lane, token);
+      if (ref.mounted && ref.read(currentProfileIdProvider) == lane.profileId) {
+        updateGroupsDebounce();
+      }
+    });
   }
 
   String _currentSelectedName(String groupName) {
@@ -178,12 +222,46 @@ class ProxiesAction extends _$ProxiesAction {
   Future<void> changeProxy({
     required String groupName,
     required String proxyName,
-  }) async {
-    final profilesAction = ref.read(profilesActionProvider.notifier);
-    final rollbackName =
-        _pendingSelectedRollback.remove(groupName) ??
-        _currentSelectedName(groupName);
-    profilesAction.updateCurrentSelectedMap(groupName, proxyName);
+  }) {
+    debouncer.cancel((FunctionTag.changeProxy, groupName));
+    final (lane, token) = _selectIntent(groupName, proxyName);
+    return _queueSelection(groupName, proxyName, lane, token);
+  }
+
+  Future<void> _queueSelection(
+    String groupName,
+    String proxyName,
+    _ProxySelectionLane lane,
+    Object token,
+  ) {
+    // Core dispatches RPCs concurrently. Send a group's selections in order,
+    // and skip queued intentions already replaced by a more recent choice.
+    final operation = lane.pending.then((_) async {
+      try {
+        await _applySelection(groupName, proxyName, lane, token);
+      } finally {
+        if (identical(_selections[groupName], lane) &&
+            identical(lane.latest, token)) {
+          _selections.remove(groupName);
+        }
+      }
+    });
+    lane.pending = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {},
+    );
+    return operation;
+  }
+
+  Future<void> _applySelection(
+    String groupName,
+    String proxyName,
+    _ProxySelectionLane lane,
+    Object token,
+  ) async {
+    if (!_isSelectionCurrent(groupName, lane, token)) {
+      return;
+    }
     final ChangeProxyResult result;
     try {
       result = await _core.changeProxy(
@@ -193,17 +271,28 @@ class ProxiesAction extends _$ProxiesAction {
         throw MessageException(result.message);
       }
     } catch (error) {
+      if (!_isSelectionCurrent(groupName, lane, token)) {
+        return;
+      }
       commonPrint.log(
         'changeProxy($groupName -> $proxyName) failed: $error',
         logLevel: coreFailureLogLevel(error),
       );
-      profilesAction.updateCurrentSelectedMap(groupName, rollbackName);
+      ref
+          .read(profilesActionProvider.notifier)
+          .updateCurrentSelectedMap(groupName, lane.confirmedName);
       dialogs.showBanner(
         currentAppLocalizations.changeProxyFailedTip,
         level: BannerLevel.error,
       );
       return;
     }
+    if (!_ownsSelection(groupName, lane)) {
+      return;
+    }
+    // A newer queued choice can still fail. Its rollback must use the last
+    // choice Core actually accepted, even when that reply is no longer shown.
+    lane.confirmedName = proxyName;
     if (!result.changed) {
       return;
     }
@@ -220,7 +309,9 @@ class ProxiesAction extends _$ProxiesAction {
       );
     }
     // After the reset, which closes the probes out through the tunnel too.
-    ref.read(routeTrackerProvider.notifier).markPicked();
+    if (_isSelectionCurrent(groupName, lane, token)) {
+      ref.read(routeTrackerProvider.notifier).markPicked();
+    }
   }
 
   Future<void> updateProvider(

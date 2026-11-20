@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:fl_clash/enum/enum.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:rust_api/link.dart';
@@ -35,8 +36,12 @@ String? _installConfigUrl(Uri uri) {
   if (uri.host != 'install-config') {
     return null;
   }
-  final url = uri.queryParameters['url']?.trim();
-  return url == null || url.isEmpty ? null : url;
+  try {
+    final url = uri.queryParameters['url']?.trim();
+    return url == null || url.isEmpty ? null : url;
+  } on FormatException {
+    return null;
+  }
 }
 
 const _linkChannel = MethodChannel('$packageName/link');
@@ -48,7 +53,7 @@ Stream<Uri> androidLinks([MethodChannel channel = _linkChannel]) {
   late final StreamController<Uri> controller;
   void add(Object? link) {
     final uri = link is String ? Uri.tryParse(link) : null;
-    if (uri != null) {
+    if (uri != null && !controller.isClosed) {
       controller.add(uri);
     }
   }
@@ -61,8 +66,12 @@ Stream<Uri> androidLinks([MethodChannel channel = _linkChannel]) {
         }
         add(call.arguments);
       });
-      final pending = await channel.invokeListMethod<String>('takeLinks');
-      pending?.forEach(add);
+      try {
+        final pending = await channel.invokeListMethod<String>('takeLinks');
+        pending?.forEach(add);
+      } catch (error, stack) {
+        if (!controller.isClosed) controller.addError(error, stack);
+      }
     },
     onCancel: () {
       channel.setMethodCallHandler(null);
@@ -86,19 +95,37 @@ class LinkManager {
     Function(String url) installConfigCallBack,
   ) async {
     destroy();
-    subscription = uriLinkStream().listen((uri) {
-      _handle(uri, installConfigCallBack);
-    });
+    subscription = uriLinkStream().listen(
+      (uri) {
+        unawaited(
+          _handle(uri, installConfigCallBack).catchError((Object error) {
+            commonPrint.log(
+              'App link handling failed (${error.runtimeType})',
+              logLevel: LogLevel.warning,
+            );
+          }),
+        );
+      },
+      onError: (Object error) {
+        commonPrint.log(
+          'App link stream failed (${error.runtimeType})',
+          logLevel: LogLevel.warning,
+        );
+      },
+    );
   }
 
-  void _handle(Uri uri, Function(String url) installConfigCallBack) {
+  Future<void> _handle(
+    Uri uri,
+    Function(String url) installConfigCallBack,
+  ) async {
     if (!linkSchemes.contains(uri.scheme)) {
       return;
     }
-    commonPrint.log('onAppLink: $uri');
     final url = _installConfigUrl(uri);
     if (url != null) {
-      installConfigCallBack(url);
+      commonPrint.log('onAppLink: install-config');
+      await Future<void>.sync(() => installConfigCallBack(url));
     }
   }
 

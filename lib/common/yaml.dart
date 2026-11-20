@@ -22,10 +22,12 @@ class Yaml {
 final yaml = Yaml();
 
 /// Applies `<<` merge keys as mihomo does; package:yaml keeps them as keys.
-Object? loadPlainYaml(String content) {
+/// Editors that preserve literal keys can opt out without bypassing the graph
+/// limits used before copying aliases.
+Object? loadPlainYaml(String content, {bool mergeKeys = true}) {
   final node = loadYamlNode(content);
   _checkPlainYamlGraph(node);
-  return _plainYaml(node.value);
+  return _plainYaml(node.value, mergeKeys: mergeKeys);
 }
 
 /// Alias nodes share their targets in package:yaml, but the plain conversion
@@ -110,9 +112,15 @@ Iterable<YamlNode> _yamlNodeChildren(YamlNode node) sync* {
   }
 }
 
-Object? _plainYaml(Object? node) => switch (node) {
+Object? _plainYaml(Object? node, {bool mergeKeys = true}) => switch (node) {
+  YamlMap() when !mergeKeys => {
+    for (final entry in node.entries)
+      entry.key.toString(): _plainYaml(entry.value, mergeKeys: false),
+  },
   YamlMap() => _plainYamlMap(node),
-  YamlList() => [for (final item in node) _plainYaml(item)],
+  YamlList() => [
+    for (final item in node) _plainYaml(item, mergeKeys: mergeKeys),
+  ],
   _ => node,
 };
 

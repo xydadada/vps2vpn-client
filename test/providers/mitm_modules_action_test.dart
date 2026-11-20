@@ -710,6 +710,52 @@ Ads = type=http-response,pattern=$pattern,script-path=${urlOf('/ads.js')}
     }
   });
 
+  group('consent belongs to the displayed content', () {
+    test('an edit during the prompt invalidates its answer', () async {
+      final original = await action().create(
+        '[Script]\nA = type=cron,cronexp="0 * * * *",script-path=a.js\n',
+      );
+      final snapshot = (await action().consentSnapshot(original.id))!;
+      await action().edit(
+        original,
+        '[General]\ndns-server = 203.0.113.53\n',
+      );
+
+      final applied = await action().recordConsent(
+        original.id,
+        asksConsent: snapshot.module.asksConsent,
+        agreed: true,
+        contentVersion: snapshot.version,
+        expected: snapshot.module,
+      );
+
+      expect(applied, isFalse);
+      final current = (await stored()).single;
+      expect(current.enabled, isFalse);
+      expect(current.accepted, isNull);
+      expect(current.asksConsent, isTrue);
+    });
+
+    test('ordinary database read-back preserves an unchanged consent snapshot', () async {
+      final original = await action().create(
+        '[Script]\nA = type=cron,cronexp="0 * * * *",script-path=a.js\n',
+      );
+      final snapshot = (await action().consentSnapshot(original.id))!;
+      await stored();
+
+      final applied = await action().recordConsent(
+        original.id,
+        asksConsent: snapshot.module.asksConsent,
+        agreed: true,
+        contentVersion: snapshot.version,
+        expected: snapshot.module,
+      );
+
+      expect(applied, isTrue);
+      expect((await stored()).single.accepted, isTrue);
+    });
+  });
+
   group('overlapping module publications', () {
     Future<File> contentFile(MitmModule item) async =>
         File(join(await appPath.mitmModulesDirPath, item.fileName));

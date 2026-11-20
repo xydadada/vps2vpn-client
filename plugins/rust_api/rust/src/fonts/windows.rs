@@ -1,9 +1,12 @@
 use std::ffi::c_void;
 use std::mem::transmute_copy;
 use std::ptr::{null_mut, NonNull};
+use std::sync::OnceLock;
 
 use windows_sys::core::{BOOL, GUID, HRESULT};
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows_sys::Win32::System::LibraryLoader::{
+    GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
+};
 
 const DWRITE_FACTORY_TYPE_SHARED: i32 = 0;
 const IID_IDWRITE_FACTORY: GUID = GUID::from_u128(0xb859ee5a_d838_4b5b_a2e8_1adc7d93db48);
@@ -50,18 +53,31 @@ fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+fn create_factory() -> Result<CreateFactory, String> {
+    // Keep one module reference so the cached function pointer stays valid.
+    // This is an OS library: application/CWD DLL search is not appropriate.
+    static CREATE: OnceLock<Result<CreateFactory, String>> = OnceLock::new();
+    CREATE
+        .get_or_init(|| unsafe {
+            let dll = wide("dwrite.dll");
+            let module = LoadLibraryExW(dll.as_ptr(), null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32);
+            if module.is_null() {
+                return Err("dwrite.dll is not available".to_owned());
+            }
+            Ok(std::mem::transmute(
+                GetProcAddress(module, c"DWriteCreateFactory".as_ptr().cast())
+                    .ok_or("DWriteCreateFactory is missing")?,
+            ))
+        })
+        .as_ref()
+        .copied()
+        .map_err(Clone::clone)
+}
+
 pub fn families() -> Result<Vec<String>, String> {
-    let dll = wide("dwrite.dll");
+    let create = create_factory()?;
     // SAFETY: slots and signatures follow dwrite.h for each interface.
     unsafe {
-        let module = LoadLibraryW(dll.as_ptr());
-        if module.is_null() {
-            return Err("dwrite.dll is not available".to_owned());
-        }
-        let create: CreateFactory = std::mem::transmute(
-            GetProcAddress(module, c"DWriteCreateFactory".as_ptr().cast())
-                .ok_or("DWriteCreateFactory is missing")?,
-        );
         let mut out = null_mut();
         let hr = create(DWRITE_FACTORY_TYPE_SHARED, &IID_IDWRITE_FACTORY, &mut out);
         let factory = Com::new(out)

@@ -91,6 +91,18 @@ class System {
     return 'chown root:admin $path && chmod 4750 $path';
   }
 
+  /// Shell quoting and AppleScript string quoting are separate layers.
+  @visibleForTesting
+  static String macOSElevationScript(String corePath) {
+    final shell = macOSElevationShell(corePath)
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\t', r'\t');
+    return 'do shell script "$shell" with administrator privileges';
+  }
+
   @visibleForTesting
   static String linuxElevationShell(String corePath) {
     final path = _shellEscape(corePath);
@@ -226,11 +238,7 @@ class System {
         );
         return AuthorizeCode.error;
       }
-      final shell = macOSElevationShell(appPath.corePath);
-      final arguments = [
-        '-e',
-        'do shell script "$shell" with administrator privileges',
-      ];
+      final arguments = ['-e', macOSElevationScript(appPath.corePath)];
       final result = await runProcess('osascript', arguments);
       if (result.exitCode != 0) {
         return AuthorizeCode.error;

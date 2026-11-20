@@ -928,6 +928,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use http_body_util::BodyExt;
     use std::io::Write;
 
     #[tokio::test]
@@ -1053,9 +1054,7 @@ mod tests {
             PROTOCOL_VERSION
         );
         assert_eq!(
-            warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            response.into_body().collect().await.unwrap().to_bytes(),
             "vps2vpnHelperService.exe"
         );
     }
@@ -1070,9 +1069,7 @@ mod tests {
             PROTOCOL_VERSION
         );
         assert_eq!(
-            warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            response.into_body().collect().await.unwrap().to_bytes(),
             "Core executable SHA256 mismatch"
         );
     }
@@ -1175,9 +1172,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let body: serde_json::Value = serde_json::from_slice(
-            &warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            &response.into_body().collect().await.unwrap().to_bytes(),
         )
         .unwrap();
         assert_eq!(body["code"], "processLaunchFailed");
@@ -1189,9 +1184,7 @@ mod tests {
         let response = launch_failure_response(&Error::other("spawn refused"));
 
         let body: serde_json::Value = serde_json::from_slice(
-            &warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            &response.into_body().collect().await.unwrap().to_bytes(),
         )
         .unwrap();
         assert_eq!(body["message"], "spawn refused");
@@ -1235,9 +1228,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
         assert!(lock_surviving_poison(&MANAGED_CORE).is_none());
         let body: serde_json::Value = serde_json::from_slice(
-            &warp::hyper::body::to_bytes(response.into_body())
-                .await
-                .unwrap(),
+            &response.into_body().collect().await.unwrap().to_bytes(),
         )
         .unwrap();
         assert_eq!(body["code"], "coreVerificationFailed");
@@ -1413,7 +1404,7 @@ mod tests {
             assert!(managed.is_none());
             assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
             let body: serde_json::Value = serde_json::from_slice(
-                &warp::hyper::body::to_bytes(response.into_body()).await.unwrap(),
+                &response.into_body().collect().await.unwrap().to_bytes(),
             )
             .unwrap();
             assert_eq!(body["code"], "internalError");

@@ -145,6 +145,20 @@ abstract class GomobileBind : DefaultTask() {
             commandLine(go, "list", "-f", "{{.DefaultGODEBUG}}", "./cmd/core")
             standardOutput = godebug
         }
+        // gomobile discards go list's error while generating its temporary go.mod,
+        // then reports a misleading "missing module declaration" for that empty file.
+        // Validate the same module graph first so missing sums and replacements surface.
+        for (target in targets.get()) {
+            val (os, arch) = target.split("/")
+            execOperations.exec {
+                workingDir(moduleDirectory)
+                environment("PATH", path)
+                environment("GOOS", os)
+                environment("GOARCH", arch)
+                commandLine(go, "list", "-m", "-json", "-tags=${tags.get()}", "all")
+                standardOutput = ByteArrayOutputStream()
+            }
+        }
         execOperations.exec {
             workingDir(moduleDirectory)
             environment("PATH", path)

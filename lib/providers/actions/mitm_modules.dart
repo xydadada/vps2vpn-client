@@ -8,6 +8,7 @@ class MitmModulesAction extends _$MitmModulesAction {
   var _autoUpdating = false;
   final _resourceDownloads = TaskPool(4);
   final _contentOperations = <int, Object>{};
+  final _contentVersions = <int, Object>{};
 
   /// Files written before a row or a line names them, which [clean] keeps.
   final _held = <String>[];
@@ -95,6 +96,7 @@ class MitmModulesAction extends _$MitmModulesAction {
   Object _beginContentOperation(int id) {
     final token = Object();
     _contentOperations[id] = token;
+    _contentVersions[id] = Object();
     return token;
   }
 
@@ -130,17 +132,39 @@ class MitmModulesAction extends _$MitmModulesAction {
 
   void putModule(MitmModule module, {bool first = false}) {
     _contentOperations.remove(module.id);
+    _publishModule(module, first: first);
+  }
+
+  void _publishModule(MitmModule module, {bool first = false}) {
+    _contentVersions[module.id] = Object();
     ref.read(mitmModulesProvider.notifier).put(module, first: first);
   }
 
-  Future<void> recordConsent(
+  Future<({MitmModule module, Object version})?> consentSnapshot(int id) async {
+    final current = await _current(id);
+    if (current == null || !ref.mounted) {
+      return null;
+    }
+    return (
+      module: current,
+      version: _contentVersions.putIfAbsent(id, Object.new),
+    );
+  }
+
+  Future<bool> recordConsent(
     int id, {
     required bool asksConsent,
     bool? agreed,
+    Object? contentVersion,
+    MitmModule? expected,
   }) async {
     final current = await _current(id);
-    if (!ref.mounted || current == null) {
-      return;
+    if (!ref.mounted ||
+        current == null ||
+        (contentVersion != null &&
+            !identical(_contentVersions[id], contentVersion)) ||
+        (expected != null && !_matchesContentSource(current, expected))) {
+      return false;
     }
     putModule(
       current.copyWith(
@@ -149,6 +173,7 @@ class MitmModulesAction extends _$MitmModulesAction {
         accepted: agreed ?? current.accepted,
       ),
     );
+    return true;
   }
 
   /// Turning a module off counts as declining it until it is turned on.
@@ -200,7 +225,7 @@ class MitmModulesAction extends _$MitmModulesAction {
         current.copyWith(arguments: arguments),
         content,
       );
-      ref.read(mitmModulesProvider.notifier).put(changed);
+      _publishModule(changed);
       final missing = content.resourceUrls.difference({
         ...changed.resources.keys,
       });
@@ -221,7 +246,7 @@ class MitmModulesAction extends _$MitmModulesAction {
       final withResources = changed.copyWith(
         resources: {...changed.resources, ...fetched, ...written},
       );
-      ref.read(mitmModulesProvider.notifier).put(withResources);
+      _publishModule(withResources);
       return withResources;
     } finally {
       _finishContentOperation(module.id, token);
@@ -273,6 +298,7 @@ class MitmModulesAction extends _$MitmModulesAction {
 
   Future<void> deleteModule(MitmModule module) async {
     _contentOperations.remove(module.id);
+    _contentVersions.remove(module.id);
     ref.read(mitmModulesProvider.notifier).del(module.id);
     final path = await _pathOf(module);
     await _oneDeletionAtATime(() async {
@@ -357,7 +383,7 @@ class MitmModulesAction extends _$MitmModulesAction {
       // No await between the last intent/row check, atomic replacement, and
       // optimistic publication. A delete or newer edit cannot interleave.
       staged.renameSync(path);
-      ref.read(mitmModulesProvider.notifier).put(saved, first: first);
+      _publishModule(saved, first: first);
       return saved;
     } catch (_) {
       if (_ownsContentOperation(module.id, token)) {

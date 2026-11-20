@@ -145,6 +145,27 @@ void main() {
 
   Finder label(String text) => find.text(text, findRichText: true);
 
+  testWidgets('extreme usage and expiry cannot wrap or crash the dashboard',
+      (tester) async {
+    const largest = 9223372036854775807;
+    setUpProfiles([
+      _profile(
+        1,
+        type: ProfileType.url,
+        info: const SubscriptionInfo(
+          upload: largest,
+          download: largest,
+          total: largest,
+          expire: largest,
+        ),
+      ),
+    ]);
+    await pumpDesktopCard(tester);
+    expect(find.textContaining('100%', findRichText: true), findsOneWidget);
+    expect(find.text('Remote'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('offers to add a profile without profiles', (tester) async {
     setUpProfiles([]);
     await pumpCard(tester);

@@ -115,16 +115,18 @@ void main() {
   testWidgets('the byte limit keeps the deadline through a stalled body', (
     tester,
   ) async {
-    final body = StreamController<Uint8List>();
+    var canceled = false;
+    final body = StreamController<Uint8List>(onCancel: () => canceled = true);
     var closed = false;
     final request = serving(
       () => ResponseBody(body.stream, 200, onClose: () => closed = true),
     );
+    var settled = false;
     final outcome = expectLater(
       request.getFileResponseForUrl(
         'https://example.invalid/stalled',
         maxBytes: 4,
-      ),
+      ).whenComplete(() => settled = true),
       throwsA(
         isA<DioException>().having(
           (error) => error.type,
@@ -136,9 +138,13 @@ void main() {
     await tester.pump();
     body.add(Uint8List.fromList([1]));
     await tester.pump(downloadTimeoutDuration);
+    expect(settled, isTrue, reason: 'the full response deadline must settle');
     await outcome;
     await tester.pump();
     expect(closed, isTrue);
-    await body.close();
+    expect(canceled, isTrue);
+    final closing = body.close();
+    await tester.pump();
+    await closing;
   });
 }

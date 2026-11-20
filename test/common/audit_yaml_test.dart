@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:fl_clash/common/mitm_module.dart';
 import 'package:fl_clash/common/yaml.dart';
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -129,6 +131,45 @@ right: *first
           (error) => error.issue,
           'issue',
           CustomImportIssue.unreadable,
+        ),
+      ),
+    );
+  });
+
+  test('literal editor mode preserves merge keys with independent aliases', () {
+    final document = loadPlainYaml('''
+base: &base {port: 443}
+target: {<<: *base, port: 8443}
+''', mergeKeys: false) as Map<String, Object?>;
+    final target = document['target']! as Map<String, Object?>;
+    expect(target, {'<<': {'port': 443}, 'port': 8443});
+    (target['<<']! as Map<String, Object?>)['port'] = 80;
+    expect(document['base'], {'port': 443});
+  });
+
+  test('proxy group edits reject expansion before converting ignored keys', () {
+    const group = ProxyGroup(id: 1, name: 'Kept', type: GroupType.Selector);
+    expect(
+      () => group.withDefinitionYaml('name: Edited\ntype: select\n${_aliasDag(24)}'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('aliases expand'),
+        ),
+      ),
+    );
+    expect(group.name, 'Kept');
+  });
+
+  test('DNS overrides share the graph bound before key validation', () {
+    expect(
+      () => const Dns().applyOverrideYaml('enable: true\n${_aliasDag(24)}'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('aliases expand'),
         ),
       ),
     );
