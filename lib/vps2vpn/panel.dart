@@ -751,6 +751,8 @@ final vpsPanelPinsProvider = FutureProvider.autoDispose<Set<String>>((
 
 final _releaseFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
 const _maxReleaseBytes = 512 * 1024 * 1024;
+const _releaseIdleTimeout = Duration(seconds: 60);
+const _releaseTransferTimeout = Duration(minutes: 8);
 final _activeReleaseDownloads = <String>{};
 
 /// Downloads a client release from the panel into [dir], always direct and
@@ -760,7 +762,11 @@ Future<File> vpsDownloadRelease(
   Uri url,
   Directory dir, {
   Set<String> pinnedSha256 = const {},
+  Duration transferTimeout = _releaseTransferTimeout,
 }) async {
+  if (transferTimeout <= Duration.zero) {
+    throw ArgumentError.value(transferTimeout, 'transferTimeout', 'must be positive');
+  }
   if (!url.isScheme('https')) {
     throw const HttpException('Release link is not HTTPS');
   }
@@ -795,16 +801,36 @@ Future<File> vpsDownloadRelease(
       throw HttpException('Download failed (HTTP ${res.statusCode})');
     }
     final sink = part.openWrite();
+    final incoming = StreamIterator<List<int>>(res);
+    final elapsed = Stopwatch()..start();
     var size = 0;
     try {
-      await for (final chunk in res.timeout(const Duration(seconds: 60))) {
+      while (true) {
+        // Stream.timeout alone only measures gaps between chunks: a server
+        // trickling bytes can otherwise hold a download open forever. Use
+        // one absolute, monotonic deadline across the entire response body.
+        final remaining = transferTimeout - elapsed.elapsed;
+        if (remaining <= Duration.zero) {
+          throw TimeoutException('Release transfer exceeded its deadline', transferTimeout);
+        }
+        final wait = remaining < _releaseIdleTimeout
+            ? remaining
+            : _releaseIdleTimeout;
+        // A timed-out moveNext cannot be cancelled by Future.timeout itself.
+        // The finally block cancels the iterator's underlying subscription.
+        if (!await incoming.moveNext().timeout(wait)) break;
+        final chunk = incoming.current;
         size += chunk.length;
         if (size > _maxReleaseBytes) {
           throw const HttpException('Release file too large');
         }
         sink.add(chunk);
       }
+      if (size == 0) {
+        throw const HttpException('Release file was empty');
+      }
     } finally {
+      await incoming.cancel();
       await sink.close();
     }
     return await part.rename(out.path);
