@@ -8,6 +8,15 @@ import 'package:flutter_test/flutter_test.dart';
 const _tok = 'AbCdEf0123456789xyzQ';
 
 void main() {
+  HttpOverrides? previousHttpOverrides;
+  setUpAll(() {
+    previousHttpOverrides = HttpOverrides.current;
+    HttpOverrides.global = null;
+  });
+  tearDownAll(() {
+    HttpOverrides.global = previousHttpOverrides;
+  });
+
   group('api base', () {
     test('drops the query and adds /api/', () {
       expect(

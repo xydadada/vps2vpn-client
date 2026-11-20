@@ -212,15 +212,19 @@ extension ProfileExtension on Profile {
 
   Future<Profile?> checkAndUpdateAndCopy({
     required ValidateConfig validate,
+    bool Function()? canCommit,
   }) async {
-    if (type != ProfileType.url) {
-      return null;
+    if (canCommit?.call() == false) {
+      throw const ProfileUpdateSuperseded();
     }
+    if (type != ProfileType.url) return null;
     final mFile = await _getFile(false);
-    if (await mFile.exists()) {
-      return null;
+    final exists = await mFile.exists();
+    if (canCommit?.call() == false) {
+      throw const ProfileUpdateSuperseded();
     }
-    return update(validate: validate);
+    if (exists) return null;
+    return update(validate: validate, canCommit: canCommit);
   }
 
   Future<File> _getFile([bool autoCreate = true]) async {
@@ -289,7 +293,9 @@ extension ProfileExtension on Profile {
       intent.check();
       final tempFile = File('${staging.path}/profile.yaml');
       await tempFile.writeAsBytes(bytes, flush: true);
-      if (await validate(tempFile.path, ageSecretKey) case final issue?) {
+      final issue = await validate(tempFile.path, ageSecretKey);
+      intent.check();
+      if (issue != null) {
         throw MessageException(issue);
       }
       await _withProfileFile(

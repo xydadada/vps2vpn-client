@@ -795,19 +795,45 @@ class SetupAction extends _$SetupAction {
     FutureOr Function()? onUpdated,
   }) async {
     var profile = ref.read(currentProfileProvider) ?? recoverMissingProfile();
+    final source = profile;
+    final selectedId = ref.read(currentProfileIdProvider);
+    final runRequest = _latestRunRequest;
+    bool current() {
+      if (!ref.mounted ||
+          !identical(_latestRunRequest, runRequest) ||
+          ref.read(currentProfileIdProvider) != selectedId) {
+        return false;
+      }
+      if (source == null) return ref.read(currentProfileProvider) == null;
+      final latest = ref.read(profilesProvider).getProfile(source.id);
+      return latest != null &&
+          latest.type == source.type &&
+          latest.url == source.url &&
+          latest.ageSecretKey == source.ageSecretKey;
+    }
+
     // A refresh failure is surfaced by safeRun; setup keeps the old profile.
     final nextProfile = await globalState.safeRun(
-      () => profile?.checkAndUpdateAndCopy(
+      () => source?.checkAndUpdateAndCopy(
         validate: (path, key) => _core.validateProfile(path, key),
+        canCommit: current,
       ),
     );
+    if (!current()) return _SetupTaskResult.failed;
     if (nextProfile != null) {
-      profile = nextProfile;
-      ref.read(profilesProvider.notifier).put(nextProfile);
+      final latest = ref.read(profilesProvider).getProfile(nextProfile.id)!;
+      final restored = latest.copyWith(
+        label: latest.label.takeFirstValid([nextProfile.label]),
+        subscriptionInfo: nextProfile.subscriptionInfo,
+        lastUpdateDate: nextProfile.lastUpdateDate,
+      );
+      profile = restored;
+      ref.read(profilesProvider.notifier).put(restored);
     }
     commonPrint.log('setup ===> ${profile?.realLabel}');
     final patchConfig = ref.read(patchClashConfigProvider);
     final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
+    if (!current()) return _SetupTaskResult.failed;
     if (!shouldContinueSetup) {
       return _SetupTaskResult.handoffToCoreRestart;
     }
@@ -820,6 +846,7 @@ class SetupAction extends _$SetupAction {
       setupState = state;
       return getProfile(setupState: state, patchConfig: realPatchConfig);
     }, title: 'build profile');
+    if (!current()) return _SetupTaskResult.failed;
     final profileFailed = realProfile == null;
     final setupParams = _setupParams.copyWith(base: realProfile?.base);
     final inputs = switch (setupState) {

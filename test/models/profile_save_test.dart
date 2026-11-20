@@ -131,7 +131,7 @@ void main() {
         Uint8List.fromList('new'.codeUnits),
         validate: (_, _) async => null,
       );
-      validation.complete(null);
+      validation.complete('obsolete validation error');
       await superseded;
       expect(await (await profile.file).readAsString(), 'new');
     });

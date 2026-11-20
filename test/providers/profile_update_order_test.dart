@@ -1,3 +1,6 @@
+@TestOn('vm')
+library;
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -5,6 +8,7 @@ import 'dart:typed_data';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/controller.dart';
 import 'package:fl_clash/core/interface.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
@@ -21,7 +25,7 @@ class _MockCore extends Mock implements CoreHandlerInterface {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final originalHttpOverrides = HttpOverrides.current;
+  HttpOverrides? originalHttpOverrides;
 
   late Directory home;
   late HttpServer server;
@@ -32,8 +36,12 @@ void main() {
   var disposed = false;
 
   setUpAll(() async {
+    originalHttpOverrides = HttpOverrides.current;
     HttpOverrides.global = null;
     loadAppLocalizations(const Locale('en'));
+    registerFallbackValue(
+      const SetupParams(selectedMap: {}, options: CoreOptions(testUrl: '')),
+    );
     globalState.packageInfo = PackageInfo(
       appName: 'test',
       packageName: 'fl_clash',
@@ -54,10 +62,24 @@ void main() {
     core = _MockCore();
     when(() => core.validateConfig(any())).thenAnswer((_) async => null);
     when(() => core.clearEffect(any())).thenAnswer((_) async {});
+    when(() => core.setupConfig(any())).thenAnswer((_) async {});
     container = ProviderContainer(
       overrides: [
         profilesProvider.overrideWith(TestProfiles.new),
         coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+        safeModeProvider.overrideWithValue(true),
+        setupStateProvider.overrideWith(
+          (_, _) => const SetupState(
+            profileId: null,
+            profileLastUpdateDate: null,
+            profileType: ProfileType.file,
+            rules: [],
+            proxyGroups: [],
+            addedRules: [],
+            script: null,
+            overrides: ProfileOverrides(),
+          ),
+        ),
       ],
     );
     globalState.container = container;
@@ -218,6 +240,46 @@ void main() {
 
     expect(await content(profile), 'original');
   });
+
+  for (final change in ['source', 'selection', 'delete']) {
+    test('missing-file recovery stops after a $change change', () async {
+      final profile = Profile.normal(label: 'missing', url: url('/old'));
+      final profiles = container.read(profilesProvider.notifier);
+      profiles.put(profile);
+      container.listen(currentProfileIdProvider, (_, _) {});
+      container.read(currentProfileIdProvider.notifier).value = profile.id;
+      final validation = holdOldValidation();
+      final pending = container
+          .read(setupActionProvider.notifier)
+          .applyProfile(force: true);
+      await validation.entered;
+
+      switch (change) {
+        case 'source':
+          profiles.put(profile.copyWith(url: url('/new')));
+        case 'selection':
+          final replacement = Profile.normal(label: 'other');
+          profiles.put(replacement);
+          container.read(currentProfileIdProvider.notifier).value =
+              replacement.id;
+        case 'delete':
+          await profiles.del(profile.id);
+          await deleteProfileFile(profile.id);
+      }
+      validation.result.complete(null);
+      expect(await pending, isFalse);
+      expect(
+        await File(await appPath.getProfilePath(profile.id.toString())).exists(),
+        isFalse,
+      );
+      if (change == 'source') {
+        expect(container.read(profilesProvider).single.url, url('/new'));
+      } else if (change == 'delete') {
+        expect(container.read(profilesProvider), isEmpty);
+      }
+      verifyNever(() => core.setupConfig(any()));
+    });
+  }
 
   test('the first update can create a new profile', () async {
     final profile = Profile.normal(label: 'new', url: url('/new'));
