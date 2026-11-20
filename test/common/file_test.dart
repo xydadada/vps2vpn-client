@@ -83,16 +83,28 @@ void main() {
       expect(file.readAsStringSync(), 'mode: rule');
     });
 
-    test('keeps the old file when the new one cannot be written', () async {
-      final file = File(join(root.path, 'config.yaml'))
-        ..writeAsStringSync('mode: rule');
-      Directory('${file.path}.$pid.tmp').createSync();
+    test('does not overwrite a directory and cleans failed staging files', () async {
+      final path = join(root.path, 'config.yaml');
+      final target = Directory(path)..createSync();
 
       await expectLater(
-        file.writeAsStringAtomically('mode: global'),
+        File(path).writeAsStringAtomically('mode: global'),
         throwsA(isA<FileSystemException>()),
       );
-      expect(file.readAsStringSync(), 'mode: rule');
+      expect(target.existsSync(), isTrue);
+      expect(root.listSync().map((entry) => basename(entry.path)), [
+        'config.yaml',
+      ]);
+    });
+
+    test('parallel writes never share a temporary sibling', () async {
+      final file = File(join(root.path, 'config.yaml'));
+      final values = List.generate(16, (i) => 'entry-$i:' + ('x' * 32768));
+      await Future.wait(values.map(file.writeAsStringAtomically));
+      expect(values, contains(file.readAsStringSync()));
+      expect(root.listSync().map((entry) => basename(entry.path)), [
+        'config.yaml',
+      ]);
     });
   });
 }
