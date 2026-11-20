@@ -286,7 +286,11 @@ extension ProfileExtension on Profile {
 const _profileReplaceAttempts = 10;
 const _profileReplaceRetryDelay = Duration(milliseconds: 50);
 
-Future<bool> _renameProfileFileRetrying(\n  File source,\n  String target, {\n  required bool Function() shouldCommit,\n}) async {
+Future<bool> _renameProfileFileRetrying(
+  File source,
+  String target, {
+  required bool Function() shouldCommit,
+}) async {
   for (var attempt = 1; ; attempt++) {
     if (!shouldCommit()) return false;
     try {
