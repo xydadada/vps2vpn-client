@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_clash/common/cache.dart';
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/common/icon_file_service.dart';
 import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
@@ -47,19 +48,22 @@ class _IconBytesCache {
 
   void operator []=(String key, Uint8List? value) {
     remove(key);
-    final size = value?.lengthInBytes ?? 0;
+    final size = (value?.lengthInBytes ?? 0) + key.length * 2 + 64;
     if (size > maxBytes) {
       return;
     }
     _entries[key] = value;
     _bytes += size;
-    while (_bytes > maxBytes) {
+    while (_bytes > maxBytes || _entries.length > 512) {
       remove(_entries.keys.first);
     }
   }
 
   void remove(String key) {
-    _bytes -= _entries.remove(key)?.lengthInBytes ?? 0;
+    if (_entries.containsKey(key)) {
+      _bytes -=
+          (_entries.remove(key)?.lengthInBytes ?? 0) + key.length * 2 + 64;
+    }
   }
 }
 
@@ -70,10 +74,18 @@ Uint8List? _decodeIcon(String src) {
   if (!src.contains('base64,')) {
     return null;
   }
+  final encodedLength = src.length - src.indexOf('base64,') - 7;
+  if (encodedLength > ((maxIconBytes + 2) ~/ 3) * 4) {
+    return null;
+  }
   if (_decodedIcons.contains(src)) {
     return _decodedIcons[src];
   }
-  return _decodedIcons[src] = src.getBase64;
+  final bytes = src.getBase64;
+  if (bytes != null && bytes.lengthInBytes > maxIconBytes) {
+    return null;
+  }
+  return _decodedIcons[src] = bytes;
 }
 
 class CommonTargetIcon extends StatelessWidget {
@@ -102,6 +114,9 @@ class CommonTargetIcon extends StatelessWidget {
       );
     }
 
+    if (src.contains('base64,')) {
+      return _defaultIcon();
+    }
     return ImageCacheWidget(src: src, defaultWidget: _defaultIcon());
   }
 
@@ -220,14 +235,19 @@ class _BytesImage extends StatelessWidget {
 final _cacheManager = CacheManager(
   Config(
     DefaultCacheManager.key,
-    fileService: HttpFileService()..concurrentFetches = maxConcurrentIconLoads,
+    fileService: IconFileService()..concurrentFetches = maxConcurrentIconLoads,
   ),
 );
 
 Stream<Uint8List> _readCachedIcon(String src) {
   return _cacheManager
       .getFileStreamV2(src)
-      .asyncMap((data) => data.file.readAsBytes());
+      .asyncMap(
+        (data) async => readIconBytes(
+          data.file.openRead(),
+          declaredLength: await data.file.length(),
+        ),
+      );
 }
 
 var _readRemoteIcon = _readCachedIcon;
@@ -239,6 +259,9 @@ set readRemoteIcon(Stream<Uint8List> Function(String src)? value) {
 
 Stream<Uint8List> _loadRemoteIcon(String src) {
   return _readRemoteIcon(src).map((bytes) {
+    if (bytes.lengthInBytes > maxIconBytes) {
+      throw const FormatException('Icon exceeds the byte limit');
+    }
     final current = _remoteIcons[src];
     final next = current != null && listEquals(current, bytes)
         ? current

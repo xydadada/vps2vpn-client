@@ -7,6 +7,19 @@ import 'package:flutter/widgets.dart';
 /// Pinned to English so every locale reads K and M, never 万 or тыс.
 final _compactFormat = NumberFormat.compact(locale: 'en');
 
+const maxCounterValue = 0x7fffffffffffffff;
+
+int? nonNegativeInt(Object? value) {
+  if (value is! num || !value.isFinite || value < 0) return null;
+  return value >= maxCounterValue ? maxCounterValue : value.toInt();
+}
+
+int addTrafficBytes(int first, int second) {
+  final left = first.clamp(0, maxCounterValue).toInt();
+  final right = second.clamp(0, maxCounterValue).toInt();
+  return right > maxCounterValue - left ? maxCounterValue : left + right;
+}
+
 extension NumExt on num {
   String get compact => _compactFormat.format(this);
 

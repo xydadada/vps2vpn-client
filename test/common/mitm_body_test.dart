@@ -148,7 +148,7 @@ void main() {
       expect(content.truncated, isTrue);
     });
 
-    test('gRPC stops inflating a frame past the limit', () {
+    test('gRPC charges rejected frames to the body inflation limit', () {
       List<int> frame(List<int> gzipped) => [
         1,
         ...(ByteData(4)..setUint32(0, gzipped.length)).buffer.asUint8List(),
@@ -163,9 +163,10 @@ void main() {
       )!;
 
       expect(text, startsWith('# 1\n1: 1\n# 2\ntoo large\n'));
-      expect('too large'.allMatches(text), hasLength(1));
+      expect('too large'.allMatches(text), hasLength(2));
       expect(text.length, lessThan(mitmGrpcInflateLimit));
-      expect(text, endsWith('# 3\n1: 1'));
+      expect(text, contains('# 3\ntoo large\n'));
+      expect(text, isNot(endsWith('# 3\n1: 1')));
     });
 
     test('gRPC reads each frame, gzipped ones and trailers too', () {

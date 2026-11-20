@@ -234,6 +234,13 @@ user accepts again, whether it comes by hand, which asks at once, or by auto upd
 this has met users: settle its interaction, listed in the MITM section of the core integration notes
 (`docs/rust-core/integration.md`, local only), before turning the flag on.
 
+The retained module code also bounds its input. Remote MITM resources share the existing four-worker task pool and
+stop while streaming at 16 MiB per resource, with one deadline spanning headers and body. A restored resource mapping
+must be a portable basename before it becomes a Core path or a backup attachment; traversal, Windows alternate data
+streams and reserved device names are excluded. Android system-CA install and removal serialize the entire script
+transaction because their cache and root staging paths are shared. These client boundaries do not turn on the
+disabled MITM feature or add MITM support to the bundled Core.
+
 ## Lifecycle Ownership And Convergence
 
 ### Shared Flutter Layer
@@ -261,6 +268,13 @@ Application exit is centralized in `SystemAction` and `SystemExitCoordinator`:
 The coordinator is idempotent, continues later cleanup steps after an earlier error, preserves the first error for the
 caller, and uses a three-second watchdog as an emergency application-exit path. `Application.dispose()` and
 `CoreManager.onCrash()` do not independently destroy Core; this avoids competing shutdown owners.
+
+Application startup and periodic updates retain their widget owner across asynchronous boundaries. The post-frame
+bootstrap checks `mounted` before and after attaching; a failed `initProvider` does not register updates, links or
+shortcuts. A link confirmation rechecks `mounted` before reading providers. `runApplicationAutoUpdates` checks its
+owner before every task, awaits tasks in order and catches each failure independently, so one failed update neither
+blocks later updates nor prevents the next timer cycle. `Bootstrap._handleFailedPreference` returns whether startup
+may continue: returning from the Android exit handler is still a terminal startup result.
 
 ### Applying Setting Changes
 
@@ -357,11 +371,22 @@ Quick Settings, notification, revoke, and Always-on VPN paths converge on the sa
   sends the explicit, permission-protected `VPN_START_REQUESTED` broadcast to `ServiceBroadcastReceiver`, which routes it to
   `ServiceState.handleStartAction()` so Core/configuration and the normal binding are restored before TUN is treated as
   ready.
-- `VpnService.onRevoke()` stops TUN/modules first, then sends `VPN_REVOKED`; the receiver only requests a stop while
-  `ServiceController.runtime` is a VPN run.
+- `VpnService.onRevoke()` stops TUN/modules first, then sends `VPN_REVOKED`; the receiver requests a stop for an
+  established VPN runtime or a VPN transition already in `STARTING`. The latter invalidates a start whose native TUN
+  is up but whose runtime has not yet been published. A proxy-only runtime still ignores VPN revoke.
 - `ServiceBroadcastReceiver` uses `goAsync()` and an atomic one-shot completion. Normal completion or a nine-second
   watchdog calls `PendingResult.finish()` exactly once; the watchdog releases Android's broadcast lease and does not
   cancel or redefine the underlying lifecycle intent.
+
+Android network observations have separate purposes. `NetworkObserver` selects system DNS from callback capability
+snapshots: a validated Internet connection precedes an unvalidated one, transport preference breaks the remaining
+ties, and the current network wins equal scores. An unvalidated network remains eligible when it is the only usable
+choice, including captive-portal access; losing-network deadlines use elapsed time. `WifiSsidPlugin` asks Android's
+API 31 best-match callback for the preferred physical Internet network with `NOT_VPN`, so the application's own VPN
+does not hide Wi-Fi and an unrelated Wi-Fi cannot suspend protection while cellular is preferred. The selected
+network's identity guards SSID updates/loss, a switch clears the old SSID immediately, and detached callback instances
+cannot publish late values. Before API 31, the legacy SSID query first verifies that the connected default (or VPN
+underlying) network is Wi-Fi.
 
 ## Core Protocol And Event Delivery
 
@@ -1602,6 +1627,17 @@ directives, so consumers continue to import the same public API:
 - `GeoResourceAction`: geo resource updates and URL configuration.
 - `UpdatingAction`: stale sweep over `UpdatingKeys`.
 
+Application-update files have one owner in `CommonAction`. Download, cancellation cleanup, discard, installer
+handoff and startup cleanup share a busy reservation. Cancellation/discard retain the current download state until
+old files and Android DownloadManager jobs are removed, and startup only cleans an idle state. Publishing `null`
+before this cleanup would let a new download start and then be deleted by the previous operation. UI progress is
+published only while its provider is mounted.
+
+WebDAV redirects with a request body stay on the original scheme, host and port. Stripping Authorization alone would
+still replay a backup's complete private content to another origin or an HTTP downgrade. Same-origin redirects keep
+the existing method/body behavior; a Digest challenge from a foreign redirected origin never changes the credentials
+used for the original server.
+
 `UpdatingKeys` in `lib/providers/app.dart` owns every per-entity updating flag; `isUpdatingProvider(key)` is the
 read-only view widgets watch. Callers pair `start(key, scope: ...)` with `stop(key, operation)` using the returned
 token, so overlapping operations on one key are reference counted and a late `stop` from a superseded operation
@@ -1674,6 +1710,14 @@ input into a `BuildRequest` (repository root, `Target`) and hands it to `buildPl
 `setup_hooks` so `dart test` there can cover it; a test run of `plugins/setup` itself would execute the hook. Failures
 reach the runner as `BuildError` (Go or Cargo failed, no Core for the architecture) or `InfraError` (a toolchain could
 not start, the package is not at `plugins/setup`).
+
+Before dependency fingerprinting or gomobile binding, both production Go build paths run
+`go run tool/apply_core_patches.go`. The patch fixes controller recreation in the pinned Clash.Meta dependency:
+closing, binding and publishing listener ownership are synchronous and serialized, while serving stays asynchronous.
+The applier verifies the repository gitlink, dependency checkout, patch blob and original/result source blobs. It
+accepts the already-patched result, rejects drift, and serializes applications through a directory lock in the
+submodule's Git directory. The patch and applier are cache inputs. A process killed while holding that lock leaves a
+visible failure after 30 seconds; only remove the lock after confirming no build is running.
 
 What the hook protocol forces:
 
@@ -2068,8 +2112,9 @@ UTF-8 bytes rather than a `String` so that decoding them stays off the UI isolat
 - `launch/` covers how the system starts the app. Autostart is the `FlClash` value in the user's Run key plus its
   `StartupApproved\Run` flag on Windows, `SMAppService.mainApp` on macOS 13 and later (nothing on macOS 12), and
   `$HOME/.config/autostart/FlClash.desktop` on Linux: the entries the `launch_at_startup` fork wrote, in its value
-  format (the Windows Run value is the bare unquoted path), so an entry an older build registered reads as enabled
-  and is removed on disable. `SMAppService` is not tied to a thread, so these are plain worker-pool calls. It also
+  format. New Windows Run values quote the executable path; older bare entries still read as enabled and are
+  removed on disable. A legacy Run value is normalized on inspection when writable, without changing its
+  StartupApproved state. Linux desktop entries quote and escape the executable as one Exec argument. `SMAppService` is not tied to a thread, so these are plain worker-pool calls. It also
   registers the `clash` URL schemes under `HKCU\Software\Classes` on Windows, and `readLocalMachineDword` is the
   synchronous HKLM read behind the Helper port and the Smart App Control state. The Linux scheme handler stays in
   `lib/common/protocol.dart`: it is a desktop file and an `xdg-mime` call, with nothing native to replace.
@@ -2107,7 +2152,9 @@ UTF-8 bytes rather than a `String` so that decoding them stays off the UI isolat
   or `kwriteconfig6`/`kwriteconfig5` (KDE) on Linux, and WinINet for the LAN and every RAS entry on Windows. With
   `NetworkProps.pacMode` on it points the system at a PAC URL instead: `pac` serves `NetworkProps.pacScript`, with
   `%mixed-port%` replaced, from a loopback listener on an ephemeral port that lives as long as the app process, and
-  each start adds a new `?v=` query so a system that caches PAC files by URL fetches the edited script. On
+  each start adds a new `?v=` query so a system that caches PAC files by URL fetches the edited script. The listener
+  admits at most 32 concurrent requests, caps request headers at 16 KiB, and shares one five-second deadline across
+  header reads and response writes. On
   Windows a hidden top-level window on its own thread turns a proxy this run set back off at `WM_ENDSESSION`, since
   shutdown kills the process before the Dart exit path runs. The package installer and uninstaller kill the app and
   then run `FlClash.exe --clear-stale-proxy`, the installer once the new files are in place; the runner loads

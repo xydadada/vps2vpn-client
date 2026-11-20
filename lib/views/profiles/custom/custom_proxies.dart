@@ -1015,6 +1015,7 @@ class _EditCustomProxyViewState extends ConsumerState<_EditCustomProxyView> {
     bool policyName = false,
     bool invalid = false,
     bool obscureText = false,
+    bool isSecret = false,
     Widget? leading,
     Widget? suffix,
     ValueChanged<Object?>? onChanged,
@@ -1024,6 +1025,7 @@ class _EditCustomProxyViewState extends ConsumerState<_EditCustomProxyView> {
       key: ValueKey('$key-$_revision'),
       initialValue: value,
       obscureText: obscureText,
+      isSecret: isSecret,
       keyboardType: digitsOnly ? TextInputType.number : TextInputType.text,
       inputFormatters: digitsOnly
           ? TextInputLimits.digitsOnly(maxLength)
@@ -1068,6 +1070,7 @@ class _EditCustomProxyViewState extends ConsumerState<_EditCustomProxyView> {
       maxLength: TextInputLimits.password,
       hintText: hintText,
       obscureText: !revealed,
+      isSecret: true,
       leading: leading,
       onChanged: onChanged,
       suffix: MinIconButtonTheme(

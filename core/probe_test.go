@@ -106,10 +106,10 @@ func TestReadProbeBodyStopsOnceTheMarkerArrives(t *testing.T) {
 		seen++
 		return strings.Contains(tail, marker)
 	})
+
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if !strings.Contains(body, marker) {
 		t.Fatalf("body lost the marker that straddled two chunks")
 	}
@@ -122,10 +122,10 @@ func TestReadProbeBodyKeepsTheCapWithoutAMarker(t *testing.T) {
 	page := strings.Repeat("x", 3*probeScanChunk)
 
 	body, err := readProbeBody(strings.NewReader(page), probeScanChunk+5, func(string) bool { return false })
+
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if len(body) != probeScanChunk+5 {
 		t.Errorf("body length = %d, want the cap", len(body))
 	}
@@ -330,5 +330,23 @@ func TestRunProbeTimesOutWhileTheTunnelStaysSuspended(t *testing.T) {
 
 	if result == nil || result.Error != probeErrorTimeout {
 		t.Fatalf("result = %+v, want a timeout", result)
+	}
+}
+
+func TestRunProbeRejectsTruncatedResponseBody(t *testing.T) {
+	server := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte("partial"))
+	})
+	withProbeProxies(t, "node-a")
+	for _, scan := range []bool{false, true} {
+		req := probeRequest{url: server.URL, proxyName: "node-a", timeout: time.Second, maxBody: 1024}
+		if scan {
+			req.until = func(string) bool { return false }
+		}
+		result := runProbe(context.Background(), req)
+		if result == nil || result.Error != probeErrorFailed || !strings.Contains(result.Message, "unexpected EOF") {
+			t.Fatalf("scan=%t: incomplete body accepted: %+v", scan, result)
+		}
 	}
 }

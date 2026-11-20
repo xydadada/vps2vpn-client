@@ -91,6 +91,26 @@ Future<ProviderContainer> pumpProfiles(
 }
 
 void main() {
+  testWidgets('subscription totals do not wrap at the signed integer limit', (
+    tester,
+  ) async {
+    const largest = 9223372036854775807;
+    final profile = urlProfile('large usage').copyWith(
+      subscriptionInfo: const SubscriptionInfo(
+        upload: largest,
+        download: largest,
+        total: largest,
+      ),
+    );
+    await pumpProfiles(tester, profiles: [profile]);
+    final used = largest.toDouble() * 2;
+    expect(
+      find.text('${used.traffic.show} / ${largest.traffic.show}'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a focused profile card opens its menu', (tester) async {
     final profiles = [
       urlProfile('url 1'),

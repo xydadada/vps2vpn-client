@@ -24,6 +24,23 @@ class _NoopSetupAction extends SetupAction {
   void autoApplyProfile() {}
 }
 
+class _RecordingProfilesAction extends ProfilesAction {
+  final refreshed = <Profile>[];
+
+  @override
+  Future<bool> saveProfileEdit(
+    Profile original,
+    Profile edited, {
+    Uint8List? bytes,
+    Future<void> Function()? beforeRefresh,
+    bool Function()? canCommit,
+  }) async {
+    await beforeRefresh?.call();
+    refreshed.add(edited);
+    return true;
+  }
+}
+
 Profile _urlProfile() =>
     Profile.normal(label: 'test', url: 'https://example.com/sub');
 
@@ -145,7 +162,12 @@ void main() {
   testWidgets(
     'the profile file row shows its size and update time without chips',
     (tester) async {
-      await pumpEditProfile(tester);
+      final profile = _urlProfile();
+      // A real zero-byte profile has an mtime; a missing file does not.
+      await File(
+        await appPath.getProfilePath(profile.id.toString()),
+      ).create(recursive: true);
+      await pumpEditProfile(tester, profile: profile);
       final row = find.widgetWithText(
         DecorationListItem,
         currentAppLocalizations.profile,
@@ -196,5 +218,34 @@ void main() {
     final saved = globalState.container.read(profilesProvider).single;
     expect(saved.autoUpdate, isFalse);
     expect(saved.autoUpdateDuration, profile.autoUpdateDuration);
+  });
+
+  testWidgets('a changed URL waits for the edit action to publish it', (
+    tester,
+  ) async {
+    final profile = _urlProfile();
+    final action = _RecordingProfilesAction();
+    await pumpEditProfile(
+      tester,
+      profile: profile,
+      overrides: [
+        profilesProvider.overrideWith(() => TestProfiles([profile])),
+        profilesActionProvider.overrideWith(() => action),
+      ],
+    );
+    final url = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.controller?.text == profile.url,
+    );
+    await tester.enterText(url, 'https://new.example.com/sub');
+    await tester.tap(find.byTooltip('Save'));
+
+    expect(
+      globalState.container.read(profilesProvider).single.url,
+      profile.url,
+    );
+    expect(action.refreshed, isEmpty);
+    await tester.pump(commonDuration);
+    expect(action.refreshed.single.url, 'https://new.example.com/sub');
+    expect(tester.takeException(), isNull);
   });
 }

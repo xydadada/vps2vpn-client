@@ -320,10 +320,15 @@ func handleClearEffect(params ClearEffectParams) error {
 	if profileId <= 0 {
 		return errors.New("invalid profile id")
 	}
-	providersRoot, providersPath := providerPaths(constant.Path.HomeDir(), profileId)
-	if err := os.RemoveAll(providersPath); err != nil {
+	root, err := os.OpenRoot(constant.Path.HomeDir())
+	if err != nil {
 		return err
 	}
-	_ = os.Remove(providersRoot)
+	defer root.Close()
+	providersRoot, providersPath := providerPaths(".", profileId)
+	if err := root.RemoveAll(providersPath); err != nil {
+		return err
+	}
+	_ = root.Remove(providersRoot)
 	return nil
 }

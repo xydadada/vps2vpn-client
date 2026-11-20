@@ -22,6 +22,27 @@ Future<void> _pump(WidgetTester tester, Widget icon) {
 }
 
 void main() {
+  testWidgets('invalid base64 uses the fallback without a network request', (
+    tester,
+  ) async {
+    final reads = <String>[];
+    readRemoteIcon = (src) {
+      reads.add(src);
+      return const Stream.empty();
+    };
+    addTearDown(() => readRemoteIcon = null);
+    await _pump(
+      tester,
+      const CommonTargetIcon(
+        src: 'data:image/png;base64,not valid!',
+        fallback: GroupMonogram('proxy'),
+      ),
+    );
+    await tester.pump();
+    expect(reads, isEmpty);
+    expect(find.text('P'), findsOne);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('a group without an icon shows the first letter of its name, '
       'past a leading emoji', (tester) async {
     for (final (name, mark) in [

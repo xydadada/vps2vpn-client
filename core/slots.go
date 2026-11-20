@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"math"
 	"time"
 )
 
@@ -34,5 +35,5 @@ func timeoutFromMillis(millis int64, fallback time.Duration) time.Duration {
 	if millis <= 0 {
 		return fallback
 	}
-	return time.Duration(millis) * time.Millisecond
+	return time.Duration(min(millis, math.MaxInt64/int64(time.Millisecond))) * time.Millisecond
 }

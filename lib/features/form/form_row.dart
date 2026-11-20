@@ -152,6 +152,7 @@ class FormRowTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final List<TextInputFormatter>? inputFormatters;
   final bool obscureText;
+  final bool isSecret;
   final bool autofocus;
   final bool autocorrect;
   final bool enableSuggestions;
@@ -168,6 +169,7 @@ class FormRowTextField extends StatelessWidget {
     this.textInputAction,
     this.inputFormatters,
     this.obscureText = false,
+    this.isSecret = false,
     this.autofocus = false,
     this.autocorrect = true,
     this.enableSuggestions = true,
@@ -198,8 +200,11 @@ class FormRowTextField extends StatelessWidget {
       inputFormatters: inputFormatters,
       obscureText: obscureText,
       autofocus: autofocus,
-      autocorrect: autocorrect,
-      enableSuggestions: enableSuggestions,
+      autocorrect: isSecret ? false : autocorrect,
+      enableSuggestions: isSecret ? false : enableSuggestions,
+      enableIMEPersonalizedLearning: !isSecret,
+      smartDashesType: isSecret ? SmartDashesType.disabled : null,
+      smartQuotesType: isSecret ? SmartQuotesType.disabled : null,
       onChanged: onChanged,
       onFieldSubmitted: onFieldSubmitted,
       textAlign: TextAlign.end,
@@ -266,6 +271,7 @@ class _FormRowSecretTextFieldState extends State<FormRowSecretTextField> {
             focusNode: widget.focusNode,
             hintText: widget.hintText,
             obscureText: _obscure,
+            isSecret: true,
             textInputAction: widget.textInputAction,
             autocorrect: false,
             enableSuggestions: false,

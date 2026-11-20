@@ -56,6 +56,11 @@ String mitmNetworkChangeValue(
 /// Asks by the module's file as it reads now; false once dismissed.
 Future<bool> answerMitmModule(WidgetRef ref, MitmModule module) async {
   final action = ref.read(mitmModulesActionProvider.notifier);
+  final snapshot = await action.consentSnapshot(module.id);
+  if (!ref.context.mounted || snapshot == null) {
+    return false;
+  }
+  module = snapshot.module;
   final overrides = ref.read(
     profileOverridesProvider(ref.read(currentProfileIdProvider)),
   );
@@ -72,10 +77,17 @@ Future<bool> answerMitmModule(WidgetRef ref, MitmModule module) async {
   } finally {
     content.close();
   }
+  if (!ref.context.mounted) {
+    return false;
+  }
   final asksConsent = read?.asksConsent ?? true;
   if (!module.copyWith(asksConsent: asksConsent).asksBeforeTurningOn) {
-    await action.recordConsent(module.id, asksConsent: asksConsent);
-    return true;
+    return action.recordConsent(
+      module.id,
+      asksConsent: asksConsent,
+      contentVersion: snapshot.version,
+      expected: snapshot.module,
+    );
   }
   final changes = read?.network.changes ?? const <MitmNetworkChange>[];
   final unverified = read?.skipVerifyHostname ?? const <String>[];
@@ -122,19 +134,20 @@ Future<bool> answerMitmModule(WidgetRef ref, MitmModule module) async {
     ),
     confirmText: appLocalizations.turnOn,
   );
-  if (agreed == null) {
+  if (!ref.context.mounted || agreed == null) {
     return false;
   }
-  await action.recordConsent(
+  return action.recordConsent(
     module.id,
     asksConsent: asksConsent,
     agreed: agreed,
+    contentVersion: snapshot.version,
+    expected: snapshot.module,
   );
-  return true;
 }
 
 Future<void> offerMitmModule(WidgetRef ref, MitmModule? module) async {
-  if (module != null && module.awaitsConsent) {
+  if (ref.context.mounted && module != null && module.awaitsConsent) {
     await answerMitmModule(ref, module);
   }
 }

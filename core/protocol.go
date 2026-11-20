@@ -111,7 +111,8 @@ type InitParams struct {
 }
 
 type DecryptConfigParams struct {
-	Path         string `json:"path"`
+	Data         []byte `json:"data"`
+	Path         string `json:"path,omitempty"`
 	AgeSecretKey string `json:"age-secret-key"`
 }
 
@@ -148,8 +149,9 @@ type ProfileBase struct {
 }
 
 type ProfileOutbounds struct {
-	Proxies     []ProfileOutbound `json:"proxies"`
-	ProxyGroups []ProfileOutbound `json:"proxy-groups"`
+	Proxies         []ProfileOutbound   `json:"proxies"`
+	ProxyGroups     []ProfileOutbound   `json:"proxy-groups"`
+	TLSFingerprints map[string][]string `json:"tls-fingerprints,omitempty"`
 }
 
 type ProfileOutbound struct {

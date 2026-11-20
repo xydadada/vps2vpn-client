@@ -110,11 +110,13 @@ func TestCollectReclaimTargetsWalksWithoutFollowingSymlinks(t *testing.T) {
 		t.Fatalf("write error: %v", err)
 	}
 
-	if targets := collectReclaimTargets(homeDir, uid); len(targets) != 0 {
+	root := openOwnershipTestRoot(t, homeDir)
+	if targets := collectReclaimTargets(root, uid); len(targets) != 0 {
 		t.Errorf("targets = %v, want nothing when the caller already owns the tree", targets)
 	}
-	if targets := collectReclaimTargets(homeDir, uid+1); targets != nil {
-		t.Errorf("targets = %v, want nil when the home directory belongs to somebody else", targets)
+	if rejected, err := openReclaimRoot(homeDir, uid+1); err == nil {
+		rejected.Close()
+		t.Error("a home directory owned by another account must not be opened")
 	}
 
 	outside := t.TempDir()
@@ -124,14 +126,24 @@ func TestCollectReclaimTargetsWalksWithoutFollowingSymlinks(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(homeDir, "escape")); err != nil {
 		t.Fatalf("symlink error: %v", err)
 	}
-	for _, target := range collectReclaimTargets(homeDir, uid) {
+	for _, target := range collectReclaimTargets(root, uid) {
 		if target.path == filepath.Join(outside, "secret") {
 			t.Fatal("the walk must not follow a symlink out of the home directory")
 		}
 	}
 }
 
-func reclaimTargetFor(t *testing.T, path string) reclaimTarget {
+func openOwnershipTestRoot(t *testing.T, path string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	return root
+}
+
+func reclaimTargetFor(t *testing.T, root *os.Root, path string) reclaimTarget {
 	t.Helper()
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -141,11 +153,16 @@ func reclaimTargetFor(t *testing.T, path string) reclaimTarget {
 	if !ok {
 		t.Fatalf("stat type = %T, want *syscall.Stat_t", info.Sys())
 	}
-	return reclaimTarget{path: path, dev: uint64(stat.Dev), ino: uint64(stat.Ino)}
+	relative, err := filepath.Rel(root.Name(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reclaimTarget{path: relative, dev: uint64(stat.Dev), ino: uint64(stat.Ino)}
 }
 
 func TestReclaimEntryVerifiesTheInodeItChowns(t *testing.T) {
 	homeDir := t.TempDir()
+	root := openOwnershipTestRoot(t, homeDir)
 	uid := os.Getuid()
 	gid := os.Getgid()
 	foreign := uid + 1
@@ -155,7 +172,7 @@ func TestReclaimEntryVerifiesTheInodeItChowns(t *testing.T) {
 		t.Fatalf("write error: %v", err)
 	}
 
-	if ok, err := reclaimEntry(reclaimTargetFor(t, file), uid, gid); ok || err != nil {
+	if ok, err := reclaimEntry(root, reclaimTargetFor(t, root, file), uid, gid); ok || err != nil {
 		t.Errorf("reclaimEntry = (%v, %v), want no work for an entry the caller owns", ok, err)
 	}
 
@@ -163,7 +180,7 @@ func TestReclaimEntryVerifiesTheInodeItChowns(t *testing.T) {
 	if err := os.Link(file, hardLink); err != nil {
 		t.Fatalf("link error: %v", err)
 	}
-	if ok, err := reclaimEntry(reclaimTargetFor(t, hardLink), foreign, gid); ok || err != nil {
+	if ok, err := reclaimEntry(root, reclaimTargetFor(t, root, hardLink), foreign, gid); ok || err != nil {
 		t.Errorf("reclaimEntry = (%v, %v), want a hard link left alone", ok, err)
 	}
 
@@ -171,20 +188,20 @@ func TestReclaimEntryVerifiesTheInodeItChowns(t *testing.T) {
 	if err := os.Symlink(file, symLink); err != nil {
 		t.Fatalf("symlink error: %v", err)
 	}
-	if _, err := reclaimEntry(reclaimTargetFor(t, symLink), foreign, gid); !errors.Is(err, syscall.ELOOP) {
-		t.Errorf("reclaimEntry error = %v, want ELOOP so a swapped final component cannot redirect the chown", err)
+	if changed, err := reclaimEntry(root, reclaimTargetFor(t, root, symLink), foreign, gid); changed || err == nil {
+		t.Errorf("reclaimEntry = (%v, %v), want a symlink rejected before chown", changed, err)
 	}
 
 	fifo := filepath.Join(homeDir, "fifo")
 	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
 		t.Fatalf("mkfifo error: %v", err)
 	}
-	if ok, err := reclaimEntry(reclaimTargetFor(t, fifo), foreign, gid); ok || err != nil {
+	if ok, err := reclaimEntry(root, reclaimTargetFor(t, root, fifo), foreign, gid); ok || err != nil {
 		t.Errorf("reclaimEntry = (%v, %v), want a fifo skipped without blocking", ok, err)
 	}
 
-	missing := reclaimTarget{path: filepath.Join(homeDir, "missing")}
-	if _, err := reclaimEntry(missing, foreign, gid); !errors.Is(err, fs.ErrNotExist) {
+	missing := reclaimTarget{path: "missing"}
+	if _, err := reclaimEntry(root, missing, foreign, gid); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("reclaimEntry error = %v, want a missing entry reported as absent", err)
 	}
 
@@ -192,13 +209,14 @@ func TestReclaimEntryVerifiesTheInodeItChowns(t *testing.T) {
 	if err := os.WriteFile(plain, []byte("proxies: []\n"), 0o600); err != nil {
 		t.Fatalf("write error: %v", err)
 	}
-	if _, err := reclaimEntry(reclaimTargetFor(t, plain), foreign, gid); err == nil {
+	if _, err := reclaimEntry(root, reclaimTargetFor(t, root, plain), foreign, gid); err == nil {
 		t.Error("a foreign-owned regular file must reach fchown, which only root may complete")
 	}
 }
 
 func TestReclaimEntryRefusesAPathSwappedThroughAnIntermediateComponent(t *testing.T) {
 	homeDir := t.TempDir()
+	root := openOwnershipTestRoot(t, homeDir)
 	outside := t.TempDir()
 	gid := os.Getgid()
 	foreign := os.Getuid() + 1
@@ -211,7 +229,7 @@ func TestReclaimEntryRefusesAPathSwappedThroughAnIntermediateComponent(t *testin
 	if err := os.WriteFile(entry, []byte("proxies: []\n"), 0o600); err != nil {
 		t.Fatalf("write error: %v", err)
 	}
-	target := reclaimTargetFor(t, entry)
+	target := reclaimTargetFor(t, root, entry)
 
 	if err := os.WriteFile(filepath.Join(outside, "provider"), []byte("secret"), 0o600); err != nil {
 		t.Fatalf("write error: %v", err)
@@ -223,7 +241,7 @@ func TestReclaimEntryRefusesAPathSwappedThroughAnIntermediateComponent(t *testin
 		t.Fatalf("symlink error: %v", err)
 	}
 
-	if ok, err := reclaimEntry(target, foreign, gid); ok || err != nil {
+	if ok, err := reclaimEntry(root, target, foreign, gid); ok || err == nil {
 		t.Errorf("reclaimEntry = (%v, %v), want the chown refused once an intermediate component was swapped", ok, err)
 	}
 }
@@ -242,5 +260,26 @@ func TestScheduleReclaimOwnershipOnlyUsesTheHomeDirInitPassed(t *testing.T) {
 
 	if homeDir, _ := reclaimHomeDir.Load().(string); homeDir == "" {
 		t.Error("init must record the home directory the app handed the core")
+	}
+}
+
+func TestReclaimEntryRejectsAnOutsideInodeCollectedThroughASwappedParent(t *testing.T) {
+	homeDir, outside := t.TempDir(), t.TempDir()
+	root := openOwnershipTestRoot(t, homeDir)
+	secret := filepath.Join(outside, "secret")
+	if err := os.WriteFile(secret, []byte("outside fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(homeDir, "escaped")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stat := info.Sys().(*syscall.Stat_t)
+	target := reclaimTarget{path: "escaped/secret", dev: uint64(stat.Dev), ino: uint64(stat.Ino)}
+	if changed, err := reclaimEntry(root, target, os.Getuid(), os.Getgid()); changed || err == nil {
+		t.Fatalf("outside inode was reachable through the root: changed=%v, err=%v", changed, err)
 	}
 }

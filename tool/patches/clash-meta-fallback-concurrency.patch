@@ -1,0 +1,102 @@
+diff --git a/adapter/outboundgroup/fallback.go b/adapter/outboundgroup/fallback.go
+index d6f61348844c..c712aee4c8ee 100644
+--- a/adapter/outboundgroup/fallback.go
++++ b/adapter/outboundgroup/fallback.go
+@@ -4,6 +4,7 @@
+ 	"context"
+ 	"encoding/json"
+ 	"errors"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/common/callback"
+@@ -19,6 +20,7 @@
+ 	*GroupBase
+ 	disableUDP     bool
+ 	testUrl        string
++	selectedMu     sync.RWMutex
+ 	selected       string
+ 	expectedStatus string
+ }
+@@ -89,7 +91,7 @@
+ 		"all":            all,
+ 		"testUrl":        f.testUrl,
+ 		"expectedStatus": f.expectedStatus,
++		"fixed":          f.selectedName(),
+-		"fixed":          f.selected,
+ 		"hidden":         f.Hidden(),
+ 		"icon":           f.Icon(),
+ 		"emptyFallback":  f.EmptyFallback().Name(),
+@@ -102,24 +104,45 @@
+ 	return proxy
+ }
+ 
++// Selection is shared by control requests and both traffic and status readers.
++// Do not hold this lock across a health probe or network operation.
++func (f *Fallback) selectedName() string {
++	f.selectedMu.RLock()
++	defer f.selectedMu.RUnlock()
++	return f.selected
++}
++
++func (f *Fallback) setSelected(name string) {
++	f.selectedMu.Lock()
++	f.selected = name
++	f.selectedMu.Unlock()
++}
++
++func (f *Fallback) clearSelectedIf(name string) {
++	f.selectedMu.Lock()
++	if f.selected == name {
++		f.selected = ""
++	}
++	f.selectedMu.Unlock()
++}
++
+ func (f *Fallback) findAliveProxy(touch bool) C.Proxy {
+ 	proxies := f.GetProxies(touch)
++	selected := f.selectedName()
+ 	for _, proxy := range proxies {
++		if selected == "" {
+-		if len(f.selected) == 0 {
+ 			if proxy.AliveForTestUrl(f.testUrl) {
+ 				return proxy
+ 			}
++		} else if proxy.Name() == selected {
++			if proxy.AliveForTestUrl(f.testUrl) {
++				return proxy
+-		} else {
+-			if proxy.Name() == f.selected {
+-				if proxy.AliveForTestUrl(f.testUrl) {
+-					return proxy
+-				} else {
+-					f.selected = ""
+-				}
+ 			}
++			// A late failed probe may not erase a newer explicit selection.
++			f.clearSelectedIf(selected)
++			selected = ""
+ 		}
+ 	}
+-
+ 	return proxies[0]
+ }
+ 
+@@ -136,7 +159,7 @@
+ 		return errors.New("proxy not exist")
+ 	}
+ 
++	f.setSelected(name)
+-	f.selected = name
+ 	if !p.AliveForTestUrl(f.testUrl) {
+ 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(5000))
+ 		defer cancel()
+@@ -148,7 +171,7 @@
+ }
+ 
+ func (f *Fallback) ForceSet(name string) {
++	f.setSelected(name)
+-	f.selected = name
+ }
+ 
+ func (f *Fallback) Providers() []P.ProxyProvider {

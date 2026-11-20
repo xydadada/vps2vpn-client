@@ -2,6 +2,11 @@ part of '../action.dart';
 
 @Riverpod(keepAlive: true)
 class CommonAction extends _$CommonAction {
+  CommonAction({Future<void> Function() clearDownloads = clearUpdateDownloads})
+    : _clearDownloads = clearDownloads;
+
+  final Future<void> Function() _clearDownloads;
+  bool _updateBusy = false;
   CoreController get _core => ref.read(coreHandlerProvider);
   bool _isUpdatingTraffic = false;
   CancelToken? _updateCancelToken;
@@ -199,7 +204,9 @@ class CommonAction extends _$CommonAction {
   /// Downloads the latest release for this build even when it is not newer.
   Future<void> testUpdateDownload() async {
     final asset = selfUpdateAsset;
-    if (asset == null || ref.read(updateDownloadStateProvider) != null) {
+    if (_updateBusy ||
+        asset == null ||
+        ref.read(updateDownloadStateProvider) != null) {
       return;
     }
     final release = await globalState.loadingRun(
@@ -214,14 +221,15 @@ class CommonAction extends _$CommonAction {
 
   Future<void> _downloadUpdate(String tag, String name) async {
     final download = ref.read(updateDownloadStateProvider.notifier);
-    if (download.value != null) return;
+    if (_updateBusy || download.value != null) return;
+    _updateBusy = true;
     final cancelToken = CancelToken();
     _updateCancelToken = cancelToken;
     download.value = UpdateDownloading(tag);
     dialogs.showBanner(currentAppLocalizations.updateDownloadStarted);
     try {
       final directory = await appPath.updateDirPath;
-      await clearUpdateDownloads();
+      await _clearDownloads();
       await Directory(directory).create(recursive: true);
       var shown = 0;
       final path = await request.downloadVerifiedRelease(
@@ -232,7 +240,9 @@ class CommonAction extends _$CommonAction {
         onReceiveProgress: (received, total) {
           // Every chunk would otherwise rebuild the status on its own frame.
           final step = total > 0 ? total / 100 : 1 << 20;
-          if (received - shown < step && received != total) return;
+          if (!ref.mounted || (received - shown < step && received != total)) {
+            return;
+          }
           shown = received;
           download.value = UpdateDownloading(
             tag,
@@ -241,6 +251,7 @@ class CommonAction extends _$CommonAction {
           );
         },
       );
+      if (!ref.mounted) return;
       download.value = UpdateReady(tag, path);
       dialogs.showBanner(
         currentAppLocalizations.updateReadyTip,
@@ -248,11 +259,12 @@ class CommonAction extends _$CommonAction {
         onTap: () => unawaited(installUpdate()),
       );
     } catch (error) {
-      download.value = null;
-      await clearUpdateDownloads();
+      await _clearDownloads();
+      if (ref.mounted) download.value = null;
       if (error is DioException && CancelToken.isCancel(error)) {
         return;
       }
+      if (!ref.mounted) return;
       commonPrint.log(
         'Update download failed: ${compactError(error)}',
         logLevel: LogLevel.warning,
@@ -261,9 +273,20 @@ class CommonAction extends _$CommonAction {
         userFacingErrorMessage(error, currentAppLocalizations),
       );
     } finally {
+      _updateBusy = false;
       if (identical(_updateCancelToken, cancelToken)) {
         _updateCancelToken = null;
       }
+    }
+  }
+
+  Future<void> clearIdleUpdateDownloads() async {
+    if (_updateBusy || ref.read(updateDownloadStateProvider) != null) return;
+    _updateBusy = true;
+    try {
+      await _clearDownloads();
+    } finally {
+      _updateBusy = false;
     }
   }
 
@@ -272,28 +295,50 @@ class CommonAction extends _$CommonAction {
   }
 
   Future<void> discardUpdate() async {
-    if (ref.read(updateDownloadStateProvider) is! UpdateReady) return;
-    ref.read(updateDownloadStateProvider.notifier).value = null;
-    await clearUpdateDownloads();
+    if (_updateBusy || ref.read(updateDownloadStateProvider) is! UpdateReady) {
+      return;
+    }
+    _updateBusy = true;
+    try {
+      await _clearDownloads();
+      if (ref.mounted) {
+        ref.read(updateDownloadStateProvider.notifier).value = null;
+      }
+    } finally {
+      _updateBusy = false;
+    }
   }
 
   Future<void> installUpdate() async {
+    if (_updateBusy) return;
     final download = ref.read(updateDownloadStateProvider);
     if (download is! UpdateReady) return;
-    if (system.isAndroid) {
-      ref.read(updateDownloadStateProvider.notifier).value = null;
-      final status = await app?.installPackage(download.path);
-      await clearUpdateDownloads();
-      if (status != null && packageInstallFailed(status)) {
+    _updateBusy = true;
+    try {
+      if (system.isAndroid) {
+        ref.read(updateDownloadStateProvider.notifier).value = null;
+        final int? status;
+        try {
+          status = await app?.installPackage(download.path);
+        } finally {
+          await _clearDownloads();
+        }
+        if (ref.mounted && status != null && packageInstallFailed(status)) {
+          await _showUpdateFailure(currentAppLocalizations.updateInstallFailed);
+        }
+        return;
+      }
+      final started = windows?.runas(
+        download.path,
+        windowsUpdateArguments(pid),
+      );
+      if (started == true && ref.mounted) {
+        await ref.read(systemActionProvider.notifier).handleExit();
+      } else if (started == false && ref.mounted) {
         await _showUpdateFailure(currentAppLocalizations.updateInstallFailed);
       }
-      return;
-    }
-    final started = windows?.runas(download.path, windowsUpdateArguments(pid));
-    if (started == true) {
-      await ref.read(systemActionProvider.notifier).handleExit();
-    } else if (started == false) {
-      await _showUpdateFailure(currentAppLocalizations.updateInstallFailed);
+    } finally {
+      _updateBusy = false;
     }
   }
 

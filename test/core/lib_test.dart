@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_clash/common/app_localizations.dart';
 import 'package:fl_clash/core/desktop/model.dart';
 import 'package:fl_clash/core/lib.dart';
@@ -19,24 +21,29 @@ class _FakeService implements Service {
   final calls = <String>[];
 
   String initError = '';
+  Completer<String>? initGate;
+  Completer<String>? syncGate;
   String syncError = '';
   bool shutdownResult = true;
   bool startResult = true;
+  Completer<bool>? startGate;
+  DateTime? runTime;
   bool stopResult = true;
   CoreMethodResponse? Function(CoreMethodCall call)? onInvokeMethod;
+  Future<CoreMethodResponse> Function(CoreMethodCall call)? onInvokeAsync;
 
   final invokedCalls = <CoreMethodCall>[];
 
   @override
   Future<String> init() async {
     calls.add('init');
-    return initError;
+    return await initGate?.future ?? initError;
   }
 
   @override
   Future<String> syncState(SharedState state) async {
     calls.add('syncState');
-    return syncError;
+    return await syncGate?.future ?? syncError;
   }
 
   @override
@@ -48,7 +55,7 @@ class _FakeService implements Service {
   @override
   Future<bool> start() async {
     calls.add('start');
-    return startResult;
+    return await startGate?.future ?? startResult;
   }
 
   @override
@@ -64,6 +71,7 @@ class _FakeService implements Service {
   }) async {
     calls.add('invokeMethod:${call.method.wireName}');
     invokedCalls.add(call);
+    if (onInvokeAsync case final invoke?) return invoke(call);
     final response = onInvokeMethod?.call(call);
     if (response == null) {
       throw const CoreMethodException(code: 'no_response', message: '');
@@ -72,7 +80,7 @@ class _FakeService implements Service {
   }
 
   @override
-  Future<DateTime?> getRunTime() async => null;
+  Future<DateTime?> getRunTime() async => runTime;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -123,6 +131,36 @@ void main() {
       expect(service.calls, isEmpty);
     });
 
+    test(
+      'coalesces starts that arrive while initialization is pending',
+      () async {
+        service.initGate = Completer<String>();
+        final first = lib.start();
+        await pumpEventQueue();
+        final second = lib.start();
+        service.initGate!.complete('');
+        final results = await Future.wait([first, second]);
+        expect(results.map((result) => result.outcome), [
+          CoreLifecycleOutcome.applied,
+          CoreLifecycleOutcome.coalesced,
+        ]);
+        expect(service.calls, ['init', 'syncState']);
+      },
+    );
+
+    test('a later stop invalidates an in-flight start generation', () async {
+      service.initGate = Completer<String>();
+      final first = lib.start();
+      await pumpEventQueue();
+      final stopping = lib.stop();
+      final latest = lib.start();
+      service.initGate!.complete('');
+      expect((await first).outcome, CoreLifecycleOutcome.superseded);
+      await stopping;
+      expect((await latest).outcome, CoreLifecycleOutcome.applied);
+      expect(service.calls, ['init', 'shutdown', 'init', 'syncState']);
+    });
+
     test('an initialization error leaves the handler unconnected', () async {
       service.initError = 'init boom';
 
@@ -132,7 +170,7 @@ void main() {
           isA<StateError>().having((e) => e.message, 'message', 'init boom'),
         ),
       );
-      expect(service.calls, ['init']);
+      expect(service.calls, ['init', 'shutdown']);
 
       service.initError = '';
       final retry = await lib.start();
@@ -177,7 +215,7 @@ void main() {
       expect(service.calls, ['shutdown']);
     });
 
-    test('a failed shutdown throws but still closes the gate', () async {
+    test('a failed shutdown retains ownership for a later stop', () async {
       await lib.start();
       service.shutdownResult = false;
 
@@ -185,7 +223,8 @@ void main() {
 
       service.shutdownResult = true;
       final again = await lib.stop();
-      expect(again.outcome, CoreLifecycleOutcome.coalesced);
+      expect(again.outcome, CoreLifecycleOutcome.applied);
+      expect(service.calls.where((call) => call == 'shutdown'), hasLength(2));
     });
   });
 
@@ -208,6 +247,42 @@ void main() {
 
       await expectLater(lib.start(), throwsA(isA<StateError>()));
       await expectLater(lib.stop(), throwsA(isA<StateError>()));
+    });
+
+    for (final phase in ['init', 'sync']) {
+      test('waits for and cleans up a start blocked in $phase', () async {
+        final gate = Completer<String>();
+        if (phase == 'init') {
+          service.initGate = gate;
+        } else {
+          service.syncGate = gate;
+        }
+        final starting = lib.start();
+        await pumpEventQueue();
+        var closed = false;
+        final closing = lib.close().then((result) {
+          closed = true;
+          return result;
+        });
+        await pumpEventQueue();
+        expect(closed, isFalse);
+        gate.complete('');
+        expect((await starting).outcome, CoreLifecycleOutcome.superseded);
+        await closing;
+        expect(service.calls.last, 'shutdown');
+        expect(service.calls.where((call) => call == 'shutdown'), hasLength(1));
+        await expectLater(lib.start(), throwsStateError);
+      });
+    }
+
+    test('allows cleanup retry after a failed terminal shutdown', () async {
+      await lib.start();
+      service.shutdownResult = false;
+      await expectLater(lib.close(), throwsStateError);
+      await expectLater(lib.start(), throwsStateError);
+      service.shutdownResult = true;
+      expect((await lib.close()).outcome, CoreLifecycleOutcome.applied);
+      expect(service.calls.where((call) => call == 'shutdown'), hasLength(2));
     });
 
     test('runs the shutdown once no matter how often it is called', () async {
@@ -250,6 +325,91 @@ void main() {
       expect(service.calls.last, 'start');
     });
 
+    test(
+      'a stopped listener cannot be started by a late Core response',
+      () async {
+        await lib.start();
+        final reply = Completer<CoreMethodResponse>();
+        service.onInvokeAsync = (call) =>
+            call.method == CoreMethod.listenerStart
+            ? reply.future
+            : Future.value(CoreMethodResponse(id: call.id));
+        final starting = lib.startListener();
+        final rejected = expectLater(
+          starting,
+          throwsA(
+            isA<CoreMethodException>().having(
+              (error) => error.code,
+              'code',
+              'core_unavailable',
+            ),
+          ),
+        );
+        await pumpEventQueue();
+        final stopping = lib.stopListener();
+        reply.complete(const CoreMethodResponse(id: '1'));
+        await rejected;
+        await stopping;
+        expect(service.calls, isNot(contains('start')));
+        expect(service.calls, contains('stop'));
+      },
+    );
+
+    test(
+      'close waits for a pending native start and cancels its intent',
+      () async {
+        await lib.start();
+        service.onInvokeMethod = (_) => const CoreMethodResponse(id: '1');
+        service.startGate = Completer<bool>();
+        final starting = lib.startListener();
+        final rejected = expectLater(
+          starting,
+          throwsA(isA<CoreMethodException>()),
+        );
+        await pumpEventQueue();
+        var closed = false;
+        final closing = lib.close().then((value) {
+          closed = true;
+          return value;
+        });
+        await pumpEventQueue();
+        expect(closed, isFalse);
+        service.startGate!.complete(true);
+        await rejected;
+        await closing;
+        expect(service.calls.sublist(service.calls.indexOf('start')), [
+          'start',
+          'stop',
+          'shutdown',
+        ]);
+      },
+    );
+
+    test(
+      'close detaches from a confirmed background VPN without stopping it',
+      () async {
+        await lib.start();
+        service.runTime = DateTime(2026);
+        service.onInvokeMethod = (_) => const CoreMethodResponse(id: '1');
+        await lib.startListener();
+        service.calls.clear();
+        await lib.close();
+        expect(service.calls, ['shutdown']);
+      },
+    );
+
+    test(
+      'close cancels an accepted native start that never became running',
+      () async {
+        await lib.start();
+        service.onInvokeMethod = (_) => const CoreMethodResponse(id: '1');
+        await lib.startListener();
+        service.calls.clear();
+        await lib.close();
+        expect(service.calls, ['stop', 'shutdown']);
+      },
+    );
+
     test('a listener stop is answered by the service', () async {
       await lib.start();
       service.onInvokeMethod = (_) => null;
@@ -288,6 +448,26 @@ void main() {
   });
 
   group('invokeMethod', () {
+    test(
+      'stop cancels a connection wait before a later start can reuse it',
+      () async {
+        final waiting = lib.invokeMethod(method: CoreMethod.proxyList);
+        final rejected = expectLater(
+          waiting,
+          throwsA(
+            isA<CoreMethodException>().having(
+              (error) => error.code,
+              'code',
+              'core_unavailable',
+            ),
+          ),
+        );
+        await lib.stop();
+        await rejected;
+        expect(service.invokedCalls, isEmpty);
+      },
+    );
+
     test('assigns an increasing call id per request', () async {
       await lib.start();
       service.onInvokeMethod = (call) =>

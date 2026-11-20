@@ -32,6 +32,48 @@ Finder _texts() => find.descendant(
 const _gb = 1024 * 1024 * 1024;
 
 void main() {
+  testWidgets('invalid and huge quotas do not break the account card', (
+    tester,
+  ) async {
+    for (final quota in [double.nan, double.infinity, -1.0, 1e308]) {
+      await _pump(
+        tester,
+        const VpsAccountCard(),
+        VpsMemberResult(
+          member: VpsMember(name: 'Boundary', enabled: true, quotaGb: quota),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('unlimited'), findsOneWidget);
+    }
+  });
+
+  testWidgets('large usage remains positive and fills the quota', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const VpsAccountCard(),
+      const VpsMemberResult(
+        member: VpsMember(
+          name: 'Boundary',
+          enabled: true,
+          usedUp: 9223372036854775807,
+          usedDown: 9223372036854775807,
+          quotaGb: 10,
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    final bar = tester.widget<FractionallySizedBox>(
+      find.byType(FractionallySizedBox),
+    );
+    expect(bar.widthFactor, 1);
+    final usage = tester.widget<Text>(find.textContaining('Used '));
+    expect(usage.data, isNot(contains('Used -')));
+    expect(usage.data, isNot(contains('Used 0 ')));
+  });
+
   testWidgets('hidden for subscriptions that are not vps2vpn links', (
     tester,
   ) async {

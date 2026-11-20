@@ -855,7 +855,7 @@ void main() {
   });
 
   test('nothing is probed before the Core has been read', () async {
-    final container = build(route: const RouteState());
+    final container = build(route: const RouteState(live: true));
     final probe = container.read(_probeProvider.notifier);
     probe.watch('a');
     await pumpEventQueue();

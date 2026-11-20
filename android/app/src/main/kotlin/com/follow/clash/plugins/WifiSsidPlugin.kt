@@ -25,7 +25,6 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry.RequestPermissionsResultListener
-import java.util.concurrent.ConcurrentHashMap
 
 class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var channel: MethodChannel
@@ -37,7 +36,7 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private var pendingPermissionResult: Result? = null
     private var rationaleBeforeRequest: Map<String, Boolean> = emptyMap()
     private var wifiNetworkCallback: ConnectivityManager.NetworkCallback? = null
-    private val wifiInfoByNetwork = ConcurrentHashMap<Network, WifiInfo>()
+    private val ssidNetworkState = SsidNetworkState<Network>()
     private val pendingSsidResults = mutableListOf<Result>()
     @Volatile
     private var hasPendingSsid = false
@@ -310,16 +309,21 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             result.error(ERROR_UNAVAILABLE, "WifiManager not available", null)
             return
         }
-        @Suppress("DEPRECATION")
-        result.success(normalizeSsid(wm.connectionInfo?.ssid))
+        result.success(legacyCurrentSsid(wm))
     }
 
-    private fun currentSsid(): String? {
-        val activeNetwork = connectivityManager?.activeNetwork
-        val info = activeNetwork?.let(wifiInfoByNetwork::get)
-            ?: wifiInfoByNetwork.values.firstOrNull()
-        return normalizeSsid(info?.ssid)
+    @Suppress("DEPRECATION")
+    private fun legacyCurrentSsid(manager: WifiManager): String? {
+        // Before API 31 the legacy getter also resolves a VPN's underlying
+        // default network. A side Wi-Fi connection must not suspend the VPN.
+        val network = connectivityManager?.activeNetworkInfo ?: return null
+        if (!network.isConnected || network.type != ConnectivityManager.TYPE_WIFI) {
+            return null
+        }
+        return normalizeSsid(manager.connectionInfo?.ssid)
     }
+
+    private fun currentSsid(): String? = ssidNetworkState.ssid
 
     private fun normalizeSsid(ssid: String?): String? {
         val normalized = ssid?.removeSurrounding("\"")
@@ -347,36 +351,49 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
         val cm = connectivityManager ?: return false
         val callback = object : ConnectivityManager.NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
+            override fun onAvailable(network: Network) {
+                if (wifiNetworkCallback !== this) return
+                ssidNetworkState.available(network)
+            }
+
             override fun onCapabilitiesChanged(
                 network: Network,
                 capabilities: NetworkCapabilities,
             ) {
-                val wifiInfo = capabilities.transportInfo as? WifiInfo
-                if (wifiInfo == null) {
-                    wifiInfoByNetwork.remove(network)
+                if (wifiNetworkCallback !== this) return
+                val info = capabilities.transportInfo as? WifiInfo
+                val ssid = if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    normalizeSsid(info?.ssid)
                 } else {
-                    wifiInfoByNetwork[network] = wifiInfo
+                    null
                 }
-                if (!hasPendingSsid) {
-                    return
-                }
-                currentSsid()?.let { ssid ->
-                    mainHandler.post {
-                        completePendingSsidResults(ssid = ssid)
-                    }
+                if (ssidNetworkState.update(network, ssid) && hasPendingSsid) {
+                    completePendingSsidResults(ssid = ssidNetworkState.ssid)
                 }
             }
 
             override fun onLost(network: Network) {
-                wifiInfoByNetwork.remove(network)
+                if (wifiNetworkCallback !== this) return
+                if (ssidNetworkState.lost(network) && hasPendingSsid) {
+                    completePendingSsidResults(ssid = null)
+                }
             }
         }
+        // Observe the system's preferred physical Internet connection even
+        // while our own VPN is the application's default network. Registering
+        // every Wi-Fi admits local-only/captive side networks while cellular is
+        // preferred; their SSIDs must never disable protection.
         val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             .build()
-        return runCatching { cm.registerNetworkCallback(request, callback) }
-            .onSuccess { wifiNetworkCallback = callback }
-            .isSuccess
+        wifiNetworkCallback = callback
+        return runCatching {
+            cm.registerBestMatchingNetworkCallback(request, callback, mainHandler)
+        }.onFailure {
+            wifiNetworkCallback = null
+            ssidNetworkState.clear()
+        }.isSuccess
     }
 
     private fun scheduleSsidTimeout() {
@@ -420,7 +437,7 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 runCatching { manager.unregisterNetworkCallback(callback) }
             }
         }
-        wifiInfoByNetwork.clear()
+        ssidNetworkState.clear()
     }
 
     private fun detachFromActivity(cancelPermissionRequest: Boolean) {

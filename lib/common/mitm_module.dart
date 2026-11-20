@@ -247,9 +247,24 @@ Map<String, Map<String, Object?>> _mergeRuleProviders(
 Map<String, String> mitmAttachments(MitmModule module) => {
   if (!module.isRemote)
     for (final MapEntry(:key, :value) in module.resources.entries)
-      if (!isMitmResourceUrl(key) && !key.startsWith(_inlineResource))
+      if (!isMitmResourceUrl(key) &&
+          !key.startsWith(_inlineResource) &&
+          isMitmResourceName(value))
         key: value,
 };
+
+/// Stored resource mappings can also arrive from an imported database.
+bool isMitmResourceName(String name) =>
+    name.isNotEmpty &&
+    name != '.' &&
+    name != '..' &&
+    !name.endsWith('.') &&
+    !name.endsWith(' ') &&
+    !RegExp(r'[\x00-\x1f<>:"/\\|?*]').hasMatch(name) &&
+    !RegExp(
+      r'^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)',
+      caseSensitive: false,
+    ).hasMatch(name);
 
 const _inlineResource = 'inline:';
 
@@ -1556,6 +1571,11 @@ class _ModuleParser {
   /// The resources directory's file for [url], or null once the line is
   /// skipped for a file the module does not download or FlClash has not.
   String? _resource(String section, String line, String url) {
+    final stored = resources[url];
+    if (stored != null && !isMitmResourceName(stored)) {
+      _skip(section, line, MitmModuleSkipReason.unreadable);
+      return null;
+    }
     if (url.startsWith(_inlineResource)) {
       final file = resources[url];
       if (file == null) {

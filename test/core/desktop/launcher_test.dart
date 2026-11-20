@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:fl_clash/core/desktop/launcher.dart';
 import 'package:fl_clash/core/desktop/model.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -39,6 +40,45 @@ void main() {
       const CoreProcessStopResult(stopped: true, exitConfirmed: true),
     );
   });
+
+  test(
+    'stderr decodes across chunks and tolerates malformed diagnostics',
+    () async {
+      final stderr = StreamController<List<int>>();
+      final exit = Completer<int>();
+      final process = _FakeProcess(
+        pid: 42,
+        exitCode: exit.future,
+        stderr: stderr.stream,
+      );
+      final messages = <String>[];
+      final previousPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        messages.add(message ?? '');
+      };
+      addTearDown(() => debugPrint = previousPrint);
+      final lease =
+          await DirectCoreLauncher(
+            startProcess: (_, _) async => process,
+            corePath: 'FlClashCore',
+          ).start(
+            sessionId: '0123456789abcdef0123456789abcdef',
+            address: 'test-address',
+          );
+
+      stderr.add([0xe4]);
+      stderr.add([0xb8, 0xad]);
+      stderr.add([0xff]);
+      await stderr.close();
+      final stopped = lease.stop(const Duration(seconds: 1));
+      exit.complete(0);
+      expect((await stopped).exitConfirmed, isTrue);
+      expect(
+        messages.map((line) => line.replaceFirst('[APP] ', '')).join(),
+        '中�',
+      );
+    },
+  );
 
   test('direct lease reports an unconfirmed exit after timeout', () async {
     final process = _FakeProcess(pid: 42, exitCode: Completer<int>().future);
@@ -89,11 +129,15 @@ class _FakeProcess implements Process {
   final Stream<List<int>> stdout = const Stream.empty();
 
   @override
-  final Stream<List<int>> stderr = const Stream.empty();
+  final Stream<List<int>> stderr;
 
   bool killed = false;
 
-  _FakeProcess({required this.pid, required this.exitCode});
+  _FakeProcess({
+    required this.pid,
+    required this.exitCode,
+    this.stderr = const Stream.empty(),
+  });
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {

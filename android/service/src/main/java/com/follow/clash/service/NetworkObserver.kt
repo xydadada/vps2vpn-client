@@ -10,6 +10,7 @@ import android.net.NetworkRequest
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.SystemClock
 import androidx.core.content.getSystemService
 import com.follow.clash.common.GlobalState
 import com.follow.clash.core.Core
@@ -21,9 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 private data class NetworkInfo(
     @Volatile var losingUntilMillis: Long = 0,
     @Volatile var dnsList: List<InetAddress> = emptyList(),
+    @Volatile var capabilities: NetworkCapabilities? = null,
 ) {
-    val priorityPenalty: Int
-        get() = if (losingUntilMillis > System.currentTimeMillis()) 10 else 0
+    val isLosing: Boolean
+        get() = losingUntilMillis > SystemClock.elapsedRealtime()
 }
 
 // Outlives every service run: the Core also tests delays and updates providers
@@ -58,7 +60,7 @@ object NetworkObserver {
 
         override fun onLosing(network: Network, maxMsToLive: Int) {
             val info = networkInfos[network] ?: return
-            info.losingUntilMillis = System.currentTimeMillis() + maxMsToLive
+            info.losingUntilMillis = SystemClock.elapsedRealtime() + maxMsToLive
             scheduleUpdateDns()
             if (maxMsToLive > 0) {
                 handler.postDelayed({
@@ -71,6 +73,11 @@ object NetworkObserver {
 
         override fun onLost(network: Network) {
             networkInfos.remove(network)
+            scheduleUpdateDns()
+        }
+
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            networkInfos[network]?.capabilities = capabilities
             scheduleUpdateDns()
         }
 
@@ -98,8 +105,8 @@ object NetworkObserver {
     }
 
     private fun networkPriority(entry: Map.Entry<Network, NetworkInfo>): Int {
-        val capabilities = connectivity?.getNetworkCapabilities(entry.key)
-        return when {
+        val capabilities = entry.value.capabilities
+        val transport = when {
             capabilities == null -> 100
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> 90
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> 0
@@ -113,12 +120,20 @@ object NetworkObserver {
                 capabilities.hasTransport(TRANSPORT_SATELLITE) -> 5
 
             else -> 20
-        } + entry.value.priorityPenalty
+        }
+        return dnsNetworkPriority(
+            transportPriority = transport,
+            validated = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true,
+            losing = entry.value.isLosing,
+        )
     }
 
     @Synchronized
     private fun updateDns() {
-        val preferred = networkInfos.entries.minByOrNull(::networkPriority)
+        val preferred = networkInfos.entries.minWithOrNull(
+            compareBy<Map.Entry<Network, NetworkInfo>>(::networkPriority)
+                .thenBy { if (it.key == currentNetwork) 0 else 1 },
+        )
         val dnsList = preferred
             ?.value
             ?.dnsList

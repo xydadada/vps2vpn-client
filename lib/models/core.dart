@@ -544,10 +544,10 @@ extension CoreMemoryStatsExt on CoreMemoryStats {
 SubscriptionInfo? subscriptionInfoFormCore(Map<String, Object?>? json) {
   if (json == null) return null;
   return SubscriptionInfo(
-    upload: (json['Upload'] as num?)?.toInt() ?? 0,
-    download: (json['Download'] as num?)?.toInt() ?? 0,
-    total: (json['Total'] as num?)?.toInt() ?? 0,
-    expire: (json['Expire'] as num?)?.toInt() ?? 0,
+    upload: trafficCounterOrZero(json['Upload']),
+    download: trafficCounterOrZero(json['Download']),
+    total: trafficCounterOrZero(json['Total']),
+    expire: subscriptionExpiryOrUnknown(json['Expire']),
   );
 }
 

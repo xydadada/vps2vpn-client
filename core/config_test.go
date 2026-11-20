@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -820,6 +821,47 @@ func TestApplyConfigTellsARejectedProfileFromAFailedCall(t *testing.T) {
 	}
 }
 
+func TestApplyConfigKeepsTheWorkingProxyGraphOnRejectedUpdate(t *testing.T) {
+	home := t.TempDir()
+	previousHome := constant.Path.HomeDir()
+	constant.SetHomeDir(home)
+	t.Cleanup(func() { constant.SetHomeDir(previousHome) })
+	working := &config.Config{General: &config.General{}, Controller: &config.Controller{}}
+	withCurrentConfig(t, working)
+	keepTunnel(t)
+	previousSkip := skipCertVerify.Load()
+	previousSmart := vpsSmartEnabled.Load()
+	previousURL := currentTestURL()
+	skipCertVerify.Store(false)
+	vpsSmartEnabled.Store(false)
+	t.Cleanup(func() {
+		skipCertVerify.Store(previousSkip)
+		vpsSmartEnabled.Store(previousSmart)
+	})
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("proxies: [unterminated\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := applyConfig(&SetupParams{Options: CoreOptions{
+		SkipCertVerify:   true,
+		SmartLines:       true,
+		TestURL:          "https://rejected-profile.invalid/probe",
+		DelayTestTimeout: 15000,
+	}})
+
+	var rejected *MethodError
+	if !errors.As(err, &rejected) || rejected.Code != "config_rejected" {
+		t.Fatalf("applyConfig = %v, want config_rejected", err)
+	}
+	if currentConfig != working {
+		t.Fatal("a rejected update replaced the previous working configuration")
+	}
+	if skipCertVerify.Load() || vpsSmartEnabled.Load() || currentTestURL() != previousURL {
+		t.Fatalf("a rejected profile changed active security or smart defaults: skipTLS=%t smart=%t URL=%q",
+			skipCertVerify.Load(), vpsSmartEnabled.Load(), currentTestURL())
+	}
+}
+
 func TestHandleSetupConfigLeavesTheListenerAloneOnSuccess(t *testing.T) {
 	withSetupConfig(t, func(*SetupParams) error { return nil })
 
@@ -1062,5 +1104,54 @@ func TestTestDelayStopsQueueingOnceTheTimeoutIsSpent(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("handleTestDelay outlived the timeout it was given, waiting for a slot")
+	}
+}
+
+func TestControllerRecreationAppliesEachSecretBeforeReturning(t *testing.T) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := probe.Addr().String()
+	_ = probe.Close()
+	t.Cleanup(func() { route.ReCreateServer(&route.Config{}) })
+	transport := &http.Transport{DisableKeepAlives: true}
+	t.Cleanup(transport.CloseIdleConnections)
+	client := &http.Client{Transport: transport, Timeout: time.Second}
+	for i := range 12 {
+		secret := "generation-" + strconv.Itoa(i)
+		route.ReCreateServer(&route.Config{Addr: address, Secret: secret})
+		for _, authorization := range []string{"Bearer " + secret, "Bearer obsolete"} {
+			request, err := http.NewRequest(http.MethodGet, "http://"+address+"/version", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", authorization)
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatalf("generation %d did not bind its listener before returning: %v", i, err)
+			}
+			_ = response.Body.Close()
+			want := http.StatusOK
+			if authorization == "Bearer obsolete" {
+				want = http.StatusUnauthorized
+			}
+			if response.StatusCode != want {
+				t.Fatalf("generation %d status = %d, want %d", i, response.StatusCode, want)
+			}
+		}
+	}
+	route.ReCreateServer(&route.Config{})
+	connection, err := net.DialTimeout("tcp", address, time.Second)
+	if err == nil {
+		_ = connection.Close()
+		t.Fatal("disabled controller still accepts connections")
+	}
+}
+
+func TestTimeoutFromMillisDoesNotOverflow(t *testing.T) {
+	const largest = int64(1<<63 - 1)
+	if got := timeoutFromMillis(largest, time.Second); got <= 0 || got > time.Duration(largest) {
+		t.Fatalf("positive timeout overflowed: %v", got)
 	}
 }

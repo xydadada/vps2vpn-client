@@ -2,6 +2,7 @@ name: Source verification
 
 on:
   push:
+    branches: [vps2vpn, audit/2026-11-reliability-security]
   pull_request:
   workflow_dispatch:
 
@@ -15,6 +16,8 @@ concurrency:
 env:
   GO_VERSION: '1.27.4'
   FLUTTER_VERSION: '3.50.0'
+  CA_BUNDLE: cacert-2026-09-25.pem
+  CA_BUNDLE_SHA256: a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505
 
 jobs:
   go:
@@ -28,6 +31,12 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: core/go.sum
+      - name: Prepare verified Core sources
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+          go run tool/apply_core_patches.go
       - name: Test and check the Go wrapper
         working-directory: core
         run: |
@@ -46,7 +55,7 @@ jobs:
       - name: Install Linux native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libgtk-3-dev
+          sudo apt-get install -y pkg-config libgtk-3-dev libsecret-1-dev
           pkg-config --exists gtk+-3.0
       - uses: actions/setup-go@v5
         with:
@@ -68,6 +77,15 @@ jobs:
             services/helper
       - name: Dependencies and analysis
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('pubspec.yaml')
+          content = path.read_text()
+          needle = '    setup:\n      build_assets: true'
+          if content.count(needle) != 1:
+              raise SystemExit('Cannot locate the setup hook configuration')
+          path.write_text(content.replace(needle, '    setup:\n      build_assets: false'))
+          PY
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
       - name: Root tests and coverage
@@ -82,6 +100,7 @@ jobs:
           dart test --reporter expanded
       - name: Save coverage and test report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: dart-test-evidence
@@ -103,7 +122,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libgtk-3-dev
+          sudo apt-get install -y pkg-config libgtk-3-dev libsecret-1-dev
           pkg-config --exists gtk+-3.0
       - name: Install the pinned Rust toolchain
         shell: bash

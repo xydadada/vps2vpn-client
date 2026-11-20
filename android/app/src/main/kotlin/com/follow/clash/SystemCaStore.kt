@@ -95,6 +95,8 @@ object SystemCaStore {
         return "%02x%02x%02x%02x".format(digest[3], digest[2], digest[1], digest[0])
     }
 
+    // Installation and removal share both the staging directory and root mounts.
+    @Synchronized
     private fun <T> withScripts(
         context: Context,
         der: ByteArray,

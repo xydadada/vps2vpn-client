@@ -414,13 +414,48 @@ void main() {
     expect(handler.calls[CoreMethod.ruleSetDump], {'path': '/rules.mrs'});
   });
 
-  test('decryptConfig sends the path and the age key', () async {
+  test('decryptConfig sends app-readable bytes and the age key', () async {
     final handler = _RecordingCoreHandler();
+    final home = await Directory.systemTemp.createTemp('decrypt-contract-');
+    addTearDown(() => home.delete(recursive: true));
+    final file = File('${home.path}/profile.age');
+    final bytes = List<int>.generate(256, (index) => index);
+    await file.writeAsBytes(bytes);
 
-    await handler.decryptConfig('/profile.yaml', 'AGE-SECRET-KEY-1A');
+    expect(
+      await handler.decryptConfig(file.path, 'AGE-SECRET-KEY-1A'),
+      'mode: rule',
+    );
+    final arguments = handler.calls[CoreMethod.configDecrypt] as Map;
+    expect(arguments, {
+      'data': base64Encode(bytes),
+      'age-secret-key': 'AGE-SECRET-KEY-1A',
+    });
+    final envelope = CoreMethodCall(
+      id: 'fixture',
+      method: CoreMethod.configDecrypt,
+      arguments: arguments,
+    );
+    final roundTrip = CoreMethodCall.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(envelope.toJson()))),
+    );
+    expect(roundTrip.method, CoreMethod.configDecrypt);
+    final decoded = roundTrip.arguments as Map;
+    expect(decoded, isNot(contains('path')));
+    expect(base64Decode(decoded['data'] as String), bytes);
+    expect(decoded['age-secret-key'], 'AGE-SECRET-KEY-1A');
+  });
 
+  test('decryptConfig distinguishes an empty file from absent data', () async {
+    final handler = _RecordingCoreHandler();
+    final home = await Directory.systemTemp.createTemp('decrypt-empty-');
+    addTearDown(() => home.delete(recursive: true));
+    final file = File('${home.path}/empty.age');
+    await file.writeAsBytes(const []);
+
+    await handler.decryptConfig(file.path, 'AGE-SECRET-KEY-1A');
     expect(handler.calls[CoreMethod.configDecrypt], {
-      'path': '/profile.yaml',
+      'data': '',
       'age-secret-key': 'AGE-SECRET-KEY-1A',
     });
   });

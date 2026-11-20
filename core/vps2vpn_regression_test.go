@@ -44,7 +44,6 @@ func newLocalFallback(t *testing.T, name, url string, opt outboundgroup.Fallback
 	return group
 }
 
-
 func TestSmartAIConfigurationOptsIntoIndependentHealth(t *testing.T) {
 	vpsOn(t)
 	raw := vpsTestRaw("MATCH,Proxy")

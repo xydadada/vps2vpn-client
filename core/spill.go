@@ -24,7 +24,7 @@ func spilledResponseDir() string {
 // elevated Core just made would refuse until the debounced reclaim.
 func makeSpilledResponseDir() (string, error) {
 	dir := spilledResponseDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	reclaimDirOwnership(dir)
@@ -58,8 +58,7 @@ func writeSpilledResponse(data []byte) (path string, err error) {
 			_ = os.Remove(path)
 		}
 	}()
-	// An elevated Core still answers a host running as the app user.
-	if err := file.Chmod(0o644); err != nil {
+	if err := preparePrivateFile(file); err != nil {
 		_ = file.Close()
 		return "", err
 	}
@@ -82,4 +81,11 @@ func clearSpilledResponses() {
 	for _, entry := range entries {
 		_ = os.Remove(filepath.Join(spilledResponseDir(), entry.Name()))
 	}
+}
+
+func preparePrivateFile(file *os.File) error {
+	if err := file.Chmod(0o600); err != nil {
+		return err
+	}
+	return ownCreatedFile(file)
 }

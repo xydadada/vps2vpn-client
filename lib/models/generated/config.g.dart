@@ -278,11 +278,9 @@ Map<String, dynamic> _$AuthenticationPropsToJson(
 _NetworkProps _$NetworkPropsFromJson(Map<String, dynamic> json) =>
     _NetworkProps(
       systemProxy: json['systemProxy'] as bool? ?? true,
-      bypassDomain:
-          (json['bypassDomain'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          defaultBypassDomain,
+      bypassDomain: json['bypassDomain'] == null
+          ? defaultBypassDomain
+          : _bypassDomainFromJson(json['bypassDomain'] as List?),
       pacMode: json['pacMode'] as bool? ?? false,
       pacScript: json['pacScript'] as String? ?? defaultPacScript,
       bypassPrivateRoute: json['bypassPrivateRoute'] as bool? ?? true,

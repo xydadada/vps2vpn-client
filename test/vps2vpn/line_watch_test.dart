@@ -11,6 +11,33 @@ const line = VpsWatchedLine(
 );
 
 void main() {
+  test(
+    'sustained failures refresh before the panel expires a daily report',
+    () {
+      final health = VpsLineHealth(threshold: 1);
+      var now = DateTime.utc(2026);
+      health.record(line.key, false);
+      health.complete(health.pending(line.key, now)!, true, now);
+      for (var cycle = 0; cycle < 5; cycle++) {
+        expect(
+          health.pending(line.key, now.add(const Duration(hours: 5))),
+          isNull,
+        );
+        now = now.add(const Duration(hours: 6));
+        expect(health.record(line.key, false), isNull);
+        final heartbeat = health.pending(line.key, now)!;
+        expect(heartbeat.ok, isFalse);
+        health.complete(heartbeat, true, now);
+      }
+      health.record(line.key, true);
+      health.complete(health.pending(line.key, now)!, true, now);
+      expect(
+        health.pending(line.key, now.add(const Duration(days: 2))),
+        isNull,
+      );
+    },
+  );
+
   test('delivery failure and recovery stay pending until acknowledged', () {
     final health = VpsLineHealth();
     final now = DateTime.utc(2026);

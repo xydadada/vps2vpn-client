@@ -174,6 +174,35 @@ void main() {
       expect(renamed.renamedProxies({'New, Proxy;1': 'Old'}), overrides);
     });
 
+    test('rename uses the same decoded fragment as the core', () {
+      const encoded = '1.1.1.1#Old%26ecs%3D1.2.3.4%2F24';
+      expect(dnsServerProxies(encoded), ['Old']);
+      final renamed = renamedDnsServer(encoded, {'Old': 'New, Proxy;1'});
+      expect(renamed, '1.1.1.1#New%2C%20Proxy%3B1&ecs=1.2.3.4/24');
+      expect(dnsServerProxies(renamed), ['New, Proxy;1']);
+      expect(
+        renamedDnsServer('1.1.1.1#ecs%3Dvalue&Old', {'Old': 'New'}),
+        '1.1.1.1#ecs=value&New',
+      );
+      expect(renamedDnsServer(encoded, {'Other': 'New'}), encoded);
+    });
+
+    test('only the last bare fragment names a dialer', () {
+      const server = 'tls://1.1.1.1#Unused&ecs=1.2.3.4/24&Old';
+      expect(renamedDnsServer(server, {'Unused': 'Renamed'}), server);
+      expect(
+        renamedDnsServer(server, {'Old': 'New'}),
+        'tls://1.1.1.1#Unused&ecs=1.2.3.4/24&New',
+      );
+    });
+
+    test('renaming retains escaped percent and separators in parameters', () {
+      const server = '1.1.1.1#ecs=value%25%2C%3B%20x&Old';
+      final renamed = renamedDnsServer(server, {'Old': 'New'});
+      expect(renamed, '1.1.1.1#ecs=value%25%2C%3B%20x&New');
+      expect(dnsServerProxies(renamed), ['New']);
+    });
+
     test('a server written to the profile but turned off names nothing', () {
       final overrides = _serverSites['cfg.NameServer']!;
       expect(overrides.copyWith(dnsOverrideKeys: {}).dnsProxies, isEmpty);

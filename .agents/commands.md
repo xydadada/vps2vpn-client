@@ -201,7 +201,7 @@ its own, lets that run decide, and names the files that only failed together. Se
 also what CI runs; `tool/check_plugins.sh` does not descend into it. It must stay out of `flutter test`, because a test
 run of `plugins/setup` would execute the build hook itself.
 
-`.github/scripts/issue-gate.js` is tested with `node --test .github/scripts/`, against the forms in
+`.github/scripts/issue-gate.js` is tested with `node --test .github/scripts/*.test.js`, against the forms in
 `.github/ISSUE_TEMPLATE/`; no workflow runs it, so run it after changing the script or a form.
 
 Native plugin code under `plugins/*/{linux,macos,windows}` is compiled by the CI `desktop` job, which runs
@@ -240,9 +240,13 @@ The CI Go-wrapper checks can be reproduced without CGO. They cover the Android f
 `timezone/`, which only the gomobile build compiles:
 
 ```bash
+go test -race tool/apply_core_patches.go tool/apply_core_patches_test.go
+go run tool/apply_core_patches.go
 cd core
-CGO_ENABLED=0 go test .
-CGO_ENABLED=0 go vet . ./cmd/...
+go mod tidy
+git diff --exit-code -- go.mod go.sum
+CGO_ENABLED=0 go test ./...
+CGO_ENABLED=0 go vet ./...
 GOOS=android GOARCH=arm64 CGO_ENABLED=0 go vet -tags=with_gvisor . ./mobile ./tun ./platform
 ```
 
@@ -255,8 +259,14 @@ cargo test --manifest-path services/helper/Cargo.toml
 cargo test --manifest-path services/helper/Cargo.toml --features windows-service
 ```
 
+The controller patch is version-bound and idempotent. Desktop hooks and Android's `bindCore` also apply it before
+building, so normal application artifacts contain the same repair. An unexpected gitlink, source, patch, or checkout
+stops the build. If a killed build leaves `vps2vpn-controller-patch.lock` inside the Core submodule's Git directory,
+first confirm that no build is running; then remove that specific stale lock and rerun the command. Do not remove
+locks from an active or unknown build.
+
 The last command requires Windows for meaningful service coverage. Native Android lifecycle edits should at minimum
-compile the modules they touch, with the JDK 17 that CI installs. On macOS the Homebrew `openjdk@17` keg is not
+compile the modules they touch, with a supported JDK; the audit workflow runs JDK 21 and the modules target Java 17 bytecode. On macOS the Homebrew `openjdk@17` keg is not
 registered with `java_home`, so export it by prefix:
 
 ```bash
@@ -266,6 +276,21 @@ export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
 ./gradlew :service:compileDebugKotlin
 ./gradlew :app:compileDebugKotlin
 ```
+
+The API 37 SDK package is named `platforms;android-37.0` in the official SDK repository, while this project's
+`compileSdk` and `targetSdk` remain 37. Verify the published identifier before installing it:
+
+```bash
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list --include_obsolete
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'ndk;28.2.13676358'
+flutter pub get
+flutter build apk --debug --target-platform android-arm64 --no-pub
+cd android
+./gradlew :app:testDebugUnitTest :common:testDebugUnitTest :service:testDebugUnitTest -Ptarget-platform=android-arm64
+```
+
+The audit workflow also runs `flutter build linux --release` with the normal `setup.build_assets: true` hook. These
+compile checks do not start the application, change system proxy settings or install a VPN.
 
 Always-on VPN entry, system VPN revoke, actual permission UI, and rapid device start/stop still require Android device or
 emulator validation; Kotlin compilation cannot prove those system callbacks.
@@ -390,6 +415,18 @@ release matrix in `build.yaml`, so a renamed artifact needs the same change in `
 
 ## Verify
 
+This vps2vpn fork now runs `.github/workflows/audit-checks.yaml` on pull requests and manual dispatch.
+It checks the Go wrapper, Linux/Windows Rust crates, Flutter/plugin/setup-hook tests, and changed Dart/Go
+formatting; build-runner output and dependency resolution must agree with the committed generated sources and locks.
+The independent `flutter-static` job reports formatting, code-generation and analysis failures without waiting for the
+full test job; the latter uses `tool/test.dart` with its documented independent reruns for shared-isolate failures.
+Separate jobs compile a normal Linux release and an Android ARM64 debug APK, run Android JVM tests, and scan every
+owned Cargo.lock with cargo-audit 0.23.0 plus the Go wrapper with govulncheck 1.10.0 (`-show verbose`). Dependency
+findings are not suppressed. The Go gate emits the exact `go mod tidy` diff and fails until it is committed. Only the setup hook is
+disabled in the disposable Flutter test checkout; rust_api stays enabled. The Windows installer and
+takeover workflows remain manual. The upstream pipeline descriptions below are historical command
+recipes; the removed upstream release/desktop/publishing workflows are not active in this fork.
+
 In the public repository every branch push runs the `dart` job; in the private
 `origin` every check job runs only when started by hand (`workflow_dispatch`).
 The `dart` job performs these root-package checks in order:
@@ -424,7 +461,7 @@ only once every build and every check job passes.
 
 `bash tool/check_plugins.sh` is that plugin gate, and CI runs the same script.
 It discovers every `plugins/*/pubspec.yaml`, analyzes each package, and runs
-`flutter test` wherever `test/*_test.dart` exists. Adding a plugin package needs
+`flutter test` wherever `test/**/*_test.dart` exists, including nested test folders. Adding a plugin package needs
 no workflow edit.
 
 ### CI Caches

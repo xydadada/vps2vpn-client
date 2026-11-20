@@ -7,9 +7,11 @@ import com.follow.clash.service.models.NotificationParams
 import com.follow.clash.service.models.VpnOptions
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -101,6 +103,7 @@ private class FakeHost(override val scope: CoroutineScope) : ServiceStateHost {
     var app: AppGateway? = null
     var duringSetup: (suspend () -> Unit)? = null
     var beforeStartService: (() -> Unit)? = null
+    var duringStartService: (suspend () -> Unit)? = null
     var lastStartOptions: VpnOptions? = null
 
     override var runtime: ServiceRuntime? = null
@@ -157,6 +160,7 @@ private class FakeHost(override val scope: CoroutineScope) : ServiceStateHost {
         startCalls++
         lastStartOptions = options
         beforeStartService?.invoke()
+        duringStartService?.invoke()
         if (!startSucceeds) {
             return false
         }
@@ -730,6 +734,34 @@ class ServiceStateMachineTest {
         machine.handleVpnRevokeAction()
 
         assertEquals(0, host.stopCalls)
+    }
+
+    @Test
+    fun `a revoke during native start invalidates it before runtime is published`() = runTest {
+        val host = FakeHost(backgroundScope)
+        val machine = ServiceStateMachine(host)
+        machine.syncSharedState(configuredState())
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        host.duringStartService = {
+            entered.complete(Unit)
+            release.await()
+        }
+
+        val start = machine.requestStart()
+        testScheduler.runCurrent()
+        entered.await()
+        assertEquals(null, host.runtime)
+        val revoked = backgroundScope.async { machine.handleVpnRevokeAction() }
+        testScheduler.runCurrent()
+        assertFalse(machine.isRunRequested)
+
+        release.complete(Unit)
+        testScheduler.runCurrent()
+        assertFalse(start.await())
+        revoked.await()
+        assertEquals(null, host.runtime)
+        assertEquals(RunState.STOPPED, machine.runState.value)
     }
 
     @Test

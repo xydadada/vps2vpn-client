@@ -29,15 +29,17 @@ class SubscriptionInfoView extends StatelessWidget {
     if (info == null || info.total == 0) {
       return const SizedBox.shrink();
     }
-    final use = info.upload + info.download;
+    final use = info.used;
     final total = info.total;
-    final progress = (use / total).clamp(0.0, 1.0).toDouble();
+    final progress = info.usage;
 
     final useShow = use.traffic.show;
     final totalShow = total.traffic.show;
-    final expireShow = info.expire != 0
-        ? DateTime.fromMillisecondsSinceEpoch(info.expire * 1000).show
-        : context.appLocalizations.infiniteTime;
+    final expireShow =
+        info.expireDate?.show ??
+        (info.expire == 0
+            ? context.appLocalizations.infiniteTime
+            : context.appLocalizations.unknown);
     final valueStyle = AppTextStyle.subheadline
         .of(context, emphasized: true)
         .copyWith(color: context.colorScheme.onSurfaceVariant);
@@ -102,12 +104,12 @@ class SubscriptionInfoDetailView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appLocalizations = context.appLocalizations;
-    final used = subscriptionInfo.upload + subscriptionInfo.download;
-    final expire = subscriptionInfo.expire != 0
-        ? DateTime.fromMillisecondsSinceEpoch(
-            subscriptionInfo.expire * 1000,
-          ).show
-        : appLocalizations.infiniteTime;
+    final used = subscriptionInfo.used;
+    final expire =
+        subscriptionInfo.expireDate?.show ??
+        (subscriptionInfo.expire == 0
+            ? appLocalizations.infiniteTime
+            : appLocalizations.unknown);
     return SelectionArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,

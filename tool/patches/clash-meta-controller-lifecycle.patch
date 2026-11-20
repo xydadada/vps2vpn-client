@@ -1,0 +1,127 @@
+diff --git a/hub/route/server.go b/hub/route/server.go
+index b1659cd085d278193a94ed860e3bfd9a8721d95e..edae0d6beff38ebf3df994da317a4fac7d6944c1 100644
+--- a/hub/route/server.go
++++ b/hub/route/server.go
+@@ -10,6 +10,7 @@
+ 	"path/filepath"
+ 	"runtime/debug"
+ 	"strings"
++	"sync"
+ 	"syscall"
+ 	"time"
+ 
+@@ -31,16 +32,28 @@
+ )
+ 
+ var (
+-	uiPath = ""
++	uiPath       = ""
++	controllerMu sync.Mutex
+ 
+-	httpServer *http.Server
+-	tlsServer  *http.Server
+-	unixServer *http.Server
+-	pipeServer *http.Server
++	httpServer *controllerServer
++	tlsServer  *controllerServer
++	unixServer *controllerServer
++	pipeServer *controllerServer
+ 
+ 	embedMode = false
+ )
+ 
++// Close the listener even if Serve has not yet registered it with Server.
++type controllerServer struct {
++	*http.Server
++	listener net.Listener
++}
++
++func (s *controllerServer) Close() error {
++	_ = s.listener.Close()
++	return s.Server.Close()
++}
++
+ func SetEmbedMode(embed bool) {
+ 	embedMode = embed
+ }
+@@ -90,11 +103,14 @@
+ }
+ 
+ func ReCreateServer(cfg *Config) {
+-	go start(cfg)
+-	go startTLS(cfg)
+-	go startUnix(cfg)
++	// Complete each listener transition before the next config can overtake it.
++	controllerMu.Lock()
++	defer controllerMu.Unlock()
++	start(cfg)
++	startTLS(cfg)
++	startUnix(cfg)
+ 	if inbound.SupportNamedPipe {
+-		go startPipe(cfg)
++		startPipe(cfg)
+ 	}
+ }
+ 
+@@ -180,8 +196,8 @@
+ 		server := &http.Server{
+ 			Handler: router(cfg.IsDebug, cfg.Secret, cfg.DohServer, cfg.Cors),
+ 		}
+-		httpServer = server
+-		_ = server.Serve(l)
++		httpServer = &controllerServer{Server: server, listener: l}
++		go func() { _ = server.Serve(l) }()
+ 	}
+ }
+ 
+@@ -239,10 +255,12 @@
+ 		server := &http.Server{
+ 			Handler: router(cfg.IsDebug, cfg.Secret, cfg.DohServer, cfg.Cors),
+ 		}
+-		tlsServer = server
+-		if err = server.Serve(tls.NewListener(l, tlsConfig)); err != nil {
+-			log.Errorln("External controller tls serve error: %s", err)
+-		}
++		tlsServer = &controllerServer{Server: server, listener: l}
++		go func() {
++			if err := server.Serve(tls.NewListener(l, tlsConfig)); err != nil {
++				log.Errorln("External controller tls serve error: %s", err)
++			}
++		}()
+ 	}
+ }
+ 
+@@ -287,10 +305,12 @@
+ 		server := &http.Server{
+ 			Handler: router(cfg.IsDebug, "", cfg.DohServer, cfg.Cors),
+ 		}
+-		unixServer = server
+-		if err = server.Serve(l); err != nil {
+-			log.Errorln("External controller unix serve error: %s", err)
+-		}
++		unixServer = &controllerServer{Server: server, listener: l}
++		go func() {
++			if err := server.Serve(l); err != nil {
++				log.Errorln("External controller unix serve error: %s", err)
++			}
++		}()
+ 	}
+ }
+ 
+@@ -318,10 +338,12 @@
+ 		server := &http.Server{
+ 			Handler: router(cfg.IsDebug, "", cfg.DohServer, cfg.Cors),
+ 		}
+-		pipeServer = server
+-		if err = server.Serve(l); err != nil {
+-			log.Errorln("External controller pipe serve error: %s", err)
+-		}
++		pipeServer = &controllerServer{Server: server, listener: l}
++		go func() {
++			if err := server.Serve(l); err != nil {
++				log.Errorln("External controller pipe serve error: %s", err)
++			}
++		}()
+ 	}
+ }
+ 

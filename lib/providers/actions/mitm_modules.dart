@@ -6,6 +6,9 @@ MitmModuleContent _parseMitmModule((String, Map<String, String>) source) =>
 @Riverpod(keepAlive: true)
 class MitmModulesAction extends _$MitmModulesAction {
   var _autoUpdating = false;
+  final _resourceDownloads = TaskPool(4);
+  final _contentOperations = <int, Object>{};
+  final _contentVersions = <int, Object>{};
 
   /// Files written before a row or a line names them, which [clean] keeps.
   final _held = <String>[];
@@ -64,35 +67,107 @@ class MitmModulesAction extends _$MitmModulesAction {
   }
 
   Future<MitmModule> updateModule(MitmModule module) async {
+    final token = _beginContentOperation(module.id);
     final updatingKeys = ref.read(updatingKeysProvider.notifier);
     final operation = updatingKeys.start(module.updatingKey);
     try {
-      final url = module.url;
-      if (url == null) {
-        return await _save(
-          module,
-          await File(await _pathOf(module)).readAsString(),
-        );
+      final current = await _current(module.id);
+      if (!_ownsContentOperation(module.id, token) || current == null) {
+        return current ?? module;
       }
-      final response = await request.getTextResponseForUrl(url);
-      return await _save(module, response.data ?? '');
+      final url = current.url;
+      final text = url == null
+          ? await File(await _pathOf(current)).readAsString()
+          : (await request.getTextResponseForUrl(url)).data ?? '';
+      return await _save(current, text, operation: token, expected: current);
+    } catch (_) {
+      if (_ownsContentOperation(module.id, token)) {
+        rethrow;
+      }
+      return _currentValue(module.id) ?? module;
     } finally {
-      updatingKeys.stop(module.updatingKey, operation);
+      _finishContentOperation(module.id, token);
+      if (ref.mounted) {
+        updatingKeys.stop(module.updatingKey, operation);
+      }
     }
   }
 
+  Object _beginContentOperation(int id) {
+    final token = Object();
+    _contentOperations[id] = token;
+    _contentVersions[id] = Object();
+    return token;
+  }
+
+  bool _ownsContentOperation(int id, Object token) =>
+      ref.mounted && identical(_contentOperations[id], token);
+
+  void _finishContentOperation(int id, Object token) {
+    if (identical(_contentOperations[id], token)) {
+      _contentOperations.remove(id);
+    }
+  }
+
+  MitmModule? _currentValue(int id) {
+    if (!ref.mounted) {
+      return null;
+    }
+    return ref
+        .read(mitmModulesProvider)
+        .value
+        ?.where((item) => item.id == id)
+        .firstOrNull;
+  }
+
+  bool _matchesContentSource(MitmModule? current, MitmModule expected) {
+    if (current == null ||
+        current.id != expected.id ||
+        current.url != expected.url) {
+      return false;
+    }
+    bool sameMap(Map<String, String> a, Map<String, String> b) =>
+        a.length == b.length &&
+        a.entries.every((entry) => b[entry.key] == entry.value);
+    return sameMap(current.arguments, expected.arguments) &&
+        sameMap(current.resources, expected.resources);
+  }
+
   void putModule(MitmModule module, {bool first = false}) {
+    _contentOperations.remove(module.id);
+    _publishModule(module, first: first);
+  }
+
+  void _publishModule(MitmModule module, {bool first = false}) {
+    _contentVersions[module.id] = Object();
     ref.read(mitmModulesProvider.notifier).put(module, first: first);
   }
 
-  Future<void> recordConsent(
+  Future<({MitmModule module, Object version})?> consentSnapshot(int id) async {
+    final current = await _current(id);
+    if (current == null || !ref.mounted) {
+      return null;
+    }
+    return (
+      module: current,
+      version: _contentVersions.putIfAbsent(id, Object.new),
+    );
+  }
+
+  Future<bool> recordConsent(
     int id, {
     required bool asksConsent,
     bool? agreed,
+    Object? contentVersion,
+    MitmModule? expected,
   }) async {
     final current = await _current(id);
-    if (!ref.mounted || current == null) {
-      return;
+    if (!ref.mounted ||
+        current == null ||
+        (contentVersion != null &&
+            !identical(_contentVersions[id], contentVersion)) ||
+        (expected != null && !_matchesContentSource(current, expected))) {
+      return false;
     }
     putModule(
       current.copyWith(
@@ -101,6 +176,7 @@ class MitmModulesAction extends _$MitmModulesAction {
         accepted: agreed ?? current.accepted,
       ),
     );
+    return true;
   }
 
   /// Turning a module off counts as declining it until it is turned on.
@@ -136,42 +212,51 @@ class MitmModulesAction extends _$MitmModulesAction {
     MitmModule module,
     Map<String, String> arguments,
   ) async {
-    final content = await _read(module, arguments);
-    final current = await _current(module.id);
-    if (!ref.mounted || current == null) {
-      return current;
-    }
-    final changed = _withContent(
-      current.copyWith(arguments: arguments),
-      content,
-    );
-    putModule(changed);
+    final token = _beginContentOperation(module.id);
     final held = <String>[];
     try {
+      final current = await _current(module.id);
+      if (!_ownsContentOperation(module.id, token) || current == null) {
+        return _currentValue(module.id);
+      }
+      final content = await _read(current, arguments);
+      if (!_ownsContentOperation(module.id, token) ||
+          !_matchesContentSource(_currentValue(module.id), current)) {
+        return _currentValue(module.id);
+      }
+      final changed = _withContent(
+        current.copyWith(arguments: arguments),
+        content,
+      );
+      _publishModule(changed);
       final missing = content.resourceUrls.difference({
         ...changed.resources.keys,
       });
-      final fetched = missing.isEmpty || !ref.mounted
+      final fetched = missing.isEmpty
           ? const <String, String>{}
           : await _download(missing, previous: const {}, held: held);
       final written = await _writeInline({
         for (final MapEntry(:key, :value) in content.inlineResources.entries)
           if (!changed.resources.containsKey(key)) key: value,
       }, held);
+      if (!_ownsContentOperation(module.id, token) ||
+          !_matchesContentSource(_currentValue(module.id), changed)) {
+        return _currentValue(module.id);
+      }
       if (fetched.isEmpty && written.isEmpty) {
         return changed;
       }
-      final latest = await _current(module.id);
-      if (!ref.mounted || latest == null) {
-        return latest;
-      }
-      final withResources = latest.copyWith(
-        resources: {...latest.resources, ...fetched, ...written},
+      final withResources = changed.copyWith(
+        resources: {...changed.resources, ...fetched, ...written},
       );
-      putModule(withResources);
+      _publishModule(withResources);
       return withResources;
     } finally {
+      _finishContentOperation(module.id, token);
       held.forEach(_held.remove);
+      if (ref.mounted) {
+        unawaited(_cleanAfterSave());
+      }
     }
   }
 
@@ -215,6 +300,8 @@ class MitmModulesAction extends _$MitmModulesAction {
   }
 
   Future<void> deleteModule(MitmModule module) async {
+    _contentOperations.remove(module.id);
+    _contentVersions.remove(module.id);
     ref.read(mitmModulesProvider.notifier).del(module.id);
     final path = await _pathOf(module);
     await _oneDeletionAtATime(() async {
@@ -238,9 +325,13 @@ class MitmModulesAction extends _$MitmModulesAction {
     return compute(_parseMitmModule, (text, arguments));
   }
 
-  Future<MitmModule?> _current(int id) async => (await ref.read(
-    mitmModulesProvider.future,
-  )).where((item) => item.id == id).firstOrNull;
+  Future<MitmModule?> _current(int id) async {
+    if (!ref.mounted) {
+      return null;
+    }
+    await ref.read(mitmModulesProvider.future);
+    return _currentValue(id);
+  }
 
   Future<MitmModule> _save(
     MitmModule module,
@@ -248,27 +339,42 @@ class MitmModulesAction extends _$MitmModulesAction {
     bool added = false,
     bool first = false,
     bool edited = false,
+    Object? operation,
+    MitmModule? expected,
   }) async {
-    final content = await compute(_parseMitmModule, (text, module.arguments));
-    if (content.isEmpty && !edited) {
-      throw MessageException(currentAppLocalizations.mitmModuleInvalid);
-    }
+    final token = operation ?? _beginContentOperation(module.id);
     final held = [module.fileName];
     _held.addAll(held);
+    Directory? staging;
     try {
+      final source = added ? module : await _current(module.id);
+      if (!_ownsContentOperation(module.id, token) ||
+          source == null ||
+          (expected != null && !_matchesContentSource(source, expected))) {
+        return source ?? module;
+      }
+      final content = await compute(_parseMitmModule, (text, source.arguments));
+      if (content.isEmpty && !edited) {
+        throw MessageException(currentAppLocalizations.mitmModuleInvalid);
+      }
       final resources = await _download(
         content.resourceUrls,
-        previous: module.resources,
+        previous: source.resources,
         held: held,
       );
       final written = await _writeInline(content.inlineResources, held);
-      await File(await _pathOf(module)).writeAsStringAtomically(text);
-      if (!ref.mounted) {
-        return module;
-      }
-      final current = added ? module : await _current(module.id);
-      if (current == null || !ref.mounted) {
-        return module;
+      final path = await _pathOf(source);
+      // Each operation owns its staging directory on the destination file
+      // system. Concurrent saves cannot share or delete another save's temp.
+      final directory = await File(path).parent.create(recursive: true);
+      staging = await directory.createTemp('.mitm-save-');
+      final staged = File(join(staging.path, 'module'));
+      await staged.writeAsString(text, flush: true);
+      final current = added ? source : _currentValue(module.id);
+      if (!_ownsContentOperation(module.id, token) ||
+          current == null ||
+          !_matchesContentSource(current, source)) {
+        return current ?? module;
       }
       final saved = _withContent(current, content).copyWith(
         name: content.name ?? current.name,
@@ -277,9 +383,25 @@ class MitmModulesAction extends _$MitmModulesAction {
         resources: {...mitmAttachments(current), ...resources, ...written},
         lastUpdateTime: DateTime.now(),
       );
-      putModule(saved, first: first);
+      // No await between the last intent/row check, atomic replacement, and
+      // optimistic publication. A delete or newer edit cannot interleave.
+      staged.renameSync(path);
+      _publishModule(saved, first: first);
       return saved;
+    } catch (_) {
+      if (_ownsContentOperation(module.id, token)) {
+        rethrow;
+      }
+      return _currentValue(module.id) ?? module;
     } finally {
+      _finishContentOperation(module.id, token);
+      if (staging != null) {
+        try {
+          await staging.delete(recursive: true);
+        } on FileSystemException {
+          // The staging directory is private to this completed operation.
+        }
+      }
       held.forEach(_held.remove);
       if (ref.mounted) {
         unawaited(_cleanAfterSave());
@@ -322,9 +444,12 @@ class MitmModulesAction extends _$MitmModulesAction {
     final directory = await appPath.mitmResourcesDirPath;
     final names = await Future.wait([
       for (final url in urls)
-        () async {
+        _resourceDownloads.run(() async {
           try {
-            final bytes = (await request.getFileResponseForUrl(url)).data;
+            final bytes = (await request.getFileResponseForUrl(
+              url,
+              maxBytes: maxMitmResourceSize,
+            )).data;
             if (bytes == null || bytes.length > maxMitmResourceSize) {
               throw const FileSystemException('too large');
             }
@@ -337,14 +462,14 @@ class MitmModulesAction extends _$MitmModulesAction {
               logLevel: LogLevel.warning,
             );
             final name = previous[url];
-            if (name == null) {
+            if (name == null || !isMitmResourceName(name)) {
               return null;
             }
             held.add(name);
             _held.add(name);
             return await File(join(directory, name)).exists() ? name : null;
           }
-        }(),
+        }),
     ]);
     return {for (final (index, url) in urls.indexed) url: ?names[index]};
   }
@@ -390,7 +515,7 @@ class MitmModulesAction extends _$MitmModulesAction {
         if (entity is! File || !ref.mounted) {
           continue;
         }
-        // writeAsStringAtomically writes a held file through `<name>.<pid>.tmp`.
+        // Keep legacy atomic-write temps for a held module as well.
         final name = basename(
           entity.path,
         ).replaceFirst(RegExp(r'\.\d+\.tmp$'), '');
@@ -429,7 +554,9 @@ class MitmModulesAction extends _$MitmModulesAction {
             !await File(await _pathOf(module)).exists() ||
             !(await Future.wait([
               for (final name in module.resources.values)
-                File(join(resourcesDir, name)).exists(),
+                isMitmResourceName(name)
+                    ? File(join(resourcesDir, name)).exists()
+                    : Future.value(false),
             ])).every((exists) => exists);
         final due =
             setting.geoAutoUpdate &&

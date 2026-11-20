@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/metacubex/mihomo/constant"
@@ -240,5 +242,64 @@ func TestHandleCompileRuleSetReportsAFailedRequest(t *testing.T) {
 	}
 	if details, _ := methodErr.Details.(map[string]any); details["statusCode"] != http.StatusNotFound {
 		t.Fatalf("details = %v, want the status code", methodErr.Details)
+	}
+}
+
+func TestHandleCompileRuleSetRejectsOverlappingUpdates(t *testing.T) {
+	withRuleSetHome(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		_, _ = w.Write([]byte("example.com\n"))
+	}))
+	defer server.Close()
+	completed := make(chan error, 1)
+	defer func() {
+		close(release)
+		if err := <-completed; err != nil {
+			t.Errorf("first update: %v", err)
+		}
+	}()
+	params := CompileRuleSetParams{Name: "remote", URL: server.URL}
+	go func() {
+		_, err := handleCompileRuleSet(params)
+		completed <- err
+	}()
+	<-started
+	_, err := handleCompileRuleSet(params)
+	var methodErr *MethodError
+	if !errors.As(err, &methodErr) || methodErr.Code != "rule_set_updating" {
+		t.Fatalf("overlapping update = %v, want rule_set_updating", err)
+	}
+	if requests.Load() != 1 {
+		t.Fatal("overlapping update reached the server")
+	}
+}
+
+func TestWriteRuleSetFileConcurrentWritersKeepWholeFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rules")
+	var writers sync.WaitGroup
+	for i := range 16 {
+		writers.Add(1)
+		go func() {
+			defer writers.Done()
+			if err := writeRuleSetFile(path, []byte(strings.Repeat(string(rune('a'+i)), 128*1024))); err != nil {
+				t.Errorf("write: %v", err)
+			}
+		}()
+	}
+	writers.Wait()
+	buf, err := os.ReadFile(path)
+	if err != nil || len(buf) != 128*1024 || strings.Trim(string(buf), string(buf[:1])) != "" {
+		t.Fatalf("final file is incomplete: length=%d, err=%v", len(buf), err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "rules" {
+		t.Fatalf("temporary files remain: %v, %v", entries, err)
 	}
 }

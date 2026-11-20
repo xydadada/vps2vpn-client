@@ -40,6 +40,28 @@ func canReclaim(homeDir string, uid int) bool {
 	return ok && int(stat.Uid) == uid
 }
 
+func openReclaimRoot(homeDir string, uid int) (*os.Root, error) {
+	if !canReclaim(homeDir, uid) {
+		return nil, fs.ErrPermission
+	}
+	root, err := os.OpenRoot(homeDir)
+	if err != nil {
+		return nil, err
+	}
+	info, err := root.Stat(".")
+	if err == nil {
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || int(stat.Uid) != uid {
+			err = fs.ErrPermission
+		}
+	}
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	return root, nil
+}
+
 func shouldReclaimEntry(info fs.FileInfo, uid int) bool {
 	if info.Mode()&fs.ModeSymlink != 0 {
 		return false
@@ -60,12 +82,9 @@ type reclaimTarget struct {
 	ino  uint64
 }
 
-func collectReclaimTargets(homeDir string, uid int) []reclaimTarget {
-	if !canReclaim(homeDir, uid) {
-		return nil
-	}
+func collectReclaimTargets(root *os.Root, uid int) []reclaimTarget {
 	var targets []reclaimTarget
-	_ = filepath.WalkDir(homeDir, func(path string, d fs.DirEntry, err error) error {
+	_ = fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -103,8 +122,8 @@ func isReclaimableStat(stat *syscall.Stat_t, uid int) bool {
 	return int(stat.Uid) != uid
 }
 
-func reclaimEntry(target reclaimTarget, uid int, gid int) (bool, error) {
-	fd, err := syscall.Open(
+func reclaimEntry(root *os.Root, target reclaimTarget, uid int, gid int) (bool, error) {
+	file, err := root.OpenFile(
 		target.path,
 		syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC,
 		0,
@@ -112,9 +131,9 @@ func reclaimEntry(target reclaimTarget, uid int, gid int) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer syscall.Close(fd)
+	defer file.Close()
 	var stat syscall.Stat_t
-	if err := syscall.Fstat(fd, &stat); err != nil {
+	if err := syscall.Fstat(int(file.Fd()), &stat); err != nil {
 		return false, err
 	}
 	if uint64(stat.Dev) != target.dev || uint64(stat.Ino) != target.ino {
@@ -123,7 +142,7 @@ func reclaimEntry(target reclaimTarget, uid int, gid int) (bool, error) {
 	if !isReclaimableStat(&stat, uid) {
 		return false, nil
 	}
-	if err := syscall.Fchown(fd, uid, gid); err != nil {
+	if err := file.Chown(uid, gid); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -133,13 +152,18 @@ func reclaimOwnership(homeDir string) {
 	if !isElevated() {
 		return
 	}
-	targets := collectReclaimTargets(homeDir, realUid)
+	root, err := openReclaimRoot(homeDir, realUid)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	targets := collectReclaimTargets(root, realUid)
 	if len(targets) == 0 {
 		return
 	}
 	reclaimed := 0
 	for _, target := range targets {
-		ok, err := reclaimEntry(target, realUid, realGid)
+		ok, err := reclaimEntry(root, target, realUid, realGid)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
 				log.Warnln("[APP] reclaim %s: %v", target.path, err)
@@ -155,16 +179,25 @@ func reclaimOwnership(homeDir string) {
 
 func reclaimDirOwnership(path string) {
 	homeDir, _ := reclaimHomeDir.Load().(string)
-	if !isElevated() || !canReclaim(homeDir, realUid) {
+	if !isElevated() {
 		return
 	}
-	info, err := os.Lstat(path)
+	root, err := openReclaimRoot(homeDir, realUid)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	relative, err := filepath.Rel(homeDir, path)
+	if err != nil {
+		return
+	}
+	info, err := root.Lstat(relative)
 	if err != nil || !info.IsDir() || !shouldReclaimEntry(info, realUid) {
 		return
 	}
 	stat := info.Sys().(*syscall.Stat_t)
-	target := reclaimTarget{path: path, dev: uint64(stat.Dev), ino: uint64(stat.Ino)}
-	if _, err := reclaimEntry(target, realUid, realGid); err != nil {
+	target := reclaimTarget{path: relative, dev: uint64(stat.Dev), ino: uint64(stat.Ino)}
+	if _, err := reclaimEntry(root, target, realUid, realGid); err != nil {
 		log.Warnln("[APP] reclaim %s: %v", path, err)
 	}
 }
@@ -190,4 +223,11 @@ func scheduleReclaimOwnership() {
 		reclaimPending.Store(false)
 		reclaimOwnership(homeDir)
 	}()
+}
+
+func ownCreatedFile(file *os.File) error {
+	if isElevated() {
+		return file.Chown(realUid, realGid)
+	}
+	return nil
 }

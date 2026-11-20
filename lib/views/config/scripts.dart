@@ -161,10 +161,18 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
       title: context.appLocalizations.url,
       value: script.url ?? '',
     );
-    if (url == null || url == script.url) {
+    if (url == null || url == script.url || !mounted) {
       return;
     }
-    await _handleUpdate(script.copyWith(url: url));
+    final current = _scripts.get(script.id);
+    if (current == null) {
+      return;
+    }
+    final edited = current.copyWith(url: url);
+    // Commit the user's edit first; a failed download can be retried, and
+    // an older response must never restore the previous URL or content.
+    _scriptsAction.putScript(edited);
+    await _handleUpdate(edited);
   }
 
   Future<void> _handleUpdate(Script script) async {

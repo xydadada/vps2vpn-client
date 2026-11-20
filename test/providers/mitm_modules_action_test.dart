@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -26,6 +27,7 @@ void main() {
   late Directory home;
   late db.Database testDatabase;
   late ProviderContainer container;
+  Future<void> Function(HttpRequest)? serve;
 
   setUpAll(() async {
     loadAppLocalizations(const Locale('en'));
@@ -37,6 +39,10 @@ void main() {
     );
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
+      if (serve case final handler?) {
+        await handler(request);
+        return;
+      }
       final response = request.response;
       final body = bodies[request.uri.path];
       if (body == null) {
@@ -51,6 +57,7 @@ void main() {
   tearDownAll(() => server.close(force: true));
 
   setUp(() async {
+    serve = null;
     final bindingOverrides = HttpOverrides.current;
     HttpOverrides.global = null;
     addTearDown(() => HttpOverrides.global = bindingOverrides);
@@ -231,6 +238,44 @@ Extra = type=http-response,pattern=^https://b,script-path=${urlOf('/extra.js')},
       expect((await stored()).single.enabled, isTrue);
     },
   );
+
+  test('module resource downloads share four slots', () async {
+    final firstBatch = Completer<void>();
+    final release = Completer<void>();
+    addTearDown(() {
+      if (!release.isCompleted) release.complete();
+    });
+    var active = 0;
+    var peak = 0;
+    serve = (incoming) async {
+      active++;
+      if (active > peak) peak = active;
+      if (active == 4 && !firstBatch.isCompleted) firstBatch.complete();
+      try {
+        await release.future;
+        incoming.response.write('{}');
+        await incoming.response.close();
+      } finally {
+        active--;
+      }
+    };
+    final text = [
+      '[Map Local]',
+      for (var i = 0; i < 7; i++)
+        '^https://example.com/$i data="${urlOf('/resource-$i.json')}"',
+    ].join('\n');
+    final pending = action().addFromFile(text, 'bounded.sgmodule');
+
+    await firstBatch.future.timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(active, 4);
+    release.complete();
+    final added = await pending;
+
+    expect(added.resources, hasLength(7));
+    expect(peak, 4);
+    await action().clean();
+  });
 
   test('a module that changes network settings is added off', () async {
     bodies = {'/dns.sgmodule': '[General]\ndns-server = 223.5.5.5\n'};
@@ -663,6 +708,178 @@ Ads = type=http-response,pattern=$pattern,script-path=${urlOf('/ads.js')}
         expect(await file.exists(), isTrue);
       });
     }
+  });
+
+  group('consent belongs to the displayed content', () {
+    test('an edit during the prompt invalidates its answer', () async {
+      final original = await action().create(
+        '[Script]\nA = type=cron,cronexp="0 * * * *",script-path=a.js\n',
+      );
+      final snapshot = (await action().consentSnapshot(original.id))!;
+      await action().edit(original, '[General]\ndns-server = 203.0.113.53\n');
+
+      final applied = await action().recordConsent(
+        original.id,
+        asksConsent: snapshot.module.asksConsent,
+        agreed: true,
+        contentVersion: snapshot.version,
+        expected: snapshot.module,
+      );
+
+      expect(applied, isFalse);
+      final current = (await stored()).single;
+      expect(current.enabled, isFalse);
+      expect(current.accepted, isNull);
+      expect(current.asksConsent, isTrue);
+    });
+
+    test(
+      'ordinary database read-back preserves an unchanged consent snapshot',
+      () async {
+        final original = await action().create(
+          '[Script]\nA = type=cron,cronexp="0 * * * *",script-path=a.js\n',
+        );
+        final snapshot = (await action().consentSnapshot(original.id))!;
+        await stored();
+
+        final applied = await action().recordConsent(
+          original.id,
+          asksConsent: snapshot.module.asksConsent,
+          agreed: true,
+          contentVersion: snapshot.version,
+          expected: snapshot.module,
+        );
+
+        expect(applied, isTrue);
+        expect((await stored()).single.accepted, isTrue);
+      },
+    );
+  });
+
+  group('overlapping module publications', () {
+    Future<File> contentFile(MitmModule item) async =>
+        File(join(await appPath.mitmModulesDirPath, item.fileName));
+
+    test('a stale caller downloads the current URL', () async {
+      bodies = {
+        '/old.sgmodule': '#!name=Old\n[URL Rewrite]\n^https://a - reject\n',
+        '/new.sgmodule': '#!name=New\n[URL Rewrite]\n^https://b - reject\n',
+      };
+      final old = await action().addFromUrl(urlOf('/old.sgmodule'));
+      action().putModule(old.copyWith(url: urlOf('/new.sgmodule')));
+
+      await action().updateModule(old);
+
+      final current = (await stored()).single;
+      expect(current.name, 'New');
+      expect(current.url, urlOf('/new.sgmodule'));
+      expect(
+        await (await contentFile(current)).readAsString(),
+        bodies['/new.sgmodule'],
+      );
+    });
+
+    test('an older edit cannot replace a newer file and resources', () async {
+      final old = await action().create('#!name=Original\n');
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      serve = (incoming) async {
+        entered.complete();
+        await release.future;
+        incoming.response.write('{}');
+        await incoming.response.close();
+      };
+      final pending = action().edit(
+        old,
+        '#!name=Old\n[Map Local]\n^https://a data="${urlOf('/slow.json')}"\n',
+      );
+      await entered.future.timeout(const Duration(seconds: 5));
+      const latest = '#!name=Latest\n[URL Rewrite]\n^https://b - reject\n';
+
+      await action().edit(old, latest);
+      release.complete();
+      await pending;
+      await action().clean();
+
+      final current = (await stored()).single;
+      expect(current.name, 'Latest');
+      expect(current.resources, isEmpty);
+      expect(await (await contentFile(current)).readAsString(), latest);
+      expect(await files(appPath.mitmModulesDirPath), [current.fileName]);
+      expect(await files(appPath.mitmResourcesDirPath), isEmpty);
+    });
+
+    test(
+      'a response arriving after deletion cannot recreate content',
+      () async {
+        bodies = {
+          '/module.sgmodule':
+              '#!name=Original\n[URL Rewrite]\n^https://a - reject\n',
+        };
+        final old = await action().addFromUrl(urlOf('/module.sgmodule'));
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        addTearDown(() {
+          if (!release.isCompleted) release.complete();
+        });
+        serve = (incoming) async {
+          entered.complete();
+          await release.future;
+          incoming.response.write(
+            '#!name=Late\n[URL Rewrite]\n^https://b - reject\n',
+          );
+          await incoming.response.close();
+        };
+        final pending = action().updateModule(old);
+        await entered.future.timeout(const Duration(seconds: 5));
+
+        await action().deleteModule(old);
+        release.complete();
+        await pending;
+        await action().clean();
+
+        expect(await stored(), isEmpty);
+        expect(await files(appPath.mitmModulesDirPath), isEmpty);
+      },
+    );
+
+    test(
+      'old argument resources cannot publish after a newer argument change',
+      () async {
+        final old = await action().create(
+          '[Argument]\nExtra = switch,false\n'
+          '[URL Rewrite]\n^https://a - reject\n'
+          '[Script]\nExtra = type=http-response,pattern=^https://b,'
+          'script-path=${urlOf('/extra.js')},enable={Extra}\n',
+        );
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        addTearDown(() {
+          if (!release.isCompleted) release.complete();
+        });
+        serve = (incoming) async {
+          entered.complete();
+          await release.future;
+          incoming.response.write(r'$done({})');
+          await incoming.response.close();
+        };
+        final pending = action().setArguments(old, const {'Extra': 'true'});
+        await entered.future.timeout(const Duration(seconds: 5));
+
+        await action().setArguments(old, const {'Extra': 'false'});
+        release.complete();
+        await pending;
+        await action().clean();
+
+        final current = (await stored()).single;
+        expect(current.arguments, {'Extra': 'false'});
+        expect(current.resources, isEmpty);
+        expect(await files(appPath.mitmResourcesDirPath), isEmpty);
+      },
+    );
   });
 
   test('deleting a module removes its content', () async {

@@ -16,7 +16,7 @@ void main() {
       expect(info.expire, 200);
     });
 
-    test('falls back to zero for null and invalid values', () {
+    test('keeps invalid expiry distinct from absent expiry', () {
       expect(SubscriptionInfo.formHString(null), const SubscriptionInfo());
 
       final info = SubscriptionInfo.formHString(
@@ -26,7 +26,10 @@ void main() {
       expect(info.upload, 0);
       expect(info.download, 20);
       expect(info.total, 0);
-      expect(info.expire, 0);
+      expect(info.expire, -1);
+      expect(info.expireDate, isNull);
+      expect(SubscriptionInfo.formHString('expire=0.5').expire, -1);
+      expect(SubscriptionInfo.formHString('expire=0').expire, 0);
     });
 
     test('skips empty and malformed fields instead of throwing', () {
@@ -47,7 +50,41 @@ void main() {
       expect(info.upload, 1);
       expect(info.download, 2400);
       expect(info.total, 10737418240);
-      expect(info.expire, 0);
+      expect(info.expire, -1);
+    });
+
+    test('invalid persisted expiry does not throw or become an epoch date', () {
+      for (final expire in [-1, 8640000000001, maxCounterValue]) {
+        final info = SubscriptionInfo.fromJson({'expire': expire});
+        expect(info.expire, -1);
+        expect(info.expireDate, isNull);
+      }
+      expect(const SubscriptionInfo(expire: 0).expireDate, isNull);
+      expect(
+        const SubscriptionInfo(
+          expire: 1893456000,
+        ).expireDate!.millisecondsSinceEpoch,
+        1893456000000,
+      );
+    });
+
+    test('negative and oversized header counters cannot wrap usage', () {
+      final info = SubscriptionInfo.formHString(
+        'upload=1e300; download=9223372036854775807; '
+        'total=100; expire=8640000000001',
+      );
+      expect(info.used, maxCounterValue);
+      expect(info.usage, 1.0);
+      expect(info.remaining, 0);
+      expect(info.expireDate, isNull);
+      final negative = SubscriptionInfo.formHString(
+        'upload=-10; download=20; total=100; expire=-1',
+      );
+      expect(negative.upload, 0);
+      expect(negative.used, 20);
+      expect(negative.remaining, 80);
+      expect(negative.usage, 0.2);
+      expect(negative.expire, -1);
     });
   });
 

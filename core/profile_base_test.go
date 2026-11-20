@@ -412,3 +412,184 @@ func TestEncodeConfigMappingKeepsEveryKeyAfterAnOpenEndedScalar(t *testing.T) {
 		t.Errorf("decoded %d rules, want all %d in order", len(decoded.Rules), len(rules))
 	}
 }
+
+func TestMergeProfileBaseRejectsCyclicAliases(t *testing.T) {
+	for name, profile := range map[string]string{
+		"root merge":      "&loop {<<: *loop}\n",
+		"nested sequence": "proxies: &loop [*loop]\n",
+		"nested map":      "x-defaults: &loop {child: *loop}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := mergeProfileBase(&SetupBase{Path: writeBaseProfile(t, profile), Overlay: "{}"})
+			if err == nil || !strings.Contains(err.Error(), "cyclic YAML alias") {
+				t.Fatalf("merge error = %v, want cyclic YAML alias", err)
+			}
+		})
+	}
+	_, err := mergeProfileBase(&SetupBase{Path: writeBaseProfile(t, "rules: []\n"), Overlay: "&loop {<<: *loop}"})
+	if err == nil || !strings.Contains(err.Error(), "cyclic YAML alias") {
+		t.Fatalf("overlay error = %v, want cyclic YAML alias", err)
+	}
+}
+
+func TestValidateAliasGraphAllowsSharedAnchors(t *testing.T) {
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte("x: &base {value: 1}\na: *base\nb: *base\n"), &document); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateAliasGraph(&document); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMappingValueHandlesRepeatedMergeSources(t *testing.T) {
+	value := &yaml.Node{Kind: yaml.ScalarNode, Value: "value"}
+	mapping := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "present"}, value,
+	}}
+	for range 24 {
+		alias := &yaml.Node{Kind: yaml.AliasNode, Alias: mapping}
+		mapping = &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!merge", Value: "<<"},
+			{Kind: yaml.SequenceNode, Content: []*yaml.Node{alias, alias}},
+		}}
+	}
+	if got := mappingValue(mapping, "absent"); got != nil {
+		t.Fatalf("absent value = %v", got)
+	}
+	if got := mappingValue(mapping, "present"); got != value {
+		t.Fatalf("present value = %v, want %v", got, value)
+	}
+}
+
+func TestLoadConfigWithBasePersistsSmartLinesForIndependentReload(t *testing.T) {
+	vpsOn(t)
+	base := &SetupBase{
+		Path:    writeBaseProfile(t, baseProfile),
+		Overlay: "rules: ['DOMAIN,user.test,DIRECT']\n",
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	applied, err := loadConfigWithBase(base, path)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	raw, err := readRawConfig(path)
+	if err != nil {
+		t.Fatalf("read persisted config: %v", err)
+	}
+	if !vpsHasGroup(raw, vpsSmartGroup) || !vpsHasGroup(raw, vpsAIGroup) {
+		t.Fatal("persisted config lost the generated groups")
+	}
+	if raw.Proxy[1]["client-fingerprint"] != "chrome" {
+		t.Fatal("persisted config lost the REALITY fingerprint")
+	}
+	if raw.Rule[0] != "DOMAIN,user.test,DIRECT" || raw.Rule[1] != "DOMAIN-SUFFIX,anthropic.com,"+vpsAIGroup {
+		t.Fatalf("persisted rule order = %v", raw.Rule)
+	}
+	reloaded, err := loadConfig(path)
+	if err != nil || !reflect.DeepEqual(ruleStrings(applied), ruleStrings(reloaded)) {
+		t.Fatalf("independent reload changed effective rules: %v", err)
+	}
+	if _, ok := reloaded.Proxies[vpsAIGroup]; !ok {
+		t.Fatal("independent reload lost the AI group")
+	}
+
+	vpsSmartEnabled.Store(false)
+	if _, err := loadConfigWithBase(base, path); err != nil {
+		t.Fatalf("apply with smart lines disabled: %v", err)
+	}
+	raw, err = readRawConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vpsHasGroup(raw, vpsSmartGroup) || vpsHasGroup(raw, vpsAIGroup) {
+		t.Fatal("disabled smart lines remained in the persisted config")
+	}
+}
+
+func TestMergeProfileBaseRejectsExcessiveAliasExpansion(t *testing.T) {
+	var profile strings.Builder
+	profile.WriteString("x0: &v0 [value]\n")
+	for i := 1; i <= 24; i++ {
+		fmt.Fprintf(&profile, "x%d: &v%d [*v%d, *v%d]\n", i, i, i-1, i-1)
+	}
+	profile.WriteString("proxies: *v24\n")
+	_, err := mergeProfileBase(&SetupBase{Path: writeBaseProfile(t, profile.String()), Overlay: "{}"})
+	if err == nil || !strings.Contains(err.Error(), "excessive YAML alias expansion") {
+		t.Fatalf("merge error = %v, want bounded alias expansion", err)
+	}
+}
+
+func TestHandleGetProfileOutboundsReturnsOnlyExplicitCertificatePins(t *testing.T) {
+	pin := strings.Repeat("ab", sha256.Size)
+	colonPin := strings.TrimSuffix(strings.Repeat("AB:", sha256.Size), ":")
+	content := fmt.Sprintf(`proxies:
+  - {name: a, type: hysteria2, server: PANEL.EXAMPLE, port: 443, fingerprint: "%s"}
+  - {name: b, type: tuic, server: panel.example, port: 444, fingerprint: "%s"}
+  - {name: c, type: hysteria2, server: other.example, port: 443, fingerprint: "%s"}
+  - {name: d, type: hysteria2, server: panel.example, port: 443, fingerprint: invalid}
+  - {name: e, type: vless, server: panel.example, port: 443, fingerprint: "%s"}
+  - {name: f, type: tuic, server: panel.example, port: 443, skip-cert-verify: true}
+`, pin, colonPin, strings.Repeat("cd", sha256.Size), strings.Repeat("ef", sha256.Size))
+	outbounds, err := handleGetProfileOutbounds(PathParams{Path: writeBaseProfile(t, content)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"panel.example": {pin},
+		"other.example": {strings.Repeat("cd", sha256.Size)},
+	}
+	if !reflect.DeepEqual(outbounds.TLSFingerprints, want) {
+		t.Fatalf("pins = %v, want %v", outbounds.TLSFingerprints, want)
+	}
+}
+
+func TestRejectedProfileDoesNotReplaceTheLastConfig(t *testing.T) {
+	path := writeBaseProfile(t, "rules:\n  - MATCH,missing-proxy\n")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	previous := []byte("rules:\n  - MATCH,DIRECT\n")
+	if err := os.WriteFile(configPath, previous, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfigWithBase(&SetupBase{Path: path, Overlay: "{}"}, configPath); err == nil {
+		t.Fatal("invalid outbound accepted")
+	}
+	actual, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(actual, previous) {
+		t.Fatalf("rejected profile replaced the previous config: %s", actual)
+	}
+}
+
+func TestWriteDocumentPreservesRepeatedLargeAlias(t *testing.T) {
+	var text strings.Builder
+	text.WriteString("x-shared: &shared\n")
+	for i := 0; i < encodeSliceLength+1; i++ {
+		fmt.Fprintf(&text, "  - DOMAIN,example-%d.test,DIRECT\n", i)
+	}
+	text.WriteString("rules: *shared\n")
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(text.String()), &document); err != nil {
+		t.Fatal(err)
+	}
+	path, err := writeDocumentFile(t.TempDir(), "*.yaml", &document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Shared []string `yaml:"x-shared"`
+		Rules  []string `yaml:"rules"`
+	}
+	if err := yaml.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Shared) != encodeSliceLength+1 || !reflect.DeepEqual(result.Shared, result.Rules) {
+		t.Fatalf("shared sequences changed: %d shared values, %d rules", len(result.Shared), len(result.Rules))
+	}
+}

@@ -91,6 +91,18 @@ void main() {
     expect(ranked.single.downloadSpeed, 1000);
   });
 
+  test('a backward clock adjustment starts a fresh sampling interval', () {
+    final ranker = _Ranker();
+    ranker.rank([_tracker('a')], t0);
+    ranker.rank([_tracker('a', download: 1000)], at(1));
+
+    final reset = ranker.rank([_tracker('a', download: 2000)], at(-60));
+    expect(reset.single.downloadSpeed, 0);
+
+    final next = ranker.rank([_tracker('a', download: 3000)], at(-59));
+    expect(next.single.downloadSpeed, 1000);
+  });
+
   test('ranks in another isolate from what the last poll kept', () async {
     final first = rankTrackerInfos(
       [_tracker('a'), _tracker('b')],

@@ -1,4 +1,5 @@
 use std::ffi::{c_char, c_int, c_void, CStr};
+use std::sync::OnceLock;
 
 #[repr(C)]
 struct FcFontSet {
@@ -58,12 +59,22 @@ unsafe fn symbol<F: Copy>(library: *mut c_void, name: &CStr) -> Result<F, String
 }
 
 pub fn families() -> Result<Vec<String>, String> {
-    let fc = Fontconfig::load()?;
+    // Pin one module reference for the symbol table's lifetime; reopening the
+    // picker must not increment the loader's reference count on every query.
+    static FONTCONFIG: OnceLock<Result<Fontconfig, String>> = OnceLock::new();
+    let fc = FONTCONFIG.get_or_init(Fontconfig::load).as_ref().map_err(Clone::clone)?;
     let family = c"family".as_ptr();
     // SAFETY: pattern strings are copied before the set is destroyed.
     unsafe {
         let pattern = (fc.pattern_create)();
+        if pattern.is_null() {
+            return Err("fontconfig could not allocate a pattern".to_owned());
+        }
         let objects = (fc.object_set_create)();
+        if objects.is_null() {
+            (fc.pattern_destroy)(pattern);
+            return Err("fontconfig could not allocate an object set".to_owned());
+        }
         (fc.pattern_add_bool)(pattern, c"scalable".as_ptr(), 1);
         (fc.object_set_add)(objects, family);
         let set = (fc.font_list)(std::ptr::null_mut(), pattern, objects);

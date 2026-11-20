@@ -798,18 +798,38 @@ extension ScriptExt on Script {
 
   Future<String?> get content async => readTextFileTask(await path);
 
-  Future<Script> save(String content) async {
-    final file = File(await path);
-    if (!await file.exists()) {
-      await file.create(recursive: true);
+  Future<Script> save(String content, {bool Function()? shouldCommit}) async {
+    if (shouldCommit?.call() == false) {
+      return this;
     }
-    await file.writeAsString(content);
-    return copyWith(lastUpdateTime: DateTime.now());
+    final target = File(await path);
+    await target.parent.create(recursive: true);
+    final staging = await target.parent.createTemp('.script-update-');
+    try {
+      final stagedFile = File.fromUri(staging.uri.resolve(fileName));
+      await stagedFile.writeAsString(content, flush: true);
+      if (shouldCommit?.call() == false) {
+        return this;
+      }
+      // Keep the final check and publication in the same isolate turn.
+      // Until this point, an interrupted write leaves the previous file intact.
+      stagedFile.renameSync(target.path);
+      return copyWith(lastUpdateTime: DateTime.now());
+    } finally {
+      try {
+        staging.deleteSync(recursive: true);
+      } on FileSystemException {
+        // A concurrent data-directory cleanup may have already removed it.
+      }
+    }
   }
 
-  Future<Script> update() async {
+  Future<Script> update({bool Function()? shouldCommit}) async {
+    if (shouldCommit?.call() == false) {
+      return this;
+    }
     final response = await request.getTextResponseForUrl(url!);
-    return save(response.data ?? '');
+    return save(response.data ?? '', shouldCommit: shouldCommit);
   }
 }
 
