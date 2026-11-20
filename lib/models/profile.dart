@@ -56,7 +56,7 @@ int trafficCounterOrZero(Object? value) => nonNegativeInt(value) ?? 0;
 int subscriptionExpiryOrUnknown(Object? value) {
   if (value == null || value == 0 || value == '0') return 0;
   final seconds = unixSecondsOrZero(value);
-  return seconds == 0 ? -1 : seconds;
+  return seconds;
 }
 
 extension SubscriptionInfoExt on SubscriptionInfo {
