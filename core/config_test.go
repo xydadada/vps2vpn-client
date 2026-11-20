@@ -821,6 +821,29 @@ func TestApplyConfigTellsARejectedProfileFromAFailedCall(t *testing.T) {
 	}
 }
 
+func TestApplyConfigKeepsTheWorkingProxyGraphOnRejectedUpdate(t *testing.T) {
+	home := t.TempDir()
+	previousHome := constant.Path.HomeDir()
+	constant.SetHomeDir(home)
+	t.Cleanup(func() { constant.SetHomeDir(previousHome) })
+	working := &config.Config{General: &config.General{}, Controller: &config.Controller{}}
+	withCurrentConfig(t, working)
+	keepTunnel(t)
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("proxies: [unterminated\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := applyConfig(&SetupParams{})
+
+	var rejected *MethodError
+	if !errors.As(err, &rejected) || rejected.Code != "config_rejected" {
+		t.Fatalf("applyConfig = %v, want config_rejected", err)
+	}
+	if currentConfig != working {
+		t.Fatal("a rejected update replaced the previous working configuration")
+	}
+}
+
 func TestHandleSetupConfigLeavesTheListenerAloneOnSuccess(t *testing.T) {
 	withSetupConfig(t, func(*SetupParams) error { return nil })
 

@@ -151,15 +151,16 @@ func applyConfig(params *SetupParams) error {
 	applyOptions(params.Options)
 	cfg, err := loadSetupConfig(params)
 	if err != nil {
-		// The fallback is what keeps the listeners serving while the host
-		// reports the error, but it applies a config with no proxies in it.
-		// From the UI that is indistinguishable from a subscription that went
-		// dead: the profile still lists every node, every delay test answers
-		// Timeout, and nothing routes. Name the real cause in the log.
-		logError(
-			"config apply failed, falling back to the built-in default - no proxies will be available: %v",
-			err,
-		)
+		if currentConfig != nil {
+			// A rejected profile is not a request to replace the last working
+			// route graph. Otherwise every proxy silently disappears while the
+			// UI still displays nodes from the selected subscription.
+			logError("config apply rejected; keeping the last working config: %v", err)
+			return &MethodError{Code: "config_rejected", Message: err.Error()}
+		}
+		// There is no working configuration to keep on first startup; let
+		// the listeners come up on the built-in default and report the failure.
+		logError("first config apply rejected; using the built-in default with no proxies: %v", err)
 		fallback, fallbackErr := config.ParseRawConfig(config.DefaultRawConfig())
 		if fallbackErr != nil {
 			return err
