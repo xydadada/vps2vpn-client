@@ -128,7 +128,7 @@ func probeOutboundIpSource(ctx context.Context, url string, proxyName string, ti
 		maxBody:   outboundIpMaxBody,
 		recorder:  hits,
 	})
-	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !sourceAnswerHasIP(result.Body) {
+	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !sourceAnswerHasIP(url, result.Body) {
 		return nil
 	}
 	return &OutboundIpResult{
@@ -160,11 +160,23 @@ func nodeHits(chains []string, proxyName string, hits []RouteHit) []RouteHit {
 // RFC 6598 space for carrier-grade NAT, which IsPrivate leaves out.
 var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
 
-// Accept an IP only from the field that the upstream actually declares.
+// Only accept the source's declared IP field. Cloudflare's trace endpoint
+// speaks key=value; all other built-in egress-IP sources speak JSON.
 // A 200 HTML error page or a JSON diagnostic containing an incidental public
 // address must not end the hedge before a healthy source can answer.
-func sourceAnswerHasIP(body string) bool {
+const outboundTraceURL = "https://www.cloudflare.com/cdn-cgi/trace"
+
+func sourceAnswerHasIP(url string, body string) bool {
 	text := strings.TrimSpace(body)
+	if url == outboundTraceURL {
+		for _, line := range strings.Split(text, "\n") {
+			key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+			if ok && key == "ip" {
+				return sourceAddressIsPublic(value)
+			}
+		}
+		return false
+	}
 	if strings.HasPrefix(text, "{") {
 		var record struct {
 			IP      string          `json:"ip"`
@@ -182,12 +194,6 @@ func sourceAnswerHasIP(body string) bool {
 			return false
 		}
 		return sourceAddressIsPublic(record.IP)
-	}
-	for _, line := range strings.Split(text, "\n") {
-		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if ok && key == "ip" {
-			return sourceAddressIsPublic(value)
-		}
 	}
 	return false
 }
