@@ -82,16 +82,16 @@ func TestSourceAnswerMustDeclareTheIPAndNotContainAnError(t *testing.T) {
 }
 
 func TestSourceAnswerAcceptsTraceTextOnlyFromCloudflare(t *testing.T) {
-    trace := "fl=1\nip=8.8.8.8\nloc=US\n"
-    if !sourceAnswerHasIP(outboundTraceURL, trace) {
-        t.Fatal("valid Cloudflare trace was rejected")
-    }
-    if sourceAnswerHasIP("https://api.ip.sb/geoip", trace) {
-        t.Fatal("non-Cloudflare text falsely satisfied the JSON source")
-    }
-    if sourceAnswerHasIP(outboundTraceURL, `{"ip":"8.8.8.8"}`) {
-        t.Fatal("unexpected JSON must not satisfy the Cloudflare trace format")
-    }
+	trace := "fl=1\nip=8.8.8.8\nloc=US\n"
+	if !sourceAnswerHasIP(outboundTraceURL, trace) {
+	    t.Fatal("valid Cloudflare trace was rejected")
+	}
+	if sourceAnswerHasIP("https://api.ip.sb/geoip", trace) {
+	    t.Fatal("non-Cloudflare text falsely satisfied the JSON source")
+	}
+	if sourceAnswerHasIP(outboundTraceURL, `{"ip":"8.8.8.8"}`) {
+	    t.Fatal("unexpected JSON must not satisfy the Cloudflare trace format")
+	}
 }
 
 func TestHandleOutboundIpSkipsAnErrorPageWithIncidentalPublicIp(t *testing.T) {
