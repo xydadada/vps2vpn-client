@@ -437,7 +437,7 @@ func TestValidateAliasGraphAllowsSharedAnchors(t *testing.T) {
 	if err := yaml.Unmarshal([]byte("x: &base {value: 1}\na: *base\nb: *base\n"), &document); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateAliasGraph(&document); err != nil {
+	if err := validateYamlAliases(&document); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -592,4 +592,14 @@ func TestWriteDocumentPreservesRepeatedLargeAlias(t *testing.T) {
 	if len(result.Shared) != encodeSliceLength+1 || !reflect.DeepEqual(result.Shared, result.Rules) {
 		t.Fatalf("shared sequences changed: %d shared values, %d rules", len(result.Shared), len(result.Rules))
 	}
+}
+
+// Keep the group-only assertion separate from the broader vpsNameTaken lookup.
+func vpsHasGroup(raw *config.RawConfig, name string) bool {
+	for _, group := range raw.ProxyGroup {
+		if vpsName(group) == name {
+			return true
+		}
+	}
+	return false
 }
