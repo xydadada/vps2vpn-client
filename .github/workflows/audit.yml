@@ -30,6 +30,10 @@ jobs:
           cache-dependency-path: core/go.sum
       - name: Core static checks
         run: make core-check
+      - name: Core tests
+        if: always() && !cancelled()
+        working-directory: core
+        run: CGO_ENABLED=0 go test -count=1 .
       - name: Core race tests
         if: always() && !cancelled()
         working-directory: core

@@ -4,11 +4,11 @@
 
 审计基线是客户端提交 [5860a5ba2ab6001869586561fccb56309db6c3e1](https://github.com/xydadada/vps2vpn-client/commit/5860a5ba2ab6001869586561fccb56309db6c3e1)。本文负责 Core、桌面 IPC 和特权 Helper；应用层及服务端发现由总报告补充。本文列出的基线行号便于定位，实际修复以 PR 的完整 diff 为准。
 
-工作先在隔离工作目录进行，公开子模块按已有 SHA 初始化，未修改子模块版本。Go 1.27.1 的官方二进制 SHA 已核验；Flutter 3.50.0 与 Rust 工具链亦已准备。执行环境随后报告 unavailable，命令服务恢复超时，导致后续本地测试及读取工作树中断。修复通过 GitHub MCP 重新读取基线源码，在内存中断言每处替换上下文唯一，再重建并提交。**下文的本地成功记录来自中断前实现；重建后的提交尚未重新执行测试，不能据此宣称最终 head 已通过。** 新增 PR 工作流用于复验最终提交。
+工作先在隔离工作目录进行，公开子模块按已有 SHA 初始化，未修改子模块版本。Go 1.27.1 的官方二进制 SHA 已核验；Flutter 3.50.0 与 Rust 工具链亦已准备。执行环境随后报告 unavailable，命令服务恢复超时，导致后续本地测试及读取工作树中断。修复通过 GitHub MCP 重新读取基线源码，在内存中断言每处替换上下文唯一，再重建并提交。**下文的本地成功记录来自中断前实现；执行环境中断后没有在本地复跑，不能据此宣称最终 head 已通过。** 重建后的 GitHub Actions 实际结果单独记录在“首轮 GitHub Actions 与合并阻断”，后续修正仍须在其对应 head 复验。
 
 没有运行真实 VPN、接管宿主网络、安装系统服务或修改默认分支。没有进行吞吐量、丢包、移动网络切换或跨操作系统设备实测，也不声称整个仓库所有文件已完成逐行审计。
 
-## 已确认问题与修复
+## 已确认问题及处理状态
 
 | 编号 | 级别 | 基线位置 | 原因与影响 | 实际修复与回归 |
 | --- | --- | --- | --- | --- |
@@ -23,6 +23,43 @@
 | CC-09 | 高 | `services/helper/src/service/hub.rs:124,503` | 子进程已经 spawn 后，Windows Job Object 创建/绑定失败使 adopt 提前返回。Rust Child drop 不终止子进程，Helper 丢失特权 Core 的所有权，可能遗留运行进程及 TUN。 | adopt 失败时同时返回仍持有 Child 的 ManagedCore；立即使用现有退出确认流程回收。回收失败仍保留 ManagedCore，并返回 coreStopFailed，供后续 stop 重试；只在确认退出后释放所有权。现有退出/Job 生命周期测试纳入 Windows CI；尚未进行 Windows 内核绑定失败的故障注入。 |
 | CC-10 | 中 | `.github/workflows/` | 原有构建及 E2E 工作流均仅支持手动触发，PR 没有自动核心/应用测试门禁。 | 新增 pull_request 和 workflow_dispatch 审计工作流：Go fmt/vet/Android vet、race 全包测试、Flutter analyze/全量测试、Helper Linux/Windows 与 windows-service 编译测试、Rust native 测试及脚本回归。权限限定 contents:read；不发布、不部署、不合并。 |
 
+## 首轮 GitHub Actions 与合并阻断
+
+[审计运行 44715931908](https://github.com/xydadada/vps2vpn-client/actions/runs/44715931908) 针对 PR head `89ab9f77c891a34ac19bdaafe500fa45a5f7bb8e`，checkout 的 PR 合并快照为 `9db79dd271af151f145629356e1854be04f31d93`。已观察到：
+
+- [Linux Helper](https://github.com/xydadada/vps2vpn-client/actions/runs/44715931908/job/136219210165)：47 passed，0 failed。
+- [Windows Helper](https://github.com/xydadada/vps2vpn-client/actions/runs/44715931908/job/136219210248)：普通模式 40 passed，windows-service 模式 43 passed，均无失败。
+- [Linux native Rust](https://github.com/xydadada/vps2vpn-client/actions/runs/44715931908/job/136219209779)：126 passed，0 failed；包括 IPC 权限、帧边界、关闭与线程退出回归。
+- [Core](https://github.com/xydadada/vps2vpn-client/actions/runs/44715931908/job/136219210188)：格式检查只报告 profile_base_test.go；race 全包运行暴露了下面两类失败。
+- [Flutter](https://github.com/xydadada/vps2vpn-client/actions/runs/44715931908/job/136219210335)：SDK bootstrap 与 pub get 成功；analyze 的唯一 warning 是新增 account_test.dart 未使用的 Riverpod import，另有 6 条非阻断 info。全量 bundled 测试首轮报告 `+5096 ~6 -77`；随后 tool/test.dart 开始逐文件复跑失败项，但该 run 被后续提交取消，不能视作最终完整测试结论。失败涉及旧导航/仪表盘布局预期、kit.dart 字体约束及 4 项本地 panel HTTP 测试，已交应用层核查。新增 Core stderr 测试没有列入首轮失败清单。
+
+持久化回归曾错误地在 ParseRawConfig 后假设 raw.ProxyGroup[0] 仍是主选择器。上游解析会原地拓扑排序，实际该位置是自动 fallback 组，报 `persisted selector members = [b a]`。这条断言现改为按名称查找主选择器 `g`；同时调整测试 fixture 排版以通过 gofmt。该修正针对测试对上游可变参数的错误假设，不是删除持久化断言。后续 CI 增加单独无 race 的全包测试，和 race 检查分别报告；两道门禁均保留。
+
+### CC-11：外部控制器重建的数据竞争（已确认，未修复，阻止合并）
+
+固定子模块 [5b453f8 的 hub/route/server.go](https://github.com/chen08209/Clash.Meta/blob/5b453f80dbcee6b3ecfb0415bcace24a48c88707/hub/route/server.go) 中，ReCreateServer（约 92 行）直接启动多个 goroutine。start（164 行读取、183 行写入 httpServer）对共享 server 指针没有同步；TLS、Unix 和 named pipe 同样使用自己的无锁全局指针。
+
+实际 race 栈为：
+
+```text
+WARNING: DATA RACE
+Write: mihomo/hub/route.start, server.go:183
+Previous read: mihomo/hub/route.start, server.go:164
+Both created by: route.ReCreateServer, server.go:93
+Caller: core.patchController, config.go:312
+Caller: core.updateConfig, config.go:234
+Tests: TestUpdateConfigReplacesTheSecretTheProfileCarried (config_test.go:288)
+       TestUpdateConfigServesTheControllerBehindTheSecretItWasGiven (config_test.go:308)
+```
+
+客户端的 configMu 只序列化外层调用，无法等待上游启动 goroutine 完成；hub.ApplyConfig 也调用此入口。快速修改外部控制器地址/密钥或连续重载存在启动顺序颠倒、旧 server 未被关闭、最新认证/监听意图未生效的风险。首轮运行在约 6 秒的测试阶段由 Go race detector 明确判定失败，不是网络测试偶发超时。
+
+已检查当前依赖 fork 的 FlClash 分支，head 仍为上述 pin。也检查了 [MetaCubeX/mihomo Alpha](https://github.com/MetaCubeX/mihomo/blob/100ff73ae769c15562d6e174e88bf0da401ec4e2/hub/route/server.go) 与 [Meta 分支](https://github.com/MetaCubeX/mihomo/blob/0455d0d28c4526937380505153e65a843d8612e8/hub/route/server.go)，两者仍有相同异步无锁逻辑，未找到可最小兼容升级取得的现成修复。依赖没有公开完成句柄或同步替换接口。仅在外层加 mutex、sleep、跳过测试或特判空 controller 都不能修复一般情形。
+
+正确后续方案是在依赖里将每种 server 的关闭、监听创建、共享指针替换置于同一所有者下并保持更新顺序，待安装完成后再异步 Serve；补快速启停/换密钥回归并运行 race。若由本项目维护源码补丁，必须统一覆盖直接 go test、Makefile、Flutter setup hook、Android gomobile 和发布构建，校验所针对的源版本，避免只在 CI 临时打补丁。本 PR 保留失败的 race 门禁，**在该问题解决前不应合并**。
+
+本文早先“本地验证记录”保留为中断时快照；以上 GitHub 结果是后续取得的新证据。当前测试修正及最终 head 是否通过以更新后的 run 为准，不能把旧 run 的成功项当成最终提交全绿。
+
 ## 设计决策与兼容性
 
 增强组继续遵循原有协议排序、主服务器优先和用户规则优先策略，未凭经验修改探测间隔、失败计数或分流域名。新逻辑只修复命名冲突、表示类型与持久化一致性。已存在的智能组仍被视为订阅自身配置，重复执行不会再次添加。
@@ -35,7 +72,7 @@ Windows Helper 只改变失败路径上的所有权，保留现有 session 校�
 
 CI 使用与项目一致的 Go 1.27.1 / Flutter 3.50.0。当前环境中官方 Flutter archive 路径返回 404，而 3.50.0 tag 源码 bootstrap 可用，所以工作流通过该 tag 克隆。CI 设置 CI=true 与 analytics suppression 环境变量；只在临时检出中关闭 setup 的 Go 构建 hook，Go 由独立 job 完整验证，Rust native hook 保留。没有改动已锁定依赖或任何子模块 pin，也没有加入会因继承代码原有样式问题必然失败的全仓 Rust 格式门禁。
 
-## 验证记录
+## 执行环境中断时的本地验证快照
 
 | 检查 | 已观察结果 | 对最终重建提交的含义 |
 | --- | --- | --- |
@@ -46,7 +83,7 @@ CI 使用与项目一致的 Go 1.27.1 / Flutter 3.50.0。当前环境中官方 F
 | Helper / rust_api cargo test、Windows 编译、Rust fmt | 工具链已准备，但没有可验证的完成结果。 | 新增 Linux/Windows Helper 与 Linux native 测试；Windows Job 故障注入仍需真实平台补充。 |
 | Android / iOS / macOS / Windows 安装包、真实 TUN、吞吐量与网络恢复 | 未执行。 | PR 不能据此标记所有平台已验证。Android Go 静态检查覆盖有限，不能代替原生构建和设备测试。 |
 
-当前验证状态是审计提交创建时的快照；最终 PR 总报告应补充真实 Actions run URL、最终 head 和任何失败原因。工作流存在不代表检查已经运行或通过。
+本表保留执行环境中断时的验证快照；后续取得的真实 GitHub Actions 结果见上方“首轮 GitHub Actions 与合并阻断”。最终 PR 总报告应继续补充最终 head 对应的 run，不能把工作流存在当成通过。
 
 ## 实际阅读覆盖
 
@@ -90,15 +127,17 @@ CI 使用与项目一致的 Go 1.27.1 / Flutter 3.50.0。当前环境中官方 F
 - `core/spill.go`
 - `core/vps2vpn_smart.go`
 
+补充完整阅读的自有 Go 子目录：`core/cmd/core/main.go`、`mobile/mobile.go`、`platform/limit.go`、`platform/procfs.go`、`timezone/timezone.go`、`timezone/timezone_android.go`、`tun/tun.go`。截至后续审查，自有 Go 生产源文件已全部阅读，外部 Clash.Meta 仍仅按关联机制审查。
+
 另外已完整阅读：
 
 - 桌面 Dart：`helper_client.dart`、`core_manifest.dart`、`rpc_client.dart`、`transport.dart`、`launcher.dart`、`launch_policy.dart`、`lifecycle.dart`、`process_probe.dart`，以及 `lib/core/spill.dart`。
 - Helper：`src/main.rs`、`src/service/mod.rs`、`linux.rs`、`windows.rs`、`owner.rs`、`peer.rs`、`build.rs` 与 Cargo.toml。hub.rs 的生产部分（约前 900 行）完整阅读；后续测试按有关退出、stop 与 Job 路径审查，不宣称全部测试逐行阅读。
-- Rust IPC：`ipc/mod.rs`、`access.rs`、`frame.rs`；该范围包括平台权限策略和帧长检查，server/outbox 的完整审查尚未完成。
+- Rust IPC：`ipc/mod.rs`、`access.rs`、`frame.rs`、`server.rs`、`outbox.rs`、`unsupported.rs`（含其中测试）；覆盖平台权限、帧边界、单 peer 交换、发送队列、关闭及线程生命周期。
 - 回归相关：`vps2vpn_smart_test.go`、`profile_base_test.go`、`rule_set_test.go`、`test/core/desktop/launcher_test.dart`；transport 测试按相关路径审查。
 - 构建及说明：两份原工作流、pubspec.yaml、Cargo.toml、Go module 定义、Makefile 的相关目标；AGENTS、项目/命令/规则说明与 core-platform、pre-commit-quality-review 技能；architecture 文档的生命周期、IPC、构建、Helper 部分。
 
-未完成完整阅读的范围包括 Core 下 mobile/platform/timezone/tun/cmd 子目录、部分 lib/core facade/model、Rust native 其余模块、原生 Android/iOS/macOS/Linux/Windows 全部平台代码、其余本地插件与大量继承 UI/工具代码。新增 CI 的构建测试并不扩展人工逐行审查的范围。
+未完成完整阅读的范围包括部分 lib/core facade/model、Rust native 其余模块、原生 Android/iOS/macOS/Linux/Windows 全部平台代码、其余本地插件与大量继承 UI/工具代码。新增 CI 的构建测试并不扩展人工逐行审查的范围。
 
 ## 尚未验证或后续工作
 

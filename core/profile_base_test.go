@@ -415,11 +415,10 @@ func TestEncodeConfigMappingKeepsEveryKeyAfterAnOpenEndedScalar(t *testing.T) {
 
 func TestLoadConfigWithBasePersistsSmartRouting(t *testing.T) {
 	vpsOn(t)
+	inherited := "x-profile: &profile\n  " + strings.ReplaceAll(strings.TrimSuffix(baseProfile, "\n"), "\n", "\n  ") + "\n<<: *profile\n"
 	for name, profile := range map[string]string{
 		"literal":   baseProfile,
-		"inherited": "x-profile: &profile\n" +
-			"  " + strings.ReplaceAll(strings.TrimSuffix(baseProfile, "\n"), "\n", "\n  ") +
-			"\n<<: *profile\n",
+		"inherited": inherited,
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := writeBaseProfile(t, profile)
@@ -455,8 +454,8 @@ func TestLoadConfigWithBasePersistsSmartRouting(t *testing.T) {
 					t.Errorf("smart outbound %q is missing", name)
 				}
 			}
-			members := raw.ProxyGroup[0]["proxies"].([]any)
-			if members[0] != vpsSmartGroup || len(members) != 3 {
+			members := vpsGroup(raw, "g")["proxies"].([]any)
+			if len(members) != 3 || members[0] != vpsSmartGroup {
 				t.Fatalf("persisted selector members = %v", members)
 			}
 			if got := raw.Proxy[1]["client-fingerprint"]; got != "chrome" {
