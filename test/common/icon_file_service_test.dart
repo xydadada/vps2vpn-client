@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:fl_clash/common/icon_file_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// A concrete HttpOverrides falls back to Dart's real socket client in tests.
+class _RealHttpOverrides extends HttpOverrides {}
+
 void main() {
   test(
     'accepts exactly the limit and does not trust a smaller declaration',
@@ -104,7 +107,7 @@ void main() {
     final service = IconFileService();
     final response = await HttpOverrides.runWithHttpOverrides(
       () => service.get('http://127.0.0.1:${origin.port}/icon'),
-      HttpOverrides(),
+      _RealHttpOverrides(),
     );
     expect(response.statusCode, 200);
     expect(response.contentLength, 3);
@@ -113,7 +116,7 @@ void main() {
     expect(await response.content.expand((bytes) => bytes).toList(), [1, 2, 3]);
     final unchanged = await HttpOverrides.runWithHttpOverrides(
       () => service.get('http://127.0.0.1:${origin.port}/unchanged'),
-      HttpOverrides(),
+      _RealHttpOverrides(),
     );
     expect(unchanged.statusCode, 304);
     expect(await unchanged.content.expand((bytes) => bytes).toList(), isEmpty);
