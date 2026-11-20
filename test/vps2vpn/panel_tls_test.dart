@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 const _token = 'AbCdEf0123456789xyzQ';
 
 Future<T> _localSocket<T>(Future<T> Function() call) =>
-    HttpOverrides.runWithHttpOverrides(call, HttpOverrides());
+    HttpOverrides.runWithHttpOverrides(call, _RealHttpOverrides());
 
 class _TrustEverything extends HttpOverrides {
   @override
@@ -17,6 +17,9 @@ class _TrustEverything extends HttpOverrides {
       ..badCertificateCallback = (_, _, _) => true;
   }
 }
+
+// A concrete HttpOverrides falls back to Dart's real socket client in tests.
+class _RealHttpOverrides extends HttpOverrides {}
 
 void main() {
   late HttpServer server;
