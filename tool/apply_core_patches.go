@@ -17,6 +17,13 @@ type patchSpec struct {
 	after    string
 }
 
+var fallbackPatch = patchSpec{
+	revision: "5b453f80dbcee6b3ecfb0415bcace24a48c88707",
+	diff:     "bed09cb88c6e1f9f8fa8d945ced19a76e9aea0c0",
+	before:   "d6f61348844ca88c64bd017a8bb8255dfadfe8a6",
+	after:    "c712aee4c8ee69dcfb15e674addb330bf4bed589",
+}
+
 var controllerPatch = patchSpec{
 	revision: "5b453f80dbcee6b3ecfb0415bcace24a48c88707",
 	diff:     "7e5d6c980ab7f5e514fde3e43ba4be8e46346442",
@@ -27,6 +34,8 @@ var controllerPatch = patchSpec{
 const coreSubmodule = "core/Clash.Meta"
 const controllerSource = "hub/route/server.go"
 const controllerDiff = "tool/patches/clash-meta-controller-lifecycle.patch"
+const fallbackSource = "adapter/outboundgroup/fallback.go"
+const fallbackDiff = "tool/patches/clash-meta-fallback-concurrency.patch"
 
 func gitOutput(directory string, args ...string) (string, error) {
 	command := exec.Command("git", args...)
@@ -39,6 +48,10 @@ func gitOutput(directory string, args ...string) (string, error) {
 }
 
 func applyControllerPatch(root string, expected patchSpec) error {
+	return applyVerifiedCorePatch(root, expected, controllerSource, controllerDiff)
+}
+
+func applyVerifiedCorePatch(root string, expected patchSpec, sourcePath, diffPath string) error {
 	link, err := gitOutput(root, "rev-parse", "HEAD:"+coreSubmodule)
 	if err != nil {
 		return err
@@ -54,8 +67,8 @@ func applyControllerPatch(root string, expected patchSpec) error {
 	if revision != expected.revision {
 		return fmt.Errorf("Core checkout %s does not match the gitlink %s", revision, expected.revision)
 	}
-	patch := filepath.Join(root, filepath.FromSlash(controllerDiff))
-	patchHash, err := gitOutput(root, "hash-object", "--path="+controllerDiff, controllerDiff)
+	patch := filepath.Join(root, filepath.FromSlash(diffPath))
+	patchHash, err := gitOutput(root, "hash-object", "--path="+diffPath, diffPath)
 	if err != nil {
 		return err
 	}
@@ -80,7 +93,7 @@ func applyControllerPatch(root string, expected patchSpec) error {
 	}
 	defer os.Remove(lock)
 
-	hash, err := gitOutput(core, "hash-object", "--path="+controllerSource, controllerSource)
+	hash, err := gitOutput(core, "hash-object", "--path="+sourcePath, sourcePath)
 	if err != nil {
 		return err
 	}
@@ -97,7 +110,7 @@ func applyControllerPatch(root string, expected patchSpec) error {
 	if _, err = gitOutput(core, "apply", "--ignore-space-change", patch); err != nil {
 		return err
 	}
-	hash, err = gitOutput(core, "hash-object", "--path="+controllerSource, controllerSource)
+	hash, err = gitOutput(core, "hash-object", "--path="+sourcePath, sourcePath)
 	if err != nil {
 		return err
 	}
@@ -112,6 +125,9 @@ func main() {
 	root, err := gitOutput("", "rev-parse", "--show-toplevel")
 	if err == nil {
 		err = applyControllerPatch(root, controllerPatch)
+		if err == nil {
+			err = applyVerifiedCorePatch(root, fallbackPatch, fallbackSource, fallbackDiff)
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
