@@ -16,6 +16,9 @@ class Request {
   late final Dio dio;
   late final Dio _clashDio;
 
+  @visibleForTesting
+  Dio get downloadDio => _clashDio;
+
   /// Refuses an untrusted certificate even with the certificate check turned
   /// off, because what it fetches is installed, on Windows as administrator.
   @visibleForTesting
@@ -94,9 +97,112 @@ class Request {
         );
   }
 
-  Future<Response<Uint8List>> getFileResponseForUrl(String url) async {
+  Future<Response<Uint8List>> _downloadLimitedBytes(String url, int maxBytes) {
+    if (maxBytes < 0) {
+      throw ArgumentError.value(maxBytes, 'maxBytes');
+    }
+    final target = downloadTarget(url);
+    final cancelToken = CancelToken();
+    StreamSubscription<Uint8List>? subscription;
+    Completer<void>? bodyDone;
+
+    Future<Response<Uint8List>> receive() async {
+      try {
+        final response = await _clashDio.getUri<ResponseBody>(
+          target.uri,
+          options: Options(
+            responseType: ResponseType.stream,
+            headers: target.headers,
+          ),
+          cancelToken: cancelToken,
+        );
+        final body = response.data;
+        final bytes = BytesBuilder(copy: false);
+        final declared = int.tryParse(
+          response.headers.value(HttpHeaders.contentLengthHeader) ?? '',
+        );
+        if (declared != null && declared > maxBytes) {
+          throw const FileSystemException('Download exceeds the size limit');
+        }
+        if (body != null) {
+          final finished = Completer<void>();
+          bodyDone = finished;
+          subscription = body.stream.listen(
+            (chunk) {
+              if (finished.isCompleted) {
+                return;
+              }
+              if (chunk.length > maxBytes - bytes.length) {
+                finished.completeError(
+                  const FileSystemException('Download exceeds the size limit'),
+                );
+                return;
+              }
+              bytes.add(chunk);
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!finished.isCompleted) {
+                finished.completeError(error, stack);
+              }
+            },
+            onDone: () {
+              if (!finished.isCompleted) {
+                finished.complete();
+              }
+            },
+            cancelOnError: true,
+          );
+          await finished.future;
+        }
+        return Response<Uint8List>(
+          data: body == null ? null : bytes.takeBytes(),
+          requestOptions: response.requestOptions,
+          headers: response.headers,
+          statusCode: response.statusCode,
+          statusMessage: response.statusMessage,
+          isRedirect: response.isRedirect,
+          redirects: response.redirects,
+          extra: response.extra,
+        );
+      } catch (_) {
+        cancelToken.cancel();
+        await subscription?.cancel();
+        rethrow;
+      }
+    }
+
+    return receive().timeout(
+      downloadTimeoutDuration,
+      onTimeout: () {
+        final error = DioException.receiveTimeout(
+          timeout: downloadTimeoutDuration,
+          requestOptions: RequestOptions(path: url),
+        );
+        cancelToken.cancel();
+        // Cancel the active response stream as well as Dio's request. Some
+        // adapters leave an already-delivered stream open after cancellation.
+        // Unblock receive() so it cannot retain an abandoned stream forever.
+        final pending = bodyDone;
+        if (pending != null && !pending.isCompleted) {
+          pending.completeError(error);
+        }
+        final active = subscription;
+        if (active != null) {
+          unawaited(active.cancel());
+        }
+        throw error;
+      },
+    );
+  }
+
+  Future<Response<Uint8List>> getFileResponseForUrl(
+    String url, {
+    int? maxBytes,
+  }) async {
     try {
-      return await _download<Uint8List>(url, ResponseType.bytes);
+      return maxBytes == null
+          ? await _download<Uint8List>(url, ResponseType.bytes)
+          : await _downloadLimitedBytes(url, maxBytes);
     } catch (e) {
       commonPrint.log(
         'getFileResponseForUrl error ${compactError(e)}',

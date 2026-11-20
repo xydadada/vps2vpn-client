@@ -20,7 +20,13 @@ func unmarshalRawConfig(buf []byte) (*config.RawConfig, error) {
 		return config.UnmarshalRawConfig(buf)
 	}
 	var document yaml.Node
-	if yaml.Unmarshal(buf, &document) != nil || !retagShortIDs(&document) {
+	if yaml.Unmarshal(buf, &document) != nil {
+		return config.UnmarshalRawConfig(buf)
+	}
+	if err := validateAliasGraph(&document); err != nil {
+		return nil, err
+	}
+	if !retagShortIDs(&document) {
 		return config.UnmarshalRawConfig(buf)
 	}
 	rawConfig := config.DefaultRawConfig()

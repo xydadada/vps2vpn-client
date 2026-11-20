@@ -370,15 +370,14 @@ func readProbeBody(body io.Reader, maxBody int64, until func(string) bool) (stri
 			start := max(0, buffer.Len()-probeScanOverlap)
 			buffer.Write(chunk[:n])
 			if until(string(buffer.Bytes()[start:])) {
-				break
+				return buffer.String(), nil
 			}
 		}
 		if err != nil {
-			if err != io.EOF {
-				return buffer.String(), err
+			if errors.Is(err, io.EOF) {
+				return buffer.String(), nil
 			}
-			break
+			return buffer.String(), err
 		}
 	}
-	return buffer.String(), nil
 }

@@ -223,7 +223,7 @@ func serve(dialed ipcConn) {
 
 		call := &MethodCall{}
 		if err := json.Unmarshal(data, call); err != nil {
-			logError("server unmarshal error: %v (data: %q)", err, data)
+			logError("server unmarshal error: %v (frame size: %d)", err, len(data))
 			continue
 		}
 
