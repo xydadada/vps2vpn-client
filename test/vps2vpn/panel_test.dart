@@ -9,7 +9,10 @@ const _tok = 'AbCdEf0123456789xyzQ';
 // Flutter's test binding installs an HTTP 400 interceptor. Local socket tests
 // must explicitly use the real dart:io client without changing production TLS.
 Future<T> _localSocket<T>(Future<T> Function() call) =>
-    HttpOverrides.runWithHttpOverrides(call, HttpOverrides());
+    HttpOverrides.runWithHttpOverrides(call, _RealHttpOverrides());
+
+// A concrete HttpOverrides falls back to Dart's real socket client in tests.
+class _RealHttpOverrides extends HttpOverrides {}
 
 void main() {
   group('api base', () {
