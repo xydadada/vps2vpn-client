@@ -431,7 +431,7 @@ void main() {
 
         expect(
           () => decompressUnlabeled(compressed, maxOutputBytes: 128),
-          throwsA(isA<StateError>()),
+          throwsA(isA<MessageException>()),
         );
       }
     });
