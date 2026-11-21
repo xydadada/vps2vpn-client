@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -109,7 +110,7 @@ void main() {
     );
   });
 
-  test('carries credentials when local authentication is enabled', () {
+  test('authenticated local proxy uses a credential-free PAC directive', () {
     final container = buildContainer();
     container.read(networkSettingProvider.notifier).value = const NetworkProps()
         .copyWith(
@@ -122,7 +123,7 @@ void main() {
 
     expect(
       FlClashHttpOverrides.findProxyFor(container, remote),
-      'PROXY user:pass@127.0.0.1:7890',
+      'PROXY 127.0.0.1:7890',
     );
 
     container.read(networkSettingProvider.notifier).value = const NetworkProps()
@@ -136,6 +137,47 @@ void main() {
       FlClashHttpOverrides.findProxyFor(container, remote),
       'PROXY 127.0.0.1:7890',
     );
+  });
+
+  test('actual proxy 407 challenge receives raw punctuation credentials', () async {
+    final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => proxy.close(force: true));
+    const username = 'user@home';
+    const password = 'p%@:ss';
+    final container = buildContainer(mixedPort: proxy.port);
+    container.read(networkSettingProvider.notifier).value = const NetworkProps()
+        .copyWith(authentication: const AuthenticationProps(
+          enable: true,
+          username: username,
+          password: password,
+        ));
+    final expected = 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+    var challenges = 0;
+    final received = <String>[];
+    proxy.listen((request) async {
+      final credential = request.headers.value(HttpHeaders.proxyAuthorizationHeader);
+      if (credential == null) {
+        challenges++;
+        request.response
+          ..statusCode = HttpStatus.proxyAuthenticationRequired
+          ..headers.set(HttpHeaders.proxyAuthenticateHeader, 'Basic realm="local-test"');
+      } else {
+        received.add(credential);
+        request.response.statusCode = credential == expected
+            ? HttpStatus.ok
+            : HttpStatus.forbidden;
+      }
+      await request.response.close();
+    });
+    final client = FlClashHttpOverrides(container).createHttpClient(null);
+    addTearDown(() => client.close(force: true));
+    final response = await (await client.getUrl(
+      Uri.parse('http://example.invalid/proxy-check'),
+    )).close();
+    await response.drain<void>();
+    expect(response.statusCode, HttpStatus.ok);
+    expect(challenges, 1);
+    expect(received, [expected]);
   });
 
   test('bypasses the proxy when the core is not running', () {
