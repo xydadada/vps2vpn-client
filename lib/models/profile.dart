@@ -54,9 +54,11 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
 int trafficCounterOrZero(Object? value) => nonNegativeInt(value) ?? 0;
 
 int subscriptionExpiryOrUnknown(Object? value) {
+  // Missing or explicitly zero means "not supplied". Keep malformed values
+  // distinct (-1) so neither UI nor persisted data treats them as epoch zero.
   if (value == null || value == 0 || value == '0') return 0;
   final seconds = unixSecondsOrZero(value);
-  return seconds;
+  return seconds == 0 ? -1 : seconds;
 }
 
 extension SubscriptionInfoExt on SubscriptionInfo {
