@@ -55,7 +55,7 @@ Uri vpsReleaseDownload(VpsClientRelease release) =>
 Uri? vpsPlatformInstaller(VpsClientRelease release) {
   final file = release.files[Platform.operatingSystem];
   if (file != null) return file;
-  if (release.files.isNotEmpty) return null;
+  // An explicit direct link may cover this OS even when other file entries exist.
   final name = _fileName(release.url);
   if (vpsUpdateFileVersion(name) == null) return null;
   return name.toLowerCase().contains('-${Platform.operatingSystem}-') ||
