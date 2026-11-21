@@ -64,6 +64,10 @@ Uri? vpsPlatformInstaller(VpsClientRelease release) {
       : null;
 }
 
+/// A missing platform asset may fall back to a page or to another OS's binary.
+bool vpsPanelHasReleasePage(VpsClientRelease release) =>
+    vpsUpdateFileVersion(_fileName(release.url)) == null;
+
 // Versions fetched automatically in this run: one try each, so a panel that
 // serves a broken or unsigned file is not downloaded again every few hours.
 final _autoTried = <String>{};
@@ -85,8 +89,18 @@ Future<void> vpsDownloadPanelUpdate(
 }) async {
   final url = vpsPlatformInstaller(release);
   if (url == null) {
-    // The panel's fallback may be a release page or another OS's installer.
-    if (!auto) await launchUrl(release.url);
+    // Never download or open another platform's installer as this update.
+    if (!auto) {
+      if (vpsPanelHasReleasePage(release)) {
+        await launchUrl(release.url);
+      } else {
+        _banner(
+          (c) => tr(c, '当前平台没有安装包，请联系管理员',
+              'No installer for this platform; ask the owner to publish one'),
+          BannerLevel.warning,
+        );
+      }
+    }
     return;
   }
   final install = vpsSelfInstallable(_fileName(url));
