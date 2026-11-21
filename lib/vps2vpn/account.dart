@@ -304,7 +304,7 @@ class VpsUpdateCard extends ConsumerWidget {
     final asset = vpsPlatformInstaller(release);
     final installs = asset != null &&
         vpsSelfInstallable(asset.pathSegments.lastOrNull ?? '');
-    final hasPage = asset == null && vpsPanelHasReleasePage(release);
+    final hasPage = asset == null && vpsPanelHasExternalLink(release);
     final tag = 'v${release.version}';
     final ready = download is UpdateReady && download.tag == tag;
     final busy = download is UpdateDownloading;
@@ -340,8 +340,8 @@ class VpsUpdateCard extends ConsumerWidget {
                             ? hasPage
                                 ? tr(
                                     context,
-                                    '当前平台暂无安装包，查看发布页面',
-                                    'No installer for this platform; open the release page',
+                                    '当前平台没有可验证的安装包，请打开下载链接',
+                                    'No signed installer for this platform; open the supplied link',
                                   )
                                 : tr(
                                     context,
@@ -375,7 +375,7 @@ class VpsUpdateCard extends ConsumerWidget {
                   ? tr(context, '更新', 'Update')
                   : asset == null
                   ? hasPage
-                      ? tr(context, '查看下载页', 'Open downloads')
+                      ? tr(context, '打开下载链接', 'Open link')
                       : tr(context, '暂无安装包', 'Unavailable')
                   : tr(context, '下载', 'Download'),
               filled: true,
