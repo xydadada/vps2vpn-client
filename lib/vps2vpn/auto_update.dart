@@ -58,8 +58,7 @@ Uri? vpsPlatformInstaller(VpsClientRelease release) {
   // An explicit direct link may cover this OS even when other file entries exist.
   final name = _fileName(release.url);
   if (vpsUpdateFileVersion(name) == null) return null;
-  return name.toLowerCase().contains('-${Platform.operatingSystem}-') ||
-          vpsSelfInstallable(name)
+  return name.toLowerCase().contains('-${Platform.operatingSystem}-')
       ? release.url
       : null;
 }
