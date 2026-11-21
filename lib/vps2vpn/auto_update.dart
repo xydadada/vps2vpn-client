@@ -92,7 +92,20 @@ Future<void> vpsDownloadPanelUpdate(
     // Never download or open another platform's installer as this update.
     if (!auto) {
       if (vpsPanelHasReleasePage(release)) {
-        await launchUrl(release.url);
+        try {
+          if (!await launchUrl(release.url)) {
+            throw const HttpException('Unable to open update link');
+          }
+        } catch (error) {
+          commonPrint.log(
+            'Client update link failed: ${compactError(error)}',
+            logLevel: LogLevel.warning,
+          );
+          _banner(
+            (c) => tr(c, '无法打开下载链接', 'Unable to open download link'),
+            BannerLevel.warning,
+          );
+        }
       } else {
         _banner(
           (c) => tr(c, '当前平台没有安装包，请联系管理员',
