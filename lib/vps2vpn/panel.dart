@@ -69,9 +69,9 @@ class VpsAiStatus {
     return VpsAiStatus(
       summary: '${json['summary'] ?? ''}',
       place: json['place'] is String ? json['place'] as String : null,
-      at: at is num && at > 0
-          ? DateTime.fromMillisecondsSinceEpoch(at.toInt() * 1000)
-          : null,
+      // The panel result is network input: a huge/NaN timestamp must not
+      // throw during widget construction.
+      at: dateTimeFromUnixSeconds(at),
       sites: sites is Map
           ? {for (final e in sites.entries) '${e.key}': '${e.value}'}
           : const {},
