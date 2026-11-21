@@ -301,9 +301,9 @@ class VpsUpdateCard extends ConsumerWidget {
     if (release == null || current == null || !release.newerThan(current)) {
       return const SizedBox.shrink();
     }
-    final installs = vpsSelfInstallable(
-      vpsReleaseDownload(release).pathSegments.lastOrNull ?? '',
-    );
+    final asset = vpsPlatformInstaller(release);
+    final installs = asset != null &&
+        vpsSelfInstallable(asset.pathSegments.lastOrNull ?? '');
     final tag = 'v${release.version}';
     final ready = download is UpdateReady && download.tag == tag;
     final busy = download is UpdateDownloading;
@@ -335,7 +335,13 @@ class VpsUpdateCard extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Text(
                     release.notes ??
-                        (installs
+                        (asset == null
+                            ? tr(
+                                context,
+                                '当前平台暂无安装包，查看发布页面',
+                                'No installer for this platform; open the release page',
+                              )
+                            : installs
                             ? tr(
                                 context,
                                 '当前 $current，更新会自动安装并重启 vps2vpn',
@@ -360,6 +366,8 @@ class VpsUpdateCard extends ConsumerWidget {
                   ? tr(context, '下载中$percent', 'Downloading$percent')
                   : installs
                   ? tr(context, '更新', 'Update')
+                  : asset == null
+                  ? tr(context, '查看下载页', 'Open downloads')
                   : tr(context, '下载', 'Download'),
               filled: true,
               onTap: ready
