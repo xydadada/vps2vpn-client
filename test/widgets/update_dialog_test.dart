@@ -278,8 +278,17 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
     });
 
-    testWidgets('cancelling the download reports nothing', (tester) async {
-      final partial = '${home.path}/update/$asset';
+    testWidgets('cancelling the staged download reports nothing', (tester) async {
+      final updateDir = Directory('${home.path}/update');
+      bool hasStagingFile() =>
+          updateDir.existsSync() &&
+          updateDir.listSync().whereType<Directory>().any(
+            (dir) =>
+                dir.path.split(Platform.pathSeparator).last.startsWith(
+                  '.release-verify-',
+                ) &&
+                File('${dir.path}${Platform.pathSeparator}$asset').existsSync(),
+          );
       final body = StreamController<Uint8List>();
       addTearDown(body.close);
       request.releaseDio.httpClientAdapter = _ReleaseAdapter(
@@ -288,7 +297,10 @@ void main() {
       );
 
       final container = await startUpdate(tester);
-      await settleUntil(tester, () => File(partial).existsSync());
+      await settleUntil(tester, hasStagingFile);
+      expect(hasStagingFile(), isTrue,
+          reason: 'update bytes must be staged before verification');
+      expect(File('${home.path}/update/$asset').existsSync(), isFalse);
       container.read(commonActionProvider.notifier).cancelUpdateDownload();
       await settleUntil(
         tester,
@@ -298,6 +310,8 @@ void main() {
 
       expect(container.read(updateDownloadStateProvider), isNull);
       expect(shows('Update failed'), isFalse);
+      expect(updateDir.existsSync() ? updateDir.listSync() : const [], isEmpty,
+          reason: 'cancellation must not leave staged installer files');
     });
   });
 
