@@ -741,6 +741,42 @@ void main() {
       },
     );
 
+    test('a ZIP entry cannot expand past its advertised size', () async {
+      final archivePath = await zipOf({
+        configJsonName: utf8.encode(json.encode({'version': 1})),
+        'overflow.bin': List<int>.filled(1 << 20, 65),
+      });
+      final zip = File(archivePath);
+      final bytes = await zip.readAsBytes();
+      var patched = false;
+      // ZIP central-directory header: uncompressed size is at offset 24,
+      // the file-name length at 28, and the name starts at offset 46.
+      for (var i = 0; i + 46 < bytes.length; i++) {
+        if (bytes[i] != 0x50 ||
+            bytes[i + 1] != 0x4b ||
+            bytes[i + 2] != 0x01 ||
+            bytes[i + 3] != 0x02) {
+          continue;
+        }
+        final nameLength = bytes[i + 28] | (bytes[i + 29] << 8);
+        if (i + 46 + nameLength > bytes.length ||
+            utf8.decode(bytes.sublist(i + 46, i + 46 + nameLength)) !=
+                'overflow.bin') {
+          continue;
+        }
+        bytes.setRange(i + 24, i + 28, [16, 0, 0, 0]);
+        patched = true;
+        break;
+      }
+      expect(patched, isTrue);
+      await zip.writeAsBytes(bytes);
+      await expectLater(restore(archivePath), failsWith(BackupFailure.invalid));
+      final staged = File(join(staging.path, 'overflow.bin'));
+      if (await staged.exists()) {
+        expect(await staged.length(), lessThanOrEqualTo(16));
+      }
+    });
+
     test('an archive without a config document is rejected', () async {
       final archivePath = await zipOf({'unrelated.txt': utf8.encode('x')});
 
