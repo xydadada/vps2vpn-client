@@ -224,6 +224,31 @@ void main() {
         download(request),
         throwsA(isA<ReleaseNotVerifiedException>()),
       );
+      expect(directory.listSync(), isEmpty);
+    });
+
+    test('keeps an existing installer if the replacement is corrupt', () async {
+      final existing = File(join(directory.path, name));
+      await existing.writeAsBytes(package);
+      final request = requestServing('$digest  ./$name\n', utf8.encode('x'));
+
+      await expectLater(
+        download(request),
+        throwsA(isA<ReleaseNotVerifiedException>()),
+      );
+
+      expect(await existing.readAsBytes(), package);
+      expect(directory.listSync().map((entity) => entity.path), [existing.path]);
+    });
+
+    test('replaces a stale installer only after verifying new bytes', () async {
+      final existing = File(join(directory.path, name));
+      await existing.writeAsString('old');
+      final request = requestServing('$digest  ./$name\n', package);
+
+      expect(await download(request), existing.path);
+      expect(await existing.readAsBytes(), package);
+      expect(directory.listSync().map((entity) => entity.path), [existing.path]);
     });
 
     test('refuses an asset the listing does not name', () async {
