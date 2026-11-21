@@ -277,6 +277,7 @@ void main() {
 
       expect(progress, [50, 100]);
       expect(calls.first.arguments, containsPair('path', '/files/a.apk'));
+      expect(methods(), isNot(contains('cancelDownload')));
     });
 
     test('reports why a download failed', () async {
@@ -292,6 +293,8 @@ void main() {
           ),
         ),
       );
+      expect(methods(), contains('cancelDownload'));
+      expect(calls.last.arguments, containsPair('id', 7));
     });
 
     test('reports a download removed outside the app', () async {
@@ -319,6 +322,9 @@ void main() {
         methods().where((method) => method == 'queryDownload'),
         hasLength(1),
       );
+      expect(methods().where((method) => method == 'cancelDownload'),
+          hasLength(1));
+      expect(calls.last.arguments, containsPair('id', 7));
     });
 
     test('fails when the download manager is unavailable', () async {
