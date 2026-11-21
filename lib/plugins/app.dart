@@ -255,27 +255,45 @@ class App {
       );
       throw const SystemDownloadException(null);
     }
-    while (true) {
-      await Future.any([
-        Future<void>.delayed(_downloadPollInterval),
-        cancelToken.whenCancel,
-      ]);
-      if (cancelToken.cancelError case final error?) {
-        throw error;
+    var completed = false;
+    try {
+      while (true) {
+        await Future.any([
+          Future<void>.delayed(_downloadPollInterval),
+          cancelToken.whenCancel,
+        ]);
+        if (cancelToken.cancelError case final error?) {
+          throw error;
+        }
+        final state = await methodChannel.invokeMapMethod<String, Object?>(
+          'queryDownload',
+          {'id': id},
+        );
+        if (state == null) {
+          throw const SystemDownloadException(null);
+        }
+        onReceiveProgress(state['received'] as int, state['total'] as int);
+        switch (state['status']) {
+          case _downloadSuccessful:
+            completed = true;
+            return;
+          case _downloadFailed:
+            throw SystemDownloadException(state['reason'] as int?);
+        }
       }
-      final state = await methodChannel.invokeMapMethod<String, Object?>(
-        'queryDownload',
-        {'id': id},
-      );
-      if (state == null) {
-        throw const SystemDownloadException(null);
-      }
-      onReceiveProgress(state['received'] as int, state['total'] as int);
-      switch (state['status']) {
-        case _downloadSuccessful:
-          return;
-        case _downloadFailed:
-          throw SystemDownloadException(state['reason'] as int?);
+    } finally {
+      if (!completed) {
+        // Stopping polling is not cancellation: Android DownloadManager would
+        // otherwise keep downloading into a staging directory now removed by
+        // the caller. Remove only this request, not other active downloads.
+        try {
+          await methodChannel.invokeMethod<bool>('cancelDownload', {'id': id});
+        } on PlatformException catch (error) {
+          commonPrint.log(
+            'Unable to cancel system download: ${compactError(error)}',
+            logLevel: LogLevel.warning,
+          );
+        }
       }
     }
   }
