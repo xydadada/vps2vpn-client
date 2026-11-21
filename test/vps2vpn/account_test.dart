@@ -156,22 +156,20 @@ void main() {
     final page = Uri.parse(
       'https://github.com/xydadada/vps2vpn-client/releases/latest',
     );
-    expect(
-      vpsPlatformInstaller(VpsClientRelease(version: '1.1.0', url: page)),
-      isNull,
-    );
+    final pageRelease = VpsClientRelease(version: '1.1.0', url: page);
+    expect(vpsPlatformInstaller(pageRelease), isNull);
+    expect(vpsPanelHasReleasePage(pageRelease), isTrue);
     final other = Platform.isWindows ? 'android' : 'windows';
     final otherFile = Uri.parse(
       'https://example.com/vps2vpn-1.1.0-$other-amd64-setup.exe',
     );
-    expect(
-      vpsPlatformInstaller(VpsClientRelease(
-        version: '1.1.0',
-        url: otherFile,
-        files: {other: otherFile},
-      )),
-      isNull,
+    final otherRelease = VpsClientRelease(
+      version: '1.1.0',
+      url: otherFile,
+      files: {other: otherFile},
     );
+    expect(vpsPlatformInstaller(otherRelease), isNull);
+    expect(vpsPanelHasReleasePage(otherRelease), isFalse);
     final direct = Uri.parse(
       'https://example.com/vps2vpn-1.1.0-${Platform.operatingSystem}-amd64-portable.zip',
     );
@@ -202,6 +200,28 @@ void main() {
     expect(find.text('Open downloads'), findsOneWidget);
     expect(find.textContaining('No installer for this platform'), findsOneWidget);
     expect(find.text('Update'), findsNothing);
+
+    final other = Platform.isWindows ? 'android' : 'windows';
+    final otherFile = Uri.parse(
+      'https://example.com/vps2vpn-1.1.0-$other-amd64-setup.exe',
+    );
+    await _pump(
+      tester,
+      const VpsUpdateCard(currentVersion: '1.0.0'),
+      VpsMemberResult(
+        member: VpsMember(
+          name: 'Ann',
+          enabled: true,
+          client: VpsClientRelease(
+            version: '1.1.0',
+            url: otherFile,
+            files: {other: otherFile},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Unavailable'), findsOneWidget);
+    expect(find.textContaining('ask the owner to publish one'), findsOneWidget);
   });
 
   test('installs by itself only what this build can run', () {
