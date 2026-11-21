@@ -101,12 +101,15 @@ void main() {
     },
   );
 
+  // A rejected certificate produces HandshakeException, intentionally mapped
+  // to the UI's TLS error (httpsRequired), not generic reachability failure.
+  // The critical security invariant is still that no token request is sent.
   test('a wrong pin never sends the bearer token request', () async {
     expect(
       (await _localSocket(
         () => fetchMember(base(), pinnedSha256: {'00' * 32}),
       ))?.problem,
-      VpsPanelProblem.unreachable,
+      VpsPanelProblem.httpsRequired,
     );
     expect(requests, isEmpty);
   });
@@ -118,7 +121,7 @@ void main() {
         () => fetchMember(base()),
         _TrustEverything(),
       );
-      expect(result?.problem, VpsPanelProblem.unreachable);
+      expect(result?.problem, VpsPanelProblem.httpsRequired);
       expect(requests, isEmpty);
     },
   );
@@ -128,7 +131,7 @@ void main() {
       () => fetchMember(base(), pinnedSha256: {'00' * 32}),
       _TrustEverything(),
     );
-    expect(result?.problem, VpsPanelProblem.unreachable);
+    expect(result?.problem, VpsPanelProblem.httpsRequired);
     expect(requests, isEmpty);
   });
 }
