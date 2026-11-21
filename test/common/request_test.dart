@@ -226,6 +226,46 @@ void main() {
       );
     });
 
+
+    test('checksum failure keeps an existing verified installer', () async {
+      final destination = File('${directory.path}${Platform.pathSeparator}$name');
+      await destination.writeAsString('previous trusted installer');
+      final failing = requestServing('$digest  ./$name\\n', utf8.encode('invalid payload'));
+
+      await expectLater(download(failing), throwsA(isA<ReleaseNotVerifiedException>()));
+
+      expect(await destination.readAsString(), 'previous trusted installer');
+      expect(directory.listSync().map((entity) => entity.path), [destination.path]);
+    });
+
+    test('verified update replaces a previous installer without staging debris', () async {
+      final destination = File('${directory.path}${Platform.pathSeparator}$name');
+      await destination.writeAsString('previous installer');
+
+      final path = await download(requestServing('$digest  ./$name\\n', package));
+
+      expect(path, destination.path);
+      expect(await destination.readAsBytes(), package);
+      expect(directory.listSync().map((entity) => entity.path), [destination.path]);
+    });
+
+    test('HTTP failure preserves a previous installer and cleans staging', () async {
+      final destination = File('${directory.path}${Platform.pathSeparator}$name');
+      await destination.writeAsString('previous trusted installer');
+      final failing = Request()
+        ..releaseDio.httpClientAdapter = _PathAdapter({
+          '/$repository/releases/download/v1.2.3/${updateChecksumsName('v1.2.3')}':
+              () => ResponseBody.fromString('$digest  ./$name\\n', 200),
+          '/$repository/releases/download/v1.2.3/$name': () =>
+              ResponseBody.fromString('upstream failure', 503),
+        });
+
+      await expectLater(download(failing), throwsA(isA<DioException>()));
+
+      expect(await destination.readAsString(), 'previous trusted installer');
+      expect(directory.listSync().map((entity) => entity.path), [destination.path]);
+    });
+
     test('refuses an asset the listing does not name', () async {
       final request = requestServing('$digest  ./other.apk\n', package);
 
