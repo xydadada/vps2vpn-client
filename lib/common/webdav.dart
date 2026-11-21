@@ -177,7 +177,13 @@ class DAVTransport {
       if (status != null && accept.contains(status)) {
         return response;
       }
-      if (status == 401 && !retriedAuth && _adoptChallenge(response)) {
+      // The response from a redirected OPTIONS request may belong to another
+      // origin. Only the configured server may negotiate or replace its
+      // cached Digest credentials; a foreign 401 must remain an error.
+      if (status == 401 &&
+          !retriedAuth &&
+          _sameOrigin(uri, origin) &&
+          _adoptChallenge(response)) {
         retriedAuth = true;
         continue;
       }
