@@ -255,7 +255,12 @@ final request = Request();
 
 /// Some subscription servers send a gzip or zlib body without saying so in
 /// Content-Encoding, which is the only signal dart:io decompresses on.
-Uint8List decompressUnlabeled(Uint8List bytes) {
+const maxDecompressedSubscriptionBytes = 32 << 20;
+
+Uint8List decompressUnlabeled(
+  Uint8List bytes, {
+  int maxOutputBytes = maxDecompressedSubscriptionBytes,
+}) {
   final codec = switch (bytes) {
     [0x1f, 0x8b, ...] => gzip,
     [0x78, final flags, ...] when (0x78 << 8 | flags) % 31 == 0 => zlib,
@@ -264,11 +269,35 @@ Uint8List decompressUnlabeled(Uint8List bytes) {
   if (codec == null) {
     return bytes;
   }
+  final output = BytesBuilder();
+  final sink = codec.decoder.startChunkedConversion(
+    _BoundedDecompressionSink(output, maxOutputBytes),
+  );
   try {
-    return Uint8List.fromList(codec.decode(bytes));
+    sink.add(bytes);
+    sink.close();
+    return output.takeBytes();
   } on FormatException {
     return bytes;
   }
+}
+
+class _BoundedDecompressionSink implements Sink<List<int>> {
+  _BoundedDecompressionSink(this.output, this.limit);
+
+  final BytesBuilder output;
+  final int limit;
+
+  @override
+  void add(List<int> chunk) {
+    if (chunk.length > limit - output.length) {
+      throw StateError('Decompressed subscription exceeds $limit bytes');
+    }
+    output.add(chunk);
+  }
+
+  @override
+  void close() {}
 }
 
 /// A 4xx is the server's verdict on the link, except 407 and 408, which come
