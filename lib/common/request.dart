@@ -12,6 +12,10 @@ import 'package:fl_clash/state.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' show join;
 
+/// Byte budget for a subscription *after* HttpClient's automatic gzip decoding.
+/// Unlabeled gzip/zlib is also subject to the separate expansion cap.
+const maxSubscriptionResponseBytes = 64 << 20;
+
 class Request {
   late final Dio dio;
 
@@ -108,6 +112,117 @@ class Request {
         );
   }
 
+  /// Stream subscription responses instead of allowing Dio to buffer
+  /// arbitrarily large raw or auto-uncompressed HTTP bodies in memory.
+  /// Include the response-body stream in the shared absolute download deadline.
+  Future<Response<Uint8List>> _downloadSubscriptionBytes(
+    String url,
+    int maxBytes, {
+    Dio? via,
+  }) {
+    if (maxBytes < 0) {
+      throw ArgumentError.value(maxBytes, 'maxBytes');
+    }
+    final target = downloadTarget(url);
+    final cancelToken = CancelToken();
+    StreamSubscription<Uint8List>? subscription;
+    Completer<void>? bodyDone;
+
+    Future<Response<Uint8List>> receive() async {
+      try {
+        final response = await (via ?? clashDio).getUri<ResponseBody>(
+          target.uri,
+          options: Options(
+            responseType: ResponseType.stream,
+            headers: target.headers,
+          ),
+          cancelToken: cancelToken,
+        );
+        final body = response.data;
+        final bytes = BytesBuilder(copy: false);
+        final declared = int.tryParse(
+          response.headers.value(HttpHeaders.contentLengthHeader) ?? '',
+        );
+        // An honest header lets us fail early. A compressed response's
+        // Content-Length describes the compressed size, so still count every
+        // actual byte yielded by HttpClient after automatic decompression.
+        if (declared != null && declared > maxBytes) {
+          throw FileSystemException(
+            'Subscription response exceeds $maxBytes bytes',
+          );
+        }
+        if (body != null) {
+          final finished = Completer<void>();
+          bodyDone = finished;
+          subscription = body.stream.listen(
+            (chunk) {
+              if (finished.isCompleted) {
+                return;
+              }
+              if (chunk.length > maxBytes - bytes.length) {
+                finished.completeError(
+                  FileSystemException(
+                    'Subscription response exceeds $maxBytes bytes',
+                  ),
+                );
+                return;
+              }
+              bytes.add(chunk);
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!finished.isCompleted) {
+                finished.completeError(error, stack);
+              }
+            },
+            onDone: () {
+              if (!finished.isCompleted) {
+                finished.complete();
+              }
+            },
+            cancelOnError: true,
+          );
+          await finished.future;
+        }
+        return Response<Uint8List>(
+          data: body == null ? null : bytes.takeBytes(),
+          requestOptions: response.requestOptions,
+          headers: response.headers,
+          statusCode: response.statusCode,
+          statusMessage: response.statusMessage,
+          isRedirect: response.isRedirect,
+          redirects: response.redirects,
+          extra: response.extra,
+        );
+      } catch (_) {
+        cancelToken.cancel();
+        await subscription?.cancel();
+        rethrow;
+      }
+    }
+
+    return receive().timeout(
+      downloadTimeoutDuration,
+      onTimeout: () {
+        final error = DioException.receiveTimeout(
+          timeout: downloadTimeoutDuration,
+          requestOptions: RequestOptions(path: url),
+        );
+        cancelToken.cancel();
+        // Cancel a body stream already handed off by Dio. Otherwise a peer
+        // that never ends the stream can leave receive() alive after timeout.
+        final pending = bodyDone;
+        if (pending != null && !pending.isCompleted) {
+          pending.completeError(error);
+        }
+        final active = subscription;
+        if (active != null) {
+          unawaited(active.cancel());
+        }
+        throw error;
+      },
+    );
+  }
+
   Future<Response<Uint8List>> getFileResponseForUrl(String url) async {
     try {
       return await _download<Uint8List>(url, ResponseType.bytes);
@@ -122,10 +237,13 @@ class Request {
 
   /// Retries directly when the proxy route fails, since the lines this
   /// update would replace may be the ones that died.
-  Future<Response<Uint8List>> getSubscriptionResponse(String url) async {
+  Future<Response<Uint8List>> getSubscriptionResponse(
+    String url, {
+    int maxBytes = maxSubscriptionResponseBytes,
+  }) async {
     final proxied = _findProxy(downloadTarget(url).uri) != 'DIRECT';
     try {
-      return await _download<Uint8List>(url, ResponseType.bytes);
+      return await _downloadSubscriptionBytes(url, maxBytes);
     } catch (error) {
       if (!proxied || !isRouteFailure(error)) {
         commonPrint.log(
@@ -141,9 +259,9 @@ class Request {
       );
     }
     try {
-      return await _download<Uint8List>(
+      return await _downloadSubscriptionBytes(
         url,
-        ResponseType.bytes,
+        maxBytes,
         via: directDio,
       );
     } catch (error) {
