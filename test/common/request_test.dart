@@ -230,7 +230,7 @@ void main() {
     test('checksum failure keeps an existing verified installer', () async {
       final destination = File('${directory.path}${Platform.pathSeparator}$name');
       await destination.writeAsString('previous trusted installer');
-      final failing = requestServing('$digest  ./$name\\n', utf8.encode('invalid payload'));
+      final failing = requestServing('$digest  ./$name\n', utf8.encode('invalid payload'));
 
       await expectLater(download(failing), throwsA(isA<ReleaseNotVerifiedException>()));
 
@@ -242,7 +242,7 @@ void main() {
       final destination = File('${directory.path}${Platform.pathSeparator}$name');
       await destination.writeAsString('previous installer');
 
-      final path = await download(requestServing('$digest  ./$name\\n', package));
+      final path = await download(requestServing('$digest  ./$name\n', package));
 
       expect(path, destination.path);
       expect(await destination.readAsBytes(), package);
@@ -255,7 +255,7 @@ void main() {
       final failing = Request()
         ..releaseDio.httpClientAdapter = _PathAdapter({
           '/$repository/releases/download/v1.2.3/${updateChecksumsName('v1.2.3')}':
-              () => ResponseBody.fromString('$digest  ./$name\\n', 200),
+              () => ResponseBody.fromString('$digest  ./$name\n', 200),
           '/$repository/releases/download/v1.2.3/$name': () =>
               ResponseBody.fromString('upstream failure', 503),
         });
