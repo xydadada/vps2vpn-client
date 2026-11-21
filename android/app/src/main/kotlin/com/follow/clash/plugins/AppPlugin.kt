@@ -324,6 +324,10 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
                 queryDownload(requireNotNull(call.argument<Number>("id")).toLong())
             }
 
+            "cancelDownload" -> reply(result) {
+                downloadManager.remove(requireNotNull(call.argument<Number>("id")).toLong()) > 0
+            }
+
             "clearDownloads" -> reply(result) {
                 clearDownloads()
                 true
