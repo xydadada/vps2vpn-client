@@ -164,9 +164,13 @@ void main() {
     (tester) async {
       final profile = _urlProfile();
       // A real zero-byte profile has an mtime; a missing file does not.
-      await File(
-        await appPath.getProfilePath(profile.id.toString()),
-      ).create(recursive: true);
+      // Real filesystem work must execute outside WidgetTester's fake-async
+      // clock, otherwise the awaiting test can hang without ever pumping.
+      await tester.runAsync(() async {
+        await File(
+          await appPath.getProfilePath(profile.id.toString()),
+        ).create(recursive: true);
+      });
       await pumpEditProfile(tester, profile: profile);
       final row = find.widgetWithText(
         DecorationListItem,
