@@ -226,7 +226,10 @@ void main() {
       return container;
     }
 
-    testWidgets('reports a file that fails its check', (tester) async {
+    testWidgets('failed update keeps a previously verified installer', (tester) async {
+      final verified = File('${home.path}/update/$asset');
+      await verified.create(recursive: true);
+      await verified.writeAsString('old trusted installer');
       request.releaseDio.httpClientAdapter = _ReleaseAdapter(
         sums: '$digest  ./$asset\n',
         asset: () => ResponseBody.fromBytes(utf8.encode('tampered'), 200),
@@ -245,7 +248,7 @@ void main() {
         findsOneWidget,
       );
       expect(container.read(updateDownloadStateProvider), isNull);
-      expect(File('${home.path}/update/$asset').existsSync(), isFalse);
+      expect(await verified.readAsString(), 'old trusted installer');
 
       await tapCancel(tester);
     });
@@ -278,7 +281,10 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
     });
 
-    testWidgets('cancelling the staged download reports nothing', (tester) async {
+    testWidgets('cancelling the staged download keeps prior installer', (tester) async {
+      final verified = File('${home.path}/update/$asset');
+      await verified.create(recursive: true);
+      await verified.writeAsString('old trusted installer');
       final updateDir = Directory('${home.path}/update');
       bool hasStagingFile() =>
           updateDir.existsSync() &&
@@ -300,7 +306,7 @@ void main() {
       await settleUntil(tester, hasStagingFile);
       expect(hasStagingFile(), isTrue,
           reason: 'update bytes must be staged before verification');
-      expect(File('${home.path}/update/$asset').existsSync(), isFalse);
+      expect(await verified.readAsString(), 'old trusted installer');
       container.read(commonActionProvider.notifier).cancelUpdateDownload();
       await settleUntil(
         tester,
@@ -310,8 +316,12 @@ void main() {
 
       expect(container.read(updateDownloadStateProvider), isNull);
       expect(shows('Update failed'), isFalse);
-      expect(updateDir.existsSync() ? updateDir.listSync() : const [], isEmpty,
-          reason: 'cancellation must not leave staged installer files');
+      expect(await verified.readAsString(), 'old trusted installer');
+      expect(
+        updateDir.listSync().whereType<Directory>(),
+        isEmpty,
+        reason: 'cancellation must not leave staged installer directories',
+      );
     });
   });
 
