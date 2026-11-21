@@ -313,7 +313,8 @@ class ProfilesAction extends _$ProfilesAction {
     bool showLoading = false,
     bool reapply = true,
   }) {
-    final previous = _profileUpdates[profile.id];
+    // Requests for the same profile can race. Do not serialize behind a
+    // stalled validator: the newer write-ownership claim supersedes the old.
     final completer = Completer<void>();
     _profileUpdates[profile.id] = completer.future;
     final operation = showLoading
@@ -321,24 +322,15 @@ class ProfilesAction extends _$ProfilesAction {
         : null;
     return () async {
       void Function() releaseClaim = () {};
+      bool Function()? isCurrent;
       try {
-        if (previous != null) {
-          await previous.catchError((Object _) {});
-        }
-        final existing = ref.read(profilesProvider).getProfile(profile.id);
-        if (existing == null ||
-            existing.type != ProfileType.url ||
-            !ref.mounted) {
-          return;
-        }
-        final sourceChanged =
-            existing.url != profile.url ||
-            existing.ageSecretKey != profile.ageSecretKey;
-        final target = sourceChanged ? profile : existing;
-        if (sourceChanged) {
-          ref.read(profilesProvider.notifier).put(profile);
-        }
+        if (!ref.mounted) return;
+        final target = ref.read(profilesProvider).getProfile(profile.id);
+        if (target == null || target.type != ProfileType.url) return;
+        // A scheduled refresh receives a snapshot that can be stale by the
+        // time it runs. Never overwrite the stored URL or encryption key.
         final claim = _claimProfileWrite(target);
+        isCurrent = claim.isCurrent;
         releaseClaim = claim.release;
         final updated = await target.update(
           validate: (path, key) => _core.validateProfile(path, key),
@@ -383,6 +375,11 @@ class ProfilesAction extends _$ProfilesAction {
             ),
           );
         }
+      } catch (_) {
+        // A superseded or deleted profile must not show an obsolete network
+        // error. Current requests still propagate their failures to callers.
+        if (isCurrent?.call() == false) return;
+        rethrow;
       } finally {
         releaseClaim();
         if (identical(_profileUpdates[profile.id], completer.future)) {
