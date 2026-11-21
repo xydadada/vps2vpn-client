@@ -133,7 +133,9 @@ void main() {
         enabled: true,
         client: VpsClientRelease(
           version: v,
-          url: Uri.parse('https://example.com/setup.exe'),
+          url: Uri.parse(
+            'https://example.com/vps2vpn-$v-${Platform.operatingSystem}-amd64-portable.zip',
+          ),
         ),
       ),
     );
