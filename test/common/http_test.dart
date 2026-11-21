@@ -139,7 +139,7 @@ void main() {
     );
   });
 
-  test('actual proxy 407 challenge receives raw punctuation credentials', () async {
+  test('authenticated streaming PUT sends raw credentials and preserves body', () async {
     final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => proxy.close(force: true));
     const username = 'user@home';
@@ -154,6 +154,7 @@ void main() {
     final expected = 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
     var challenges = 0;
     final received = <String>[];
+    final uploaded = <int>[];
     proxy.listen((request) async {
       final credential = request.headers.value(HttpHeaders.proxyAuthorizationHeader);
       if (credential == null) {
@@ -163,6 +164,9 @@ void main() {
           ..headers.set(HttpHeaders.proxyAuthenticateHeader, 'Basic realm="local-test"');
       } else {
         received.add(credential);
+        await for (final chunk in request) {
+          uploaded.addAll(chunk);
+        }
         request.response.statusCode = credential == expected
             ? HttpStatus.ok
             : HttpStatus.forbidden;
@@ -171,13 +175,17 @@ void main() {
     });
     final client = FlClashHttpOverrides(container).createHttpClient(null);
     addTearDown(() => client.close(force: true));
-    final response = await (await client.getUrl(
+    final request = await client.openUrl(
+      'PUT',
       Uri.parse('http://example.invalid/proxy-check'),
-    )).close();
+    );
+    request.add([1, 2, 3, 4, 5]);
+    final response = await request.close();
     await response.drain<void>();
     expect(response.statusCode, HttpStatus.ok);
-    expect(challenges, 1);
+    expect(challenges, 0);
     expect(received, [expected]);
+    expect(uploaded, [1, 2, 3, 4, 5]);
   });
 
   test('bypasses the proxy when the core is not running', () {
