@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fl_clash/common/app_update.dart';
 import 'package:fl_clash/common/release_asset.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -148,6 +150,58 @@ void main() {
       withClient('1.1.0'),
     );
     expect(_texts(), findsNothing);
+  });
+
+  test('release links without a matching signed asset remain browser links', () {
+    final page = Uri.parse(
+      'https://github.com/xydadada/vps2vpn-client/releases/latest',
+    );
+    expect(
+      vpsPlatformInstaller(VpsClientRelease(version: '1.1.0', url: page)),
+      isNull,
+    );
+    final other = Platform.isWindows ? 'android' : 'windows';
+    final otherFile = Uri.parse(
+      'https://example.com/vps2vpn-1.1.0-$other-amd64-setup.exe',
+    );
+    expect(
+      vpsPlatformInstaller(VpsClientRelease(
+        version: '1.1.0',
+        url: otherFile,
+        files: {other: otherFile},
+      )),
+      isNull,
+    );
+    final direct = Uri.parse(
+      'https://example.com/vps2vpn-1.1.0-${Platform.operatingSystem}-amd64-portable.zip',
+    );
+    expect(
+      vpsPlatformInstaller(VpsClientRelease(version: '1.1.0', url: direct)),
+      direct,
+    );
+  });
+
+  testWidgets('no platform installer offers the release page, not an update', (
+    tester,
+  ) async {
+    resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+    final page = Uri.parse(
+      'https://github.com/xydadada/vps2vpn-client/releases/latest',
+    );
+    await _pump(
+      tester,
+      const VpsUpdateCard(currentVersion: '1.0.0'),
+      VpsMemberResult(
+        member: VpsMember(
+          name: 'Ann',
+          enabled: true,
+          client: VpsClientRelease(version: '1.1.0', url: page),
+        ),
+      ),
+    );
+    expect(find.text('Open downloads'), findsOneWidget);
+    expect(find.textContaining('No installer for this platform'), findsOneWidget);
+    expect(find.text('Update'), findsNothing);
   });
 
   test('installs by itself only what this build can run', () {
