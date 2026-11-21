@@ -288,7 +288,8 @@ class App {
         // the caller. Remove only this request, not other active downloads.
         try {
           await methodChannel.invokeMethod<bool>('cancelDownload', {'id': id});
-        } on PlatformException catch (error) {
+        } on Exception catch (error) {
+          // Cleanup must never mask the original failure or cancellation.
           commonPrint.log(
             'Unable to cancel system download: ${compactError(error)}',
             logLevel: LogLevel.warning,
