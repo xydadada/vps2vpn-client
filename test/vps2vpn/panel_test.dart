@@ -55,6 +55,20 @@ void main() {
     expect(VpsMember.fromJson({'expire_at': 0}).expireAt, isNull);
   });
 
+  test('malformed AI status timestamps never crash or render far-future dates', () {
+    for (final at in [double.nan, double.infinity, -1, 9000000000000, 'bad']) {
+      final status = VpsAiStatus.fromJson({
+        'summary': 'Offline result',
+        'at': at,
+      });
+      expect(status?.at, isNull, reason: 'bad timestamp: $at');
+    }
+    expect(
+      VpsAiStatus.fromJson({'at': 1893456000})?.at?.millisecondsSinceEpoch,
+      1893456000000,
+    );
+  });
+
   test('a published client is offered only when it is newer', () {
     final r = VpsClientRelease.fromJson({
       'version': 'v1.4.0',
