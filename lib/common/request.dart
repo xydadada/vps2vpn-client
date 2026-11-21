@@ -253,9 +253,40 @@ class Request {
 
 final request = Request();
 
+/// Maximum expanded bytes accepted from a subscription with missing
+/// Content-Encoding. The compressed body can be tiny despite a huge output.
+const maxUnlabeledSubscriptionBytes = 64 << 20;
+
+class _LimitedInflationSink implements Sink<List<int>> {
+  _LimitedInflationSink(this.limit);
+
+  final int limit;
+  final BytesBuilder output = BytesBuilder(copy: false);
+  int _written = 0;
+
+  @override
+  void add(List<int> chunk) {
+    if (chunk.length > limit - _written) {
+      throw StateError('Decompressed subscription exceeds $limit bytes');
+    }
+    _written += chunk.length;
+    output.add(chunk);
+  }
+
+  @override
+  void close() {}
+}
+
 /// Some subscription servers send a gzip or zlib body without saying so in
 /// Content-Encoding, which is the only signal dart:io decompresses on.
-Uint8List decompressUnlabeled(Uint8List bytes) {
+/// Bound decoded output *while inflating*, before collecting the entire body.
+Uint8List decompressUnlabeled(
+  Uint8List bytes, {
+  int maxOutputBytes = maxUnlabeledSubscriptionBytes,
+}) {
+  if (maxOutputBytes < 0) {
+    throw ArgumentError.value(maxOutputBytes, 'maxOutputBytes');
+  }
   final codec = switch (bytes) {
     [0x1f, 0x8b, ...] => gzip,
     [0x78, final flags, ...] when (0x78 << 8 | flags) % 31 == 0 => zlib,
@@ -264,8 +295,12 @@ Uint8List decompressUnlabeled(Uint8List bytes) {
   if (codec == null) {
     return bytes;
   }
+  final sink = _LimitedInflationSink(maxOutputBytes);
   try {
-    return Uint8List.fromList(codec.decode(bytes));
+    final decoder = codec.decoder.startChunkedConversion(sink);
+    decoder.add(bytes);
+    decoder.close();
+    return sink.output.takeBytes();
   } on FormatException {
     return bytes;
   }
