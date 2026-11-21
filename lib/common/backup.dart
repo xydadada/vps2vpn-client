@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:drift/drift.dart';
@@ -255,12 +254,6 @@ class _BoundedZipOutput extends OutputFileStream {
   void writeBytes(List<int> bytes, {int? length}) {
     _check(length ?? bytes.length);
     super.writeBytes(bytes, length: length);
-  }
-
-  @override
-  void writeRange(Uint8List bytes, int start, int end) {
-    _check(end - start);
-    super.writeRange(bytes, start, end);
   }
 }
 
