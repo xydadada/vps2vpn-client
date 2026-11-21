@@ -142,8 +142,11 @@ void main() {
     await tester.pump();
     expect(closed, isTrue);
     expect(canceled, isTrue);
-    final closing = body.close();
+    // The response subscription was cancelled above. On a
+    // single-subscription controller, close() can wait indefinitely for a
+    // listener to consume the done event after its only listener is gone.
+    // The actual regression is cancellation and deadline enforcement.
+    unawaited(body.close());
     await tester.pump();
-    await closing;
   });
 }
