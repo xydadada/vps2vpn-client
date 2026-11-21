@@ -641,11 +641,18 @@ class _ProfileCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
     final sub = profile.subscriptionInfo;
-    final used = sub == null ? 0 : sub.upload + sub.download;
+    // Profile headers are untrusted. Adding two int64 counters can wrap
+    // around on native Dart; saturate at the largest valid counter instead.
+    const maxCounter = 0x7fffffffffffffff;
+    final up = math.min(maxCounter, math.max(0, sub?.upload ?? 0));
+    final down = math.min(maxCounter, math.max(0, sub?.download ?? 0));
+    final used = down > maxCounter - up ? maxCounter : up + down;
     final total = sub?.total ?? 0;
     final ratio = total > 0 ? math.min(1.0, used / total) : 0.0;
     String? expire;
-    if (sub != null && sub.expire > 0) {
+    // Dart DateTime rejects epochs outside its supported range. Only
+    // display dates within the server's documented 0001..9999 window.
+    if (sub != null && sub.expire > 0 && sub.expire <= 253402300799) {
       final d = DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000);
       expire = tr(
         context,
