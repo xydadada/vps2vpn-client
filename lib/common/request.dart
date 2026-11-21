@@ -291,7 +291,7 @@ class _BoundedDecompressionSink implements Sink<List<int>> {
   @override
   void add(List<int> chunk) {
     if (chunk.length > limit - output.length) {
-      throw StateError('Decompressed subscription exceeds $limit bytes');
+      throw MessageException('Subscription exceeds the $limit-byte decompression limit');
     }
     output.add(chunk);
   }
