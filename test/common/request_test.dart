@@ -423,6 +423,33 @@ void main() {
       }
     });
 
+    test('bounds gzip and zlib inflation without losing valid output', () {
+      final expanded = List<int>.filled(16 * 1024, 0x41);
+      for (final codec in [gzip, zlib]) {
+        final body = Uint8List.fromList(codec.encode(expanded));
+        expect(body.length, lessThan(1024));
+
+        expect(
+          () => decompressUnlabeled(body, maxOutputBytes: 1024),
+          throwsStateError,
+        );
+        expect(
+          decompressUnlabeled(body, maxOutputBytes: expanded.length),
+          expanded,
+        );
+      }
+    });
+
+    test('rejects a negative expansion limit', () {
+      expect(
+        () => decompressUnlabeled(
+          Uint8List.fromList(gzip.encode(yaml)),
+          maxOutputBytes: -1,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test('leaves a plain body untouched', () {
       final body = Uint8List.fromList(yaml);
 
