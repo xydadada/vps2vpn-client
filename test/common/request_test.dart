@@ -423,6 +423,30 @@ void main() {
       }
     });
 
+    test('rejects gzip and zlib bodies that inflate past the byte limit', () {
+      for (final codec in [gzip, zlib]) {
+        final compressed = Uint8List.fromList(
+          codec.encode(List<int>.filled(2048, 65)),
+        );
+
+        expect(
+          () => decompressUnlabeled(compressed, maxOutputBytes: 128),
+          throwsA(isA<StateError>()),
+        );
+      }
+    });
+
+    test('accepts decoded bodies at the exact byte limit', () {
+      for (final codec in [gzip, zlib]) {
+        final compressed = Uint8List.fromList(codec.encode(yaml));
+
+        expect(
+          decompressUnlabeled(compressed, maxOutputBytes: yaml.length),
+          yaml,
+        );
+      }
+    });
+
     test('leaves a plain body untouched', () {
       final body = Uint8List.fromList(yaml);
 
