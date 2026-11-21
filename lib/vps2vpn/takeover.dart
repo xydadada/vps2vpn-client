@@ -156,7 +156,8 @@ Future<ProcessResult> _run(String executable, List<String> args) =>
 
 /// Other proxy apps running now. Empty off Windows or when tasklist fails.
 Future<List<VpsRival>> scanRivals({VpsRun run = _run}) async {
-  if (!Platform.isWindows) return const [];
+  // Injected test runners are safe to exercise on non-Windows CI.
+  if (!Platform.isWindows && identical(run, _run)) return const [];
   try {
     final r = await run('tasklist', ['/FO', 'CSV', '/NH']);
     if (r.exitCode != 0) return const [];
@@ -170,16 +171,24 @@ Future<List<VpsRival>> scanRivals({VpsRun run = _run}) async {
 Future<List<String>> quitRivals(
   List<VpsRival> rivals, {
   VpsRun run = _run,
+  bool Function()? isCurrent,
 }) async {
   if (rivals.isEmpty) return const [];
   if (_underTest && identical(run, _run)) return rivalNames(rivals);
-  for (final image in {for (final r in rivals) r.image}) {
+  bool canKill() => isCurrent == null || isCurrent();
+  if (!canKill()) return rivalNames(rivals);
+  // Kill ONLY the specific observed processes: /IM would also terminate
+  // newly launched or unrelated processes sharing the same executable name.
+  for (final pid in {for (final rival in rivals) rival.pid}) {
+    if (!canKill()) break; // disconnect/takeover disable cancels pending kills
+    if (pid <= 0) continue;
     try {
-      // /T takes the app's own core with it; /F because tray apps ignore a
-      // polite close (they hide to the tray instead).
-      await run('taskkill', ['/F', '/T', '/IM', image]);
+      // /T would also kill descendants that were never in the observed
+      // rival list, including unrelated processes launched by the app.
+      await run('taskkill', ['/F', '/PID', '$pid']);
     } catch (_) {}
   }
+  if (!canKill()) return rivalNames(rivals);
   // Give Windows a moment to release their ports and TUN adapters.
   await Future<void>.delayed(const Duration(milliseconds: 600));
   return rivalNames(await scanRivals(run: run));
@@ -314,7 +323,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
   final names = rivalNames(rivals);
   var still = const <String>[];
   if (act && rivals.isNotEmpty) {
-    still = await quitRivals(rivals);
+    still = await quitRivals(rivals, isCurrent: canAct);
   }
   int? from;
   int? to;
