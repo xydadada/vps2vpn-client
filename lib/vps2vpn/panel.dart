@@ -162,7 +162,7 @@ class VpsMember {
     this.expireAt,
     this.ai,
     this.client,
-  }) : unlimited = unlimited ?? (quotaGb <= 0);
+  }) : unlimited = unlimited ?? !(quotaGb > 0 && quotaGb <= 1e6);
 
   final String name;
   final bool enabled;
@@ -200,8 +200,14 @@ class VpsMember {
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
     final rawQuotaGb = json['quota_gb'];
+    // Match the server's supported 0..1e6 GiB quota range. A finite but
+    // astronomic number (1e308) is not a usable finite allowance and must
+    // never render as a zero-byte limited plan or produce Infinity.
     final unlimited =
-        rawQuotaGb is! num || !rawQuotaGb.isFinite || rawQuotaGb <= 0;
+        rawQuotaGb is! num ||
+        !rawQuotaGb.isFinite ||
+        rawQuotaGb <= 0 ||
+        rawQuotaGb > 1e6;
     final quota = json['quota_eff'] ?? rawQuotaGb;
     return VpsMember(
       name: '${json['name'] ?? ''}',
