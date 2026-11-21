@@ -334,6 +334,103 @@ void main() {
       );
       expect((proxied.calls, direct.calls), (1, 1));
     });
+    test('rejects streamed bytes beyond the cap despite a small header', () async {
+      final (:request, :proxied, :direct) = routes(
+        proxied: (_) => ResponseBody(
+          Stream.fromIterable([
+            Uint8List.fromList([1, 2, 3]),
+            Uint8List.fromList([4, 5, 6]),
+          ]),
+          200,
+          headers: {HttpHeaders.contentLengthHeader: ['1']},
+        ),
+        direct: _status(200, 'must not retry'),
+      );
+
+      await expectLater(
+        request.getSubscriptionResponse(url, maxBytes: 4),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect((proxied.calls, direct.calls), (1, 0));
+    });
+
+    test('preserves headers and exact-size chunked subscription', () async {
+      final (:request, :proxied, :direct) = routes(
+        proxied: (_) => ResponseBody(
+          Stream.fromIterable([
+            Uint8List.fromList([1, 2]),
+            Uint8List.fromList([3, 4]),
+          ]),
+          200,
+          headers: {
+            HttpHeaders.contentLengthHeader: ['4'],
+            'subscription-userinfo': ['upload=1; download=2'],
+          },
+        ),
+        direct: _status(200, 'must not retry'),
+      );
+
+      final response = await request.getSubscriptionResponse(url, maxBytes: 4);
+      expect(response.data, [1, 2, 3, 4]);
+      expect(response.headers.value('subscription-userinfo'), 'upload=1; download=2');
+      expect((proxied.calls, direct.calls), (1, 0));
+    });
+
+    test('enforces the same byte limit on the direct fallback', () async {
+      final (:request, :proxied, :direct) = routes(
+        proxied: _status(502),
+        direct: (_) => ResponseBody.fromBytes(List<int>.filled(6, 0x41), 200),
+      );
+
+      await expectLater(
+        request.getSubscriptionResponse(url, maxBytes: 4),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect((proxied.calls, direct.calls), (1, 1));
+    });
+
+    test('a negative byte limit fails without performing a request', () async {
+      final (:request, :proxied, :direct) = routes(
+        proxied: _status(200),
+        direct: _status(200),
+      );
+      await expectLater(
+        request.getSubscriptionResponse(url, maxBytes: -1),
+        throwsArgumentError,
+      );
+      expect((proxied.calls, direct.calls), (0, 0));
+    });
+
+    testWidgets('a stalled subscription body releases the stream at timeout', (
+      tester,
+    ) async {
+      var cancelled = false;
+      final stream = StreamController<Uint8List>(
+        onCancel: () => cancelled = true,
+      );
+      addTearDown(stream.close);
+      final (:request, :proxied, :direct) = routes(
+        proxied: (_) => ResponseBody(stream.stream, 200),
+        direct: _status(200),
+        running: false,
+      );
+      final pending = request.getSubscriptionResponse(url, maxBytes: 4);
+      final assertion = expectLater(
+        pending,
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.receiveTimeout,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(downloadTimeoutDuration + const Duration(seconds: 1));
+      await assertion;
+      expect(cancelled, isTrue);
+      expect((proxied.calls, direct.calls), (1, 0));
+    });
   });
 
   group('isRouteFailure', () {
