@@ -79,7 +79,9 @@ Stream<Uri> androidLinks([MethodChannel channel = _linkChannel]) {
     },
     onCancel: () {
       channel.setMethodCallHandler(null);
-      return controller.close();
+      // With the only listener cancelled, awaiting close() can wait forever
+      // for an undeliverable done event. Mark closed without blocking cancel.
+      unawaited(controller.close());
     },
   );
   return controller.stream;
