@@ -64,8 +64,8 @@ Uri? vpsPlatformInstaller(VpsClientRelease release) {
       : null;
 }
 
-/// A missing platform asset may fall back to a page or to another OS's binary.
-bool vpsPanelHasReleasePage(VpsClientRelease release) =>
+/// Unversioned fallback URLs are opened externally, never verified as an installer.
+bool vpsPanelHasExternalLink(VpsClientRelease release) =>
     vpsUpdateFileVersion(_fileName(release.url)) == null;
 
 // Versions fetched automatically in this run: one try each, so a panel that
@@ -91,7 +91,7 @@ Future<void> vpsDownloadPanelUpdate(
   if (url == null) {
     // Never download or open another platform's installer as this update.
     if (!auto) {
-      if (vpsPanelHasReleasePage(release)) {
+      if (vpsPanelHasExternalLink(release)) {
         try {
           if (!await launchUrl(release.url)) {
             throw const HttpException('Unable to open update link');
