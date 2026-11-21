@@ -158,7 +158,7 @@ void main() {
     );
     final pageRelease = VpsClientRelease(version: '1.1.0', url: page);
     expect(vpsPlatformInstaller(pageRelease), isNull);
-    expect(vpsPanelHasReleasePage(pageRelease), isTrue);
+    expect(vpsPanelHasExternalLink(pageRelease), isTrue);
     final other = Platform.isWindows ? 'android' : 'windows';
     final otherFile = Uri.parse(
       'https://example.com/vps2vpn-1.1.0-$other-amd64-setup.exe',
@@ -169,7 +169,7 @@ void main() {
       files: {other: otherFile},
     );
     expect(vpsPlatformInstaller(otherRelease), isNull);
-    expect(vpsPanelHasReleasePage(otherRelease), isFalse);
+    expect(vpsPanelHasExternalLink(otherRelease), isFalse);
     final direct = Uri.parse(
       'https://example.com/vps2vpn-1.1.0-${Platform.operatingSystem}-amd64-portable.zip',
     );
@@ -179,7 +179,7 @@ void main() {
     );
   });
 
-  testWidgets('no platform installer offers the release page, not an update', (
+  testWidgets('no platform installer offers an external link, not an update', (
     tester,
   ) async {
     resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
@@ -197,7 +197,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Open downloads'), findsOneWidget);
+    expect(find.text('Open link'), findsOneWidget);
     expect(find.textContaining('No installer for this platform'), findsOneWidget);
     expect(find.text('Update'), findsNothing);
 
