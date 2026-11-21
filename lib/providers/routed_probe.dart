@@ -243,7 +243,10 @@ mixin RoutedProbe<K, V>
 
   void _launch() {
     _scheduled = false;
-    if (!ref.mounted || !_route.live || !ref.read(appVisibleProvider)) {
+    if (!ref.mounted ||
+        !_route.live ||
+        !_route.synced ||
+        !ref.read(appVisibleProvider)) {
       return;
     }
     final route = _route;
@@ -548,7 +551,10 @@ mixin RoutedProbe<K, V>
       _reverify = true;
       return;
     }
-    if (!ref.mounted || !_route.live || !ref.read(appVisibleProvider)) {
+    if (!ref.mounted ||
+        !_route.live ||
+        !_route.synced ||
+        !ref.read(appVisibleProvider)) {
       return;
     }
     final stamps = <K, RouteStamp>{};
