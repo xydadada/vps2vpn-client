@@ -177,6 +177,14 @@ void main() {
       vpsPlatformInstaller(VpsClientRelease(version: '1.1.0', url: direct)),
       direct,
     );
+    expect(
+      vpsPlatformInstaller(VpsClientRelease(
+        version: '1.1.0',
+        url: direct,
+        files: {other: otherFile},
+      )),
+      direct,
+    );
   });
 
   testWidgets('no platform installer offers an external link, not an update', (
