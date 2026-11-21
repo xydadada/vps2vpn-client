@@ -264,6 +264,9 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
       final output = _BoundedOutputFileStream(outPath, file.size);
       try {
         file.writeContent(output);
+      } on ArchiveLimitException {
+        // The upgraded decoder rejects ZIP inflation beyond declared size.
+        throw const BackupException(BackupFailure.invalid);
       } finally {
         await output.close();
       }
