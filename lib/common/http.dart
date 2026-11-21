@@ -101,29 +101,26 @@ class FlClashHttpOverrides extends HttpOverrides {
     client.badCertificateCallback = (certificate, host, port) =>
         allowBadCertificate(_container, certificate, host, port);
     client.findProxy = (url) => findProxyFor(_container, url);
-    client.authenticateProxy = (host, port, scheme, realm) async {
-      // The PROXY directive is not a URI: encoded userinfo is passed
-      // literally to the proxy instead of percent-decoded by HttpClient.
-      if (host != '127.0.0.1' || scheme.toLowerCase() != 'basic') return false;
-      final mixedPort = _container.read(
-        patchClashConfigProvider.select((state) => state.mixedPort),
-      );
-      final authentication = _container.read(
-        networkSettingProvider.select((state) => state.authentication),
-      );
-      if (port != mixedPort ||
-          !authentication.enable ||
-          authentication.username.isEmpty) {
-        return false;
-      }
+    // PAC proxy strings do not percent-decode userinfo. Preinstall Basic
+    // credentials to preserve upload bodies: a 407 retry discards the body
+    // of an already streamed PUT in Dart's HttpClient implementation.
+    final mixedPort = _container.read(
+      patchClashConfigProvider.select((state) => state.mixedPort),
+    );
+    final authentication = _container.read(
+      networkSettingProvider.select((state) => state.authentication),
+    );
+    if (authentication.enable && authentication.username.isNotEmpty) {
       client.addProxyCredentials(
-        host,
-        port,
-        realm ?? '',
-        HttpClientBasicCredentials(authentication.username, authentication.password),
+        '127.0.0.1',
+        mixedPort,
+        '',
+        HttpClientBasicCredentials(
+          authentication.username,
+          authentication.password,
+        ),
       );
-      return true;
-    };
+    }
     return client;
   }
 }
