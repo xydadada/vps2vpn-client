@@ -304,6 +304,7 @@ class VpsUpdateCard extends ConsumerWidget {
     final asset = vpsPlatformInstaller(release);
     final installs = asset != null &&
         vpsSelfInstallable(asset.pathSegments.lastOrNull ?? '');
+    final hasPage = asset == null && vpsPanelHasReleasePage(release);
     final tag = 'v${release.version}';
     final ready = download is UpdateReady && download.tag == tag;
     final busy = download is UpdateDownloading;
@@ -336,11 +337,17 @@ class VpsUpdateCard extends ConsumerWidget {
                   Text(
                     release.notes ??
                         (asset == null
-                            ? tr(
-                                context,
-                                '当前平台暂无安装包，查看发布页面',
-                                'No installer for this platform; open the release page',
-                              )
+                            ? hasPage
+                                ? tr(
+                                    context,
+                                    '当前平台暂无安装包，查看发布页面',
+                                    'No installer for this platform; open the release page',
+                                  )
+                                : tr(
+                                    context,
+                                    '当前平台没有安装包，请联系管理员',
+                                    'No installer for this platform; ask the owner to publish one',
+                                  )
                             : installs
                             ? tr(
                                 context,
@@ -367,14 +374,16 @@ class VpsUpdateCard extends ConsumerWidget {
                   : installs
                   ? tr(context, '更新', 'Update')
                   : asset == null
-                  ? tr(context, '查看下载页', 'Open downloads')
+                  ? hasPage
+                      ? tr(context, '查看下载页', 'Open downloads')
+                      : tr(context, '暂无安装包', 'Unavailable')
                   : tr(context, '下载', 'Download'),
               filled: true,
               onTap: ready
                   ? () => unawaited(
                       ref.read(commonActionProvider.notifier).installUpdate(),
                     )
-                  : busy
+                  : busy || (asset == null && !hasPage)
                   ? null
                   : () => unawaited(
                       vpsDownloadPanelUpdate(ref, release, current: current),
