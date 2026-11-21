@@ -12,6 +12,7 @@ import 'package:fl_clash/common/release_asset.dart';
 import 'package:fl_clash/common/request.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' show join;
 import 'package:riverpod/riverpod.dart';
 
 class _StalledHttpClient extends Fake implements HttpClient {
@@ -238,7 +239,9 @@ void main() {
       );
 
       expect(await existing.readAsBytes(), package);
-      expect(directory.listSync().map((entity) => entity.path), [existing.path]);
+      expect(directory.listSync().map((entity) => entity.path).toList(), [
+        existing.path,
+      ]);
     });
 
     test('replaces a stale installer only after verifying new bytes', () async {
@@ -248,7 +251,9 @@ void main() {
 
       expect(await download(request), existing.path);
       expect(await existing.readAsBytes(), package);
-      expect(directory.listSync().map((entity) => entity.path), [existing.path]);
+      expect(directory.listSync().map((entity) => entity.path).toList(), [
+        existing.path,
+      ]);
     });
 
     test('refuses an asset the listing does not name', () async {
