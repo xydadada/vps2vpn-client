@@ -14,6 +14,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
+import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart' show BannerLevel;
@@ -46,9 +47,22 @@ bool vpsSelfInstallable(String fileName) {
 String _fileName(Uri url) =>
     url.pathSegments.isEmpty ? '' : url.pathSegments.last;
 
-/// The panel's installer for this platform.
+/// The configured download link, including a web page as the fallback.
 Uri vpsReleaseDownload(VpsClientRelease release) =>
     release.downloadFor(Platform.operatingSystem);
+
+/// Only an actual installer for this OS belongs in the signature downloader.
+Uri? vpsPlatformInstaller(VpsClientRelease release) {
+  final file = release.files[Platform.operatingSystem];
+  if (file != null) return file;
+  if (release.files.isNotEmpty) return null;
+  final name = _fileName(release.url);
+  if (vpsUpdateFileVersion(name) == null) return null;
+  return name.toLowerCase().contains('-${Platform.operatingSystem}-') ||
+          vpsSelfInstallable(name)
+      ? release.url
+      : null;
+}
 
 // Versions fetched automatically in this run: one try each, so a panel that
 // serves a broken or unsigned file is not downloaded again every few hours.
@@ -69,7 +83,12 @@ Future<void> vpsDownloadPanelUpdate(
   required String current,
   bool auto = false,
 }) async {
-  final url = vpsReleaseDownload(release);
+  final url = vpsPlatformInstaller(release);
+  if (url == null) {
+    // The panel's fallback may be a release page or another OS's installer.
+    if (!auto) await launchUrl(release.url);
+    return;
+  }
   final install = vpsSelfInstallable(_fileName(url));
   final download = ref.read(updateDownloadStateProvider.notifier);
   final tag = 'v${release.version}';
@@ -191,7 +210,8 @@ Future<void> vpsAutoUpdateCheck(WidgetRef ref) async {
         .timeout(const Duration(minutes: 1));
     final release = result?.member?.client;
     if (release == null || !release.newerThan(current)) return;
-    if (!vpsSelfInstallable(_fileName(vpsReleaseDownload(release)))) return;
+    final installer = vpsPlatformInstaller(release);
+    if (installer == null || !vpsSelfInstallable(_fileName(installer))) return;
     if (!_autoTried.add(release.version)) return;
     await vpsDownloadPanelUpdate(ref, release, current: current, auto: true);
   } catch (error) {
