@@ -228,8 +228,8 @@ void main() {
 
     testWidgets('failed update keeps a previously verified installer', (tester) async {
       final verified = File('${home.path}/update/$asset');
-      await verified.create(recursive: true);
-      await verified.writeAsString('old trusted installer');
+      verified.createSync(recursive: true);
+      verified.writeAsStringSync('old trusted installer');
       request.releaseDio.httpClientAdapter = _ReleaseAdapter(
         sums: '$digest  ./$asset\n',
         asset: () => ResponseBody.fromBytes(utf8.encode('tampered'), 200),
@@ -248,7 +248,7 @@ void main() {
         findsOneWidget,
       );
       expect(container.read(updateDownloadStateProvider), isNull);
-      expect(await verified.readAsString(), 'old trusted installer');
+      expect(verified.readAsStringSync(), 'old trusted installer');
 
       await tapCancel(tester);
     });
@@ -283,8 +283,8 @@ void main() {
 
     testWidgets('cancelling the staged download keeps prior installer', (tester) async {
       final verified = File('${home.path}/update/$asset');
-      await verified.create(recursive: true);
-      await verified.writeAsString('old trusted installer');
+      verified.createSync(recursive: true);
+      verified.writeAsStringSync('old trusted installer');
       final updateDir = Directory('${home.path}/update');
       bool hasStagingFile() =>
           updateDir.existsSync() &&
@@ -306,7 +306,7 @@ void main() {
       await settleUntil(tester, hasStagingFile);
       expect(hasStagingFile(), isTrue,
           reason: 'update bytes must be staged before verification');
-      expect(await verified.readAsString(), 'old trusted installer');
+      expect(verified.readAsStringSync(), 'old trusted installer');
       container.read(commonActionProvider.notifier).cancelUpdateDownload();
       await settleUntil(
         tester,
@@ -316,7 +316,7 @@ void main() {
 
       expect(container.read(updateDownloadStateProvider), isNull);
       expect(shows('Update failed'), isFalse);
-      expect(await verified.readAsString(), 'old trusted installer');
+      expect(verified.readAsStringSync(), 'old trusted installer');
       expect(
         updateDir.listSync().whereType<Directory>(),
         isEmpty,
