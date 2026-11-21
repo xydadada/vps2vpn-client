@@ -198,7 +198,7 @@ void main() {
       ),
     );
     expect(find.text('Open link'), findsOneWidget);
-    expect(find.textContaining('No installer for this platform'), findsOneWidget);
+    expect(find.textContaining('No signed installer for this platform'), findsOneWidget);
     expect(find.text('Update'), findsNothing);
 
     final other = Platform.isWindows ? 'android' : 'windows';
