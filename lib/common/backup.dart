@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:drift/drift.dart';
@@ -230,6 +231,39 @@ Future<MigrationData> readBackupArchive({
 const _maxBackupEntries = 2000;
 const _maxBackupUncompressedBytes = 256 * 1024 * 1024;
 
+// archive 4.3 may inflate beyond a ZIP entry's declared size. Stop the write,
+// not just the restore, before an untrusted archive can fill the device.
+class _BoundedZipOutput extends OutputFileStream {
+  _BoundedZipOutput(String path, this.maxBytes)
+      : super.withFileHandle(FileHandle(path, mode: FileAccess.write));
+
+  final int maxBytes;
+
+  void _check(int bytes) {
+    if (bytes < 0 || bytes > maxBytes - length) {
+      throw const BackupException(BackupFailure.invalid);
+    }
+  }
+
+  @override
+  void writeByte(int value) {
+    _check(1);
+    super.writeByte(value);
+  }
+
+  @override
+  void writeBytes(List<int> bytes, {int? length}) {
+    _check(length ?? bytes.length);
+    super.writeBytes(bytes, length: length);
+  }
+
+  @override
+  void writeRange(Uint8List bytes, int start, int end) {
+    _check(end - start);
+    super.writeRange(bytes, start, end);
+  }
+}
+
 Future<void> _extract(String archivePath, String stagingDirPath) async {
   await Directory(stagingDirPath).create(recursive: true);
   final input = InputFileStream(archivePath);
@@ -260,7 +294,7 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
         throw const BackupException(BackupFailure.invalid);
       }
       await Directory(dirname(outPath)).create(recursive: true);
-      final output = OutputFileStream(outPath);
+      final output = _BoundedZipOutput(outPath, file.size);
       try {
         file.writeContent(output);
       } finally {
