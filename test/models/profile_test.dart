@@ -29,6 +29,35 @@ void main() {
       expect(info.expire, 0);
     });
 
+    test('rejects impossible calendar epochs before DateTime conversion', () {
+      for (final epoch in [9000000000000, 9223372036854775807, -1, 0]) {
+        final sub = SubscriptionInfo(
+          expire: epoch,
+        );
+        expect(sub.expireDate, isNull, reason: 'epoch: $epoch');
+      }
+      final accepted = SubscriptionInfo.formHString(
+        'expire=1893456000',
+      );
+      expect(accepted.expireDate?.millisecondsSinceEpoch, 1893456000000);
+    });
+
+    test('two maximum counters and negative counters never wrap usage', () {
+      const huge = 0x7fffffffffffffff;
+      const saturated = SubscriptionInfo(
+        upload: huge,
+        download: huge,
+        total: 100,
+      );
+      expect(saturated.usage, 1.0);
+      const withNegative = SubscriptionInfo(
+        upload: -50,
+        download: 20,
+        total: 100,
+      );
+      expect(withNegative.usage, 0.2);
+    });
+
     test('skips empty and malformed fields instead of throwing', () {
       final info = SubscriptionInfo.formHString(
         'upload=10;; download; =5; total=100;',
