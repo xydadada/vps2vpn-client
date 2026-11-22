@@ -238,8 +238,25 @@ Future<bool> portFree(int port) async {
       return false;
     }
   }
+  // An IPv6 holder ([::1], v6-only [::]) passes the IPv4 binds above.
+  for (final address in [
+    InternetAddress.loopbackIPv6,
+    InternetAddress.anyIPv6,
+  ]) {
+    try {
+      final socket = await ServerSocket.bind(address, port, v6Only: true);
+      await socket.close();
+    } on SocketException catch (e) {
+      if (_noIpv6.contains(e.osError?.errorCode)) continue;
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
   return true;
 }
+
+const _noIpv6 = {10047, 10049, 97, 99, 47, 49};
 
 /// [preferred] when it is free, else the first free port of our own range.
 Future<int> pickPort(
