@@ -52,54 +52,57 @@ class VpsShell extends StatelessWidget {
         fontFamilyFallback: vpsFontFallback,
       ),
       child: VpsBackdrop(
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final wide = c.maxWidth >= 760;
-            return ValueListenableBuilder<int>(
-              valueListenable: vpsTab,
-              builder: (context, tab, _) {
-                final body = AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 260),
-                  switchInCurve: Curves.easeOutCubic,
-                  // Pages fill the area and start at the top, short or long.
-                  layoutBuilder: (current, previous) => Stack(
-                    fit: StackFit.expand,
-                    children: [...previous, ?current],
-                  ),
-                  transitionBuilder: (child, a) => FadeTransition(
-                    opacity: a,
-                    child: SlideTransition(
-                      position: Tween(
-                        begin: const Offset(0, 0.015),
-                        end: Offset.zero,
-                      ).animate(a),
-                      child: child,
+        // Pages and the tab bar keep clear of Android's system bars.
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, c) {
+              final wide = c.maxWidth >= 760;
+              return ValueListenableBuilder<int>(
+                valueListenable: vpsTab,
+                builder: (context, tab, _) {
+                  final body = AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    switchInCurve: Curves.easeOutCubic,
+                    // Pages fill the area and start at the top, short or long.
+                    layoutBuilder: (current, previous) => Stack(
+                      fit: StackFit.expand,
+                      children: [...previous, ?current],
                     ),
-                  ),
-                  child: KeyedSubtree(key: ValueKey(tab), child: _pages[tab]),
-                );
-                if (wide) {
-                  return Row(
+                    transitionBuilder: (child, a) => FadeTransition(
+                      opacity: a,
+                      child: SlideTransition(
+                        position: Tween(
+                          begin: const Offset(0, 0.015),
+                          end: Offset.zero,
+                        ).animate(a),
+                        child: child,
+                      ),
+                    ),
+                    child: KeyedSubtree(key: ValueKey(tab), child: _pages[tab]),
+                  );
+                  if (wide) {
+                    return Row(
+                      children: [
+                        _SideNav(tab: tab),
+                        Expanded(child: body),
+                      ],
+                    );
+                  }
+                  return Stack(
                     children: [
-                      _SideNav(tab: tab),
-                      Expanded(child: body),
+                      Positioned.fill(child: body),
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        bottom: 16,
+                        child: _BottomNav(tab: tab),
+                      ),
                     ],
                   );
-                }
-                return Stack(
-                  children: [
-                    Positioned.fill(child: body),
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 16,
-                      child: _BottomNav(tab: tab),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
+                },
+              );
+            },
+          ),
         ),
       ),
     );
