@@ -12,6 +12,7 @@ import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 String _ago(BuildContext context, DateTime at) {
   final d = DateTime.now().difference(at);
@@ -244,6 +245,9 @@ class VpsAccountCard extends ConsumerWidget {
         ? null
         : vpsExpiryText(context, m.expireAt!);
     final block = vpsAccountBlock(result);
+    final page = vpsMemberPage(
+      ref.watch(currentProfileProvider.select((p) => p?.url ?? '')),
+    );
     return _frame(
       p,
       color: block != null ? p.bad : p.good,
@@ -259,10 +263,31 @@ class VpsAccountCard extends ConsumerWidget {
       progress: m.unlimited
           ? null
           : (quota > 0 ? (m.used / quota).clamp(0.0, 1.0) : 1.0),
-      action: VpsButton(
-        label: state.isLoading ? l10n.loading : l10n.update,
-        icon: VpsIcon.refresh,
-        onTap: state.isLoading ? null : () => ref.invalidate(vpsMemberProvider),
+      action: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          VpsButton(
+            label: state.isLoading ? l10n.loading : l10n.update,
+            icon: VpsIcon.refresh,
+            onTap: state.isLoading
+                ? null
+                : () => ref.invalidate(vpsMemberProvider),
+          ),
+          // Asking for more data and inviting a friend live on the panel's
+          // member centre; open it in the browser.
+          if (page != null)
+            VpsButton(
+              key: const ValueKey('vps-member-centre'),
+              label: tr(context, '打开会员中心', 'Open member centre'),
+              icon: VpsIcon.me,
+              filled: block == VpsAccountBlock.quota ||
+                  block == VpsAccountBlock.expired,
+              onTap: () => unawaited(
+                launchUrl(page, mode: LaunchMode.externalApplication),
+              ),
+            ),
+        ],
       ),
     );
   }

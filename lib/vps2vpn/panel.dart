@@ -48,6 +48,15 @@ Uri? vpsApiBase(String subUrl) {
   );
 }
 
+/// The member centre for a vps2vpn subscription link, else null: the panel
+/// serves it at `<sub>/` over HTTPS (asking for more data, inviting a
+/// friend). The token in the path signs the member in.
+Uri? vpsMemberPage(String subUrl) {
+  final base = vpsApiBase(subUrl);
+  if (base == null) return null;
+  return base.replace(pathSegments: [...base.pathSegments.take(2), '']);
+}
+
 // Dart DateTime supports at most +/- 8,640,000,000,000,000 ms from epoch.
 // Convert only finite in-range *seconds* from remote panel JSON. One corrupt
 // optional timestamp must not make the entire member response unusable.

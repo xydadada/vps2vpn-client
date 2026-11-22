@@ -27,6 +27,15 @@ void main() {
       expect(vpsApiBase('https://example.com/s/$_tok/extra'), isNull);
       expect(vpsApiBase('clash://install-config?url=x'), isNull);
     });
+
+    test('the member centre is the link page itself, over HTTPS', () {
+      expect(
+        vpsMemberPage('http://1.2.3.4:43470/s/$_tok?format=clash').toString(),
+        'https://1.2.3.4:43470/s/$_tok/',
+      );
+      expect(vpsMemberPage('https://example.com/sub?token=$_tok'), isNull);
+      expect(vpsMemberPage(''), isNull);
+    });
   });
 
   test('reads the member fields the panel sends', () {

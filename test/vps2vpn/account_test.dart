@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fl_clash/common/app_update.dart';
 import 'package:fl_clash/common/release_asset.dart';
+import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/auto_update.dart';
@@ -15,15 +16,22 @@ import '../helpers/test_app.dart';
 Future<void> _pump(
   WidgetTester tester,
   Widget child,
-  VpsMemberResult? result,
-) async {
+  VpsMemberResult? result, {
+  String? subscription,
+}) async {
   await tester.pumpWidget(
     TestApp(
       // A fresh scope per pump, so a new override takes effect.
       key: UniqueKey(),
       includeNavigatorKey: false,
       locale: const Locale('en'),
-      overrides: [vpsMemberProvider.overrideWith((ref) async => result)],
+      overrides: [
+        vpsMemberProvider.overrideWith((ref) async => result),
+        // The real one loads the saved profiles (and leaves timers behind).
+        currentProfileProvider.overrideWithValue(
+          subscription == null ? null : Profile.normal(url: subscription),
+        ),
+      ],
       child: SingleChildScrollView(child: child),
     ),
   );
@@ -95,6 +103,30 @@ void main() {
       find.textContaining('Disconnect your other devices'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('opens the member centre only for a vps2vpn link', (
+    tester,
+  ) async {
+    const member = VpsMemberResult(
+      member: VpsMember(name: 'Ann', enabled: false, disabledReason: 'quota'),
+    );
+    final button = find.byKey(const ValueKey('vps-member-centre'));
+    await _pump(
+      tester,
+      const VpsAccountCard(),
+      member,
+      subscription: 'https://panel.example:8443/s/abcdefghijklmnop',
+    );
+    expect(button, findsOneWidget);
+    expect(find.text('Open member centre'), findsOneWidget);
+    await _pump(
+      tester,
+      const VpsAccountCard(),
+      member,
+      subscription: 'https://example.com/other/sub',
+    );
+    expect(button, findsNothing);
   });
 
   test('tells a member whom the panel will not carry, and why', () {
