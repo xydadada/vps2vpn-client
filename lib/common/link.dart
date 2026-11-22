@@ -117,7 +117,7 @@ class LinkManager {
     }
     commonPrint.log('onAppLink: ${uri.scheme}');
     final url = _installConfigUrl(uri);
-    if (url != null) {
+    if (url != null && url.isUrl) {
       // Catch both synchronous callbacks and rejected async callbacks.
       // Logging the original error would expose user subscription tokens.
       unawaited(

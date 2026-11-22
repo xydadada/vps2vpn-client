@@ -95,6 +95,21 @@ void main() {
     expect(received, isEmpty);
   });
 
+  test(
+    'an install-config link to anything but a web address is ignored',
+    () async {
+      await listen();
+
+      await emit(
+        'vps2vpn://install-config?url=file%3A%2F%2F%2FC%3A%2Fsub.yaml',
+      );
+      await emit('vps2vpn://install-config?url=javascript%3Aalert(1)');
+      await emit('vps2vpn://install-config?url=vless%3A%2F%2Fid%40host%3A443');
+
+      expect(received, isEmpty);
+    },
+  );
+
   test('a link for another host is ignored', () async {
     await listen();
 
