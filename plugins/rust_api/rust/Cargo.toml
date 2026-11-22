@@ -80,6 +80,7 @@ windows-sys = { version = "0.61", features = [
   "Win32_Networking_WinInet",
   "Win32_Networking_WinSock",
   "Win32_Security",
+  "Win32_Security_Authorization",
   "Win32_System_Com",
   "Win32_System_DataExchange",
   "Win32_System_LibraryLoader",
@@ -93,6 +94,9 @@ windows-sys = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
   "Wdk_System_SystemServices",
 ] }
+# Parses the SDDL text for the IPC pipe's descriptor (ipc/access.rs); the
+# same crate interprocess already builds on.
+widestring = "1"
 windows = { version = "0.62", features = [
   "Devices_WiFi",
   "Foundation",
