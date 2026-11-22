@@ -58,15 +58,19 @@ String? vpsGuessCountry(String name) {
   for (final e in _countryZh.entries) {
     if (e.key != 'CN' && name.contains(e.value)) return e.key;
   }
-  final m = RegExp(
-    r'(?:^|[^A-Za-z])([A-Za-z]{2})(?:[^A-Za-z]|$)',
-  ).allMatches(name);
-  for (final x in m) {
-    final code = x.group(1)!.toUpperCase();
-    if (code != 'CN' && _countryZh.containsKey(code)) return code;
+  for (final x in RegExp(
+    r'(?<![A-Za-z])[A-Za-z]{2}(?![A-Za-z])',
+  ).allMatches(name)) {
+    final word = x.group(0)!;
+    final code = word.toUpperCase();
+    if (code == 'CN' || !_countryZh.containsKey(code)) continue;
+    if (_alsoEnglishWords.contains(code) && word != code) continue;
+    return code;
   }
   return null;
 }
+
+const _alsoEnglishWords = {'IN', 'MY', 'ID'};
 
 String countryName(BuildContext context, String code) {
   final c = code.toUpperCase();
@@ -170,8 +174,8 @@ class VpsHomePage extends ConsumerWidget {
                       VpsInfoTip(
                         tr(
                           context,
-                          '系统代理：设置 Windows 系统代理，浏览器及遵循系统设置的应用生效，轻量、无需管理员权限。\n虚拟网卡（TUN）：在网络层接管全部流量，终端、游戏等不读取代理设置的程序同样生效，需要管理员权限。',
-                          'System proxy: sets the Windows proxy; browsers and apps that honour it. No admin needed.\nTUN: a virtual adapter takes over all traffic at the network layer, terminals and games included. Needs admin.',
+                          '系统代理：设置系统代理，浏览器及遵循系统设置的应用生效，轻量、无需管理员权限。\n虚拟网卡（TUN）：在网络层接管全部流量，终端、游戏等不读取代理设置的程序同样生效，需要管理员权限。',
+                          'System proxy: sets the system proxy; browsers and apps that honour it. No admin needed.\nTUN: a virtual adapter takes over all traffic at the network layer, terminals and games included. Needs admin.',
                         ),
                       ),
                     ],
@@ -188,6 +192,7 @@ class VpsHomePage extends ConsumerWidget {
                 ],
               ),
             );
+            if (Platform.isAndroid) return routing;
             if (!wide) {
               return Column(
                 children: [routing, const SizedBox(height: 16), takeover],
@@ -233,8 +238,15 @@ class _HeroState extends ConsumerState<_Hero> {
       if (ref.read(patchClashConfigProvider).mode == Mode.direct) {
         ref.read(setupActionProvider.notifier).changeMode(Mode.rule);
       }
+      if (!Platform.isAndroid &&
+          !ref.read(patchClashConfigProvider).tun.enable &&
+          !ref.read(networkSettingProvider).systemProxy) {
+        useWholeSystem(ref, false);
+      }
       // Test hook: VPS2VPN_IMPORT_URL imports a subscription on first start.
-      final testLink = Platform.environment['VPS2VPN_IMPORT_URL'];
+      final testLink = vpsLoopbackLink(
+        Platform.environment['VPS2VPN_IMPORT_URL'],
+      );
       if (testLink != null && ref.read(profilesProvider).isEmpty) {
         ref.read(profilesActionProvider.notifier).addProfileFromLink(testLink);
       }

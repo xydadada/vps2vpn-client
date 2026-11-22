@@ -74,6 +74,24 @@ void main() {
       expect(vpsLinkSource('vless://uuid@host:443'), isNull);
       expect(vpsLinkSource('not a link'), isNull);
     });
+
+    test('the unasked test import takes only an address on this PC', () {
+      for (final local in [
+        'http://127.0.0.1:18000/sub.yaml',
+        'http://localhost:18000/sub.yaml',
+        'http://[::1]:18000/sub.yaml',
+      ]) {
+        expect(vpsLoopbackLink(local), local);
+      }
+      for (final other in [
+        null,
+        'https://panel.example.com/s/$_tok',
+        'http://127.0.0.1.example.com/sub.yaml',
+        'file:///C:/sub.yaml',
+      ]) {
+        expect(vpsLoopbackLink(other), isNull);
+      }
+    });
   });
 
   test('reads the member fields the panel sends', () {

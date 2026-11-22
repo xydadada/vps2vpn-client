@@ -70,6 +70,14 @@ String? vpsLinkSource(String link) {
   return uri.host;
 }
 
+/// [link] when it is an http(s) address on this PC (127.0.0.1, localhost or
+/// ::1), else null.
+String? vpsLoopbackLink(String? link) {
+  final host = link == null ? null : vpsLinkSource(link);
+  const loopback = {'127.0.0.1', 'localhost', '::1'};
+  return host != null && loopback.contains(host) ? link!.trim() : null;
+}
+
 /// [link] as a subscription: the member centre's own address (`<sub>/`, or
 /// `<sub>/index.html`, as copied from the browser) is turned back into the
 /// subscription `<sub>`, keeping scheme, port and query. Anything else is
