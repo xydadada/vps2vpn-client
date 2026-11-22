@@ -202,6 +202,8 @@ rules:
   Check (-not $decoy.HasExited) 'takeover on: an unrelated process was left alone'
   foreach ($h in $holders) { $h.Refresh(); Check (-not $h.HasExited) "takeover on: port holder $($h.Id) was left alone" }
   Test-Through $port 'takeover on'
+  $owner = (Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Select-Object -First 1).UserName
+  Check ($owner -match 'SYSTEM') "takeover on: the Helper runs the Core as SYSTEM (got $owner)"
   $reg = Get-ItemProperty $inetKey
   "system proxy: enable=$($reg.ProxyEnable) server=$($reg.ProxyServer)"
   Check ($reg.ProxyEnable -eq 1 -and "$($reg.ProxyServer)" -match ":$port(?:$|;)") "takeover on: system proxy points at port $port"
