@@ -145,6 +145,7 @@ proxies:
 proxy-groups:
   - {name: Proxy, type: select, proxies: [ci-upstream]}
 rules:
+  - PROCESS-NAME,python.exe,DIRECT
   - MATCH,Proxy
 "@ | Set-Content (Join-Path $subDir 'sub.yaml') -Encoding utf8
   Start-Tracked 'python' @('-I', (Join-Path $work 'coexist_upstream.py'), $upstreamLog, "$upstreamPort") | Out-Null
