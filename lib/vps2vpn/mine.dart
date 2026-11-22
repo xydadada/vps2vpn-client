@@ -114,8 +114,8 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
         setState(
           () => _note = tr(
             context,
-            '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
-            'No subscription link on the clipboard. Copy it from the deploy tool first.',
+            '剪贴板里没有订阅链接。请先复制管理员发给你的链接，再点这里。',
+            'No subscription link on the clipboard. Copy the link the owner gave you first.',
           ),
         );
         return;

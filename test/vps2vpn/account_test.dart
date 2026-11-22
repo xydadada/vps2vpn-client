@@ -73,7 +73,7 @@ void main() {
     expect(find.text('Ann'), findsOneWidget);
     expect(find.text('Active'), findsOneWidget);
     expect(find.textContaining('Used 2'), findsOneWidget);
-    expect(find.text('Expires in 12 days'), findsOneWidget);
+    expect(find.text('12 days left'), findsOneWidget);
   });
 
   testWidgets('says why the account is off', (tester) async {
@@ -90,6 +90,76 @@ void main() {
     );
     expect(find.text('Paused for a while: too many devices'), findsOneWidget);
     expect(find.textContaining('unlimited'), findsOneWidget);
+    // And what to do about it.
+    expect(
+      find.textContaining('Disconnect your other devices'),
+      findsOneWidget,
+    );
+  });
+
+  test('tells a member whom the panel will not carry, and why', () {
+    VpsMemberResult off(String? reason) => VpsMemberResult(
+      member: VpsMember(name: 'Ann', enabled: false, disabledReason: reason),
+    );
+    expect(vpsAccountBlock(null), isNull);
+    expect(
+      vpsAccountBlock(
+        const VpsMemberResult(member: VpsMember(name: 'Ann', enabled: true)),
+      ),
+      isNull,
+    );
+    expect(
+      vpsAccountBlock(
+        const VpsMemberResult(problem: VpsPanelProblem.unreachable),
+      ),
+      isNull,
+    );
+    expect(
+      vpsAccountBlock(const VpsMemberResult(linkChanged: true)),
+      VpsAccountBlock.linkChanged,
+    );
+    expect(vpsAccountBlock(off('quota')), VpsAccountBlock.quota);
+    expect(vpsAccountBlock(off('expired')), VpsAccountBlock.expired);
+    expect(vpsAccountBlock(off('devices')), VpsAccountBlock.devices);
+    expect(vpsAccountBlock(off('manual')), VpsAccountBlock.manual);
+    expect(vpsAccountBlock(off(null)), VpsAccountBlock.manual);
+  });
+
+  testWidgets('the last day reads "today", never "0 days left"', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 11, 22, 9);
+    late BuildContext context;
+    await _pump(
+      tester,
+      Builder(
+        builder: (c) {
+          context = c;
+          return const SizedBox();
+        },
+      ),
+      null,
+    );
+    expect(
+      vpsExpiryText(context, now.add(const Duration(hours: 5)), now: now),
+      'Expires today',
+    );
+    expect(
+      vpsExpiryText(
+        context,
+        now.add(const Duration(days: 3, hours: 1)),
+        now: now,
+      ),
+      '3 days left',
+    );
+    expect(
+      vpsExpiryText(
+        context,
+        now.subtract(const Duration(minutes: 1)),
+        now: now,
+      ),
+      'Expired',
+    );
   });
 
   testWidgets('a replaced link asks for the new one', (tester) async {

@@ -115,6 +115,73 @@ class VpsServerAiCard extends ConsumerWidget {
 
 /// Settings page: name, usage against the quota, expiry; or why the
 /// account is off, or that the link was replaced.
+/// Why the panel will not carry this member's traffic now, or null.
+enum VpsAccountBlock { linkChanged, quota, expired, devices, manual }
+
+VpsAccountBlock? vpsAccountBlock(VpsMemberResult? result) {
+  if (result == null) return null;
+  if (result.linkChanged) return VpsAccountBlock.linkChanged;
+  final m = result.member;
+  if (m == null || m.enabled) return null;
+  return switch (m.disabledReason) {
+    'quota' => VpsAccountBlock.quota,
+    'expired' => VpsAccountBlock.expired,
+    'devices' => VpsAccountBlock.devices,
+    _ => VpsAccountBlock.manual,
+  };
+}
+
+String vpsAccountBlockReason(BuildContext context, VpsAccountBlock block) =>
+    switch (block) {
+      VpsAccountBlock.linkChanged => tr(
+        context,
+        '订阅链接已失效',
+        'Your link no longer works',
+      ),
+      VpsAccountBlock.quota => tr(context, '流量已用完', 'Data used up'),
+      VpsAccountBlock.expired => tr(context, '已到期', 'Expired'),
+      VpsAccountBlock.devices => tr(
+        context,
+        '设备过多，暂停一会儿',
+        'Paused for a while: too many devices',
+      ),
+      VpsAccountBlock.manual => tr(
+        context,
+        '已被管理员停用',
+        'Turned off by the owner',
+      ),
+    };
+
+/// What the member can do about [block].
+String vpsAccountBlockHint(
+  BuildContext context,
+  VpsAccountBlock block,
+) => switch (block) {
+  VpsAccountBlock.linkChanged => tr(
+    context,
+    '请向管理员要新链接，复制后在「设置」里点“从剪贴板导入”。',
+    'Ask the owner for the new link, copy it and tap "From clipboard" in Settings.',
+  ),
+  VpsAccountBlock.devices => tr(
+    context,
+    '先断开其他设备上的连接，稍后会自动恢复。',
+    'Disconnect your other devices; it resumes by itself shortly.',
+  ),
+  _ => tr(
+    context,
+    '现在连接也上不了网，请联系管理员处理。',
+    "Connecting won't get you online now. Ask the owner to sort it out.",
+  ),
+};
+
+/// "Expired", "Expires today" or the whole days left until [expire].
+String vpsExpiryText(BuildContext context, DateTime expire, {DateTime? now}) {
+  final diff = expire.difference(now ?? DateTime.now());
+  if (diff.isNegative) return tr(context, '已到期', 'Expired');
+  if (diff.inDays == 0) return tr(context, '今天到期', 'Expires today');
+  return tr(context, '还剩 ${diff.inDays} 天', '${diff.inDays} days left');
+}
+
 class VpsAccountCard extends ConsumerWidget {
   const VpsAccountCard({super.key});
 
@@ -153,7 +220,7 @@ class VpsAccountCard extends ConsumerWidget {
           tr(
             context,
             '服务器不再认这个链接了。请向管理员要新链接，复制后点“从剪贴板导入”。',
-            'The server no longer knows this link. Ask for the new one, copy it and tap "Import from clipboard".',
+            'The server no longer knows this link. Ask for the new one, copy it and tap "From clipboard".',
           ),
         ],
         action: refresh,
@@ -173,36 +240,22 @@ class VpsAccountCard extends ConsumerWidget {
             '已用 ${m.used.traffic.show} / ${quota.traffic.show}',
             'Used ${m.used.traffic.show} of ${quota.traffic.show}',
           );
-    String? expiry;
-    if (m.expireAt != null) {
-      final diff = m.expireAt!.difference(DateTime.now());
-      expiry = diff.isNegative
-          ? tr(context, '已到期', 'Expired')
-          : diff.inDays == 0
-          ? tr(context, '今天到期', 'Expires today')
-          : tr(
-              context,
-              '还剩 ${diff.inDays} 天到期',
-              'Expires in ${diff.inDays} days',
-            );
-    }
-    final off = !m.enabled;
-    final reason = switch (m.disabledReason) {
-      'quota' => tr(context, '流量已用完', 'Data used up'),
-      'expired' => tr(context, '已到期', 'Expired'),
-      'devices' => tr(
-        context,
-        '设备过多，暂停一会儿',
-        'Paused for a while: too many devices',
-      ),
-      _ => tr(context, '已被管理员停用', 'Turned off by the owner'),
-    };
+    final expiry = m.expireAt == null
+        ? null
+        : vpsExpiryText(context, m.expireAt!);
+    final block = vpsAccountBlock(result);
     return _frame(
       p,
-      color: off ? p.bad : p.good,
+      color: block != null ? p.bad : p.good,
       title: m.name.isEmpty ? tr(context, '我的账户', 'My account') : m.name,
-      status: off ? reason : tr(context, '正常', 'Active'),
-      lines: [usage, ?expiry],
+      status: block != null
+          ? vpsAccountBlockReason(context, block)
+          : tr(context, '正常', 'Active'),
+      lines: [
+        usage,
+        ?expiry,
+        if (block != null) vpsAccountBlockHint(context, block),
+      ],
       progress: m.unlimited
           ? null
           : (quota > 0 ? (m.used / quota).clamp(0.0, 1.0) : 1.0),

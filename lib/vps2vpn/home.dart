@@ -12,8 +12,10 @@ import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
+import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
@@ -258,10 +260,23 @@ class _HeroState extends ConsumerState<_Hero> {
         : friendlyLineName(context, picked);
 
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+    // What the panel says about the account outranks what the Core says:
+    // connected to a server that refuses you is not connected.
+    final block = vpsAccountBlock(ref.watch(vpsMemberProvider).value);
+    final delay = group == null || !on
+        ? null
+        : ref.watch(
+            delayProvider(proxyName: group.name, testUrl: group.testUrl),
+          );
+    final lineDown = on && delay != null && delay < 0;
     final (status, statusColor) = !hasProfile
         ? (tr(context, '未导入订阅', 'No subscription'), p.muted)
+        : block != null
+        ? (vpsAccountBlockReason(context, block), p.bad)
         : suspended
         ? (tr(context, '已暂停', 'Paused'), p.warn)
+        : lineDown
+        ? (tr(context, '线路无响应', 'Line not responding'), p.warn)
         : on
         ? (tr(context, '已连接', 'Connected'), p.good)
         : (tr(context, '未连接', 'Disconnected'), p.muted);
@@ -278,20 +293,34 @@ class _HeroState extends ConsumerState<_Hero> {
     final sub = !hasProfile
         ? tr(
             context,
-            '粘贴部署工具生成的订阅链接，即可使用你的私有线路',
-            'Paste the link from the deploy tool to use your private line',
+            '粘贴管理员发给你的订阅链接，即可使用你的私有线路',
+            'Paste the subscription link the owner gave you to use your line',
           )
+        : block != null
+        ? vpsAccountBlockHint(context, block)
         : suspended
         ? tr(
             context,
             '连接已暂停，恢复后自动继续，也可点击"断开"停止',
             'Connection paused; resumes automatically or tap Stop',
           )
+        : lineDown
+        ? tr(
+            context,
+            '当前线路没有响应。到「节点」换一条，或到「检测」看看原因。',
+            'The line is not answering. Pick another in Nodes, or see Check.',
+          )
+        : on && mode == Mode.global
+        ? tr(
+            context,
+            '全部流量正经由你的服务器加密传输',
+            'All traffic is encrypted through your server',
+          )
         : on
         ? tr(
             context,
-            '流量正经由你的服务器加密传输',
-            'Traffic is encrypted through your server',
+            '境外流量正经由你的服务器加密传输，国内网站直连',
+            'Traffic abroad goes encrypted through your server; local sites go direct',
           )
         : tr(
             context,
@@ -786,19 +815,31 @@ class _Stats extends ConsumerWidget {
     final total = ref.watch(totalTrafficProvider);
     final profile = ref.watch(currentProfileProvider);
     final sub = profile?.subscriptionInfo;
+    // The panel's live numbers when it has answered, the ones the
+    // subscription carried at its last update otherwise, so this tile and
+    // the account card in Settings never disagree.
+    final member = ref.watch(vpsMemberProvider).value?.member;
     String? left;
     String? expire;
-    if (sub != null && sub.total > 0) {
-      final remain = math.max(0, sub.total - sub.upload - sub.download);
-      left = remain.traffic.show;
-    }
-    if (sub != null && sub.expire > 0) {
-      final diff = DateTime.fromMillisecondsSinceEpoch(
-        sub.expire * 1000,
-      ).difference(DateTime.now());
-      expire = diff.isNegative
-          ? tr(context, '已到期', 'Expired')
-          : tr(context, '还剩 ${diff.inDays} 天', '${diff.inDays} days left');
+    if (member != null) {
+      if (!member.unlimited && member.quotaGb > 0) {
+        final quota = (member.quotaGb * 1024 * 1024 * 1024).round();
+        left = math.max(0, quota - member.used).traffic.show;
+      }
+      if (member.expireAt != null) {
+        expire = vpsExpiryText(context, member.expireAt!);
+      }
+    } else {
+      if (sub != null && sub.total > 0) {
+        final remain = math.max(0, sub.total - sub.upload - sub.download);
+        left = remain.traffic.show;
+      }
+      if (sub != null && sub.expire > 0) {
+        expire = vpsExpiryText(
+          context,
+          DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000),
+        );
+      }
     }
     final p = VpsPalette.of(context);
     final groups = ref.watch(currentGroupsStateProvider).value;
