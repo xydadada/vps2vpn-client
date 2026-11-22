@@ -458,10 +458,11 @@ class _LegalLineState extends State<_LegalLine> {
                     child: Text(
                       tr(
                         context,
-                        '本软件包含按 GPL-3.0 许可的开源组件（FlClash、mihomo）。'
-                            '许可全文位于安装目录 data/legal，可向发布方索取对应源代码。',
-                        'Includes GPL-3.0 components (FlClash, mihomo). The licence '
-                            'is in data/legal; source is available on request.',
+                        '本软件包含按 GPL-3.0 许可的开源组件（FlClash、mihomo），以及按 OFL 许可的字体（Inter、Noto Sans SC）。'
+                            '全部许可文本位于安装目录 data/legal，可向发布方索取对应源代码。',
+                        'Includes GPL-3.0 components (FlClash, mihomo) and OFL fonts '
+                            '(Inter, Noto Sans SC). All licences are in data/legal; '
+                            'source is available on request.',
                       ),
                       textAlign: TextAlign.center,
                       style: style,

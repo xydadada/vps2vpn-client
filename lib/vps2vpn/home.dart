@@ -52,6 +52,22 @@ const _countryZh = {
   'TR': '土耳其',
 };
 
+/// The country a node's name points at ("新加坡 Hysteria2", "US-2", "jp
+/// reality"), as a two-letter code, or null.
+String? vpsGuessCountry(String name) {
+  for (final e in _countryZh.entries) {
+    if (e.key != 'CN' && name.contains(e.value)) return e.key;
+  }
+  final m = RegExp(
+    r'(?:^|[^A-Za-z])([A-Za-z]{2})(?:[^A-Za-z]|$)',
+  ).allMatches(name);
+  for (final x in m) {
+    final code = x.group(1)!.toUpperCase();
+    if (code != 'CN' && _countryZh.containsKey(code)) return code;
+  }
+  return null;
+}
+
 String countryName(BuildContext context, String code) {
   final c = code.toUpperCase();
   return vpsZh(context) ? (_countryZh[c] ?? c) : c;
@@ -91,11 +107,6 @@ class VpsHomePage extends ConsumerWidget {
     final tun = ref.watch(patchClashConfigProvider.select((s) => s.tun.enable));
     return VpsPage(
       title: tr(context, '概览', 'Overview'),
-      subtitle: tr(
-        context,
-        '私有线路，自主掌控',
-        'Your private network, under your control',
-      ),
       children: [
         const VpsTakeoverNotice(),
         const VpsSubscriptionNotice(),
@@ -280,16 +291,46 @@ class _HeroState extends ConsumerState<_Hero> {
         : on
         ? (tr(context, '已连接', 'Connected'), p.good)
         : (tr(context, '未连接', 'Disconnected'), p.muted);
-    // Connected, the headline is where you are; otherwise what to do next.
+    // Connected, the headline is where you are (the capsule above it says
+    // how well); otherwise what to do next.
     final title = !hasProfile
         ? tr(context, '导入订阅以开始', 'Import a subscription')
-        : suspended
-        ? tr(context, '已暂停', 'Paused')
         : on && info != null
         ? countryName(context, info.countryCode)
-        : on
-        ? tr(context, '已连接', 'Connected')
+        : isStart
+        ? (picked == null
+              ? tr(context, '已连接', 'Connected')
+              : friendlyLineName(context, picked))
         : tr(context, '准备就绪', 'Ready');
+    // One colour for the whole state: capsule, button, ring and the light
+    // behind the window. Null is "not connected": the brand's own colour.
+    final tone = !hasProfile
+        ? null
+        : block != null
+        ? p.bad
+        : suspended || lineDown
+        ? p.warn
+        : on
+        ? p.good
+        : null;
+    if (vpsAmbient.value != tone) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) vpsAmbient.value = tone;
+      });
+    }
+    final latencyChip = !on || delay == null
+        ? null
+        : switch (delay) {
+            0 => VpsChip(
+              label: tr(context, '测速中…', 'Testing…'),
+              color: p.muted,
+            ),
+            < 0 => VpsChip(label: tr(context, '超时', 'Timed out'), color: p.bad),
+            final d => VpsChip(
+              label: tr(context, '延迟 $d ms', '$d ms'),
+              color: d < 200 ? p.good : (d < 500 ? p.warn : p.bad),
+            ),
+          };
     final sub = !hasProfile
         ? tr(
             context,
@@ -333,6 +374,7 @@ class _HeroState extends ConsumerState<_Hero> {
         final wide = c.maxWidth >= 640;
         final button = _PowerRing(
           on: on,
+          tone: tone ?? p.good,
           add: !hasProfile,
           size: wide ? 148 : 132,
           label: !hasProfile
@@ -350,36 +392,46 @@ class _HeroState extends ConsumerState<_Hero> {
               : CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _StatusDot(color: statusColor, pulse: on),
-                const SizedBox(width: 8),
-                Text(
-                  status,
-                  style: vpsText(
-                    p,
-                    size: 12.5,
-                    weight: FontWeight.w500,
-                    color: p.soft,
-                    spacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+            VpsChip(label: status, color: statusColor, tinted: true),
+            const SizedBox(height: 14),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: Text(
-                title,
-                key: ValueKey(title),
-                style: vpsText(
-                  p,
-                  size: wide ? 34 : 28,
-                  weight: FontWeight.w600,
-                  spacing: -0.6,
-                  height: 1.15,
+              duration: const Duration(milliseconds: 350),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, a) => FadeTransition(
+                opacity: a,
+                child: ScaleTransition(
+                  scale: Tween(begin: 0.96, end: 1.0).animate(a),
+                  alignment: wide ? Alignment.centerLeft : Alignment.center,
+                  child: child,
                 ),
+              ),
+              child: Row(
+                key: ValueKey(title),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (on && info != null) ...[
+                    _CountryBadge(
+                      code: info.countryCode,
+                      color: tone ?? p.good,
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: vpsText(
+                        p,
+                        size: wide ? 36 : 28,
+                        weight: FontWeight.w700,
+                        spacing: -0.8,
+                        height: 1.15,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
@@ -390,70 +442,37 @@ class _HeroState extends ConsumerState<_Hero> {
             ),
           ],
         );
-        final facts = [
-          (
-            tr(context, '出口', 'Exit'),
-            on && info != null
-                ? '${countryName(context, info.countryCode)} · ${info.countryCode.toUpperCase()}'
-                : '—',
-          ),
-          (tr(context, '线路', 'Line'), line ?? '—'),
-          (
-            tr(context, '模式', 'Mode'),
-            mode == Mode.global
-                ? tr(context, '全局', 'Global')
-                : tr(context, '规则', 'Rule'),
-          ),
-          (tr(context, '时长', 'Uptime'), on ? getTimeText(runTime) : '—'),
-        ];
-        final meta = Container(
-          margin: const EdgeInsets.only(top: 26),
-          padding: const EdgeInsets.only(top: 18),
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: p.line)),
-          ),
-          child: Row(
-            children: [
-              for (final (i, (k, v)) in facts.indexed) ...[
-                if (i > 0)
-                  Container(
-                    width: 1,
-                    height: 30,
-                    margin: EdgeInsets.symmetric(horizontal: wide ? 18 : 10),
-                    color: p.line,
-                  ),
-                Expanded(
-                  flex: i == 1 && wide ? 2 : 1,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        k,
-                        style: vpsText(
-                          p,
-                          size: 11.5,
-                          color: p.muted,
-                          weight: FontWeight.w500,
-                          spacing: 0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        v,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: vpsText(
-                          p,
-                          size: 13.5,
-                          weight: FontWeight.w500,
-                          tabular: true,
-                        ),
-                      ),
-                    ],
-                  ),
+        // The details as quiet capsules: latency coloured by how fast it is,
+        // the rest neutral, so the eye lands on the one that matters.
+        final meta = Padding(
+          padding: const EdgeInsets.only(top: 22),
+          child: Align(
+            alignment: wide ? Alignment.centerLeft : Alignment.center,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: wide ? WrapAlignment.start : WrapAlignment.center,
+              children: [
+                ?latencyChip,
+                if (on && info != null && line != null)
+                  VpsChip(label: line, color: p.soft),
+                VpsChip(
+                  label: mode == Mode.global
+                      ? tr(context, '全局模式', 'Global')
+                      : tr(context, '规则模式', 'Rule mode'),
+                  color: p.soft,
                 ),
+                if (on)
+                  VpsChip(
+                    label: tr(
+                      context,
+                      '已连接 ${getTimeText(runTime)}',
+                      'Up ${getTimeText(runTime)}',
+                    ),
+                    color: p.soft,
+                  ),
               ],
-            ],
+            ),
           ),
         );
         return Container(
@@ -468,23 +487,26 @@ class _HeroState extends ConsumerState<_Hero> {
           ),
           child: Stack(
             children: [
-              // A faint warm light behind the button; brighter when connected.
+              // The state's light pooled behind the button.
               Positioned(
-                right: wide ? -120 : null,
-                top: -140,
+                right: wide ? -110 : null,
+                top: -130,
                 left: wide ? null : 0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 500),
-                  opacity: on ? 1 : 0.45,
-                  child: Container(
+                child: TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: tone ?? p.accent),
+                  duration: const Duration(milliseconds: 700),
+                  curve: Curves.easeInOutCubic,
+                  builder: (_, c, _) => Container(
                     width: 460,
                     height: 460,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          vpsCoral.withValues(alpha: p.dark ? 0.16 : 0.10),
-                          vpsCoral.withValues(alpha: 0),
+                          (c ?? p.accent).withValues(
+                            alpha: p.dark ? (on ? 0.20 : 0.10) : 0.10,
+                          ),
+                          (c ?? p.accent).withValues(alpha: 0),
                         ],
                       ),
                     ),
@@ -527,80 +549,11 @@ class _HeroState extends ConsumerState<_Hero> {
   }
 }
 
-class _StatusDot extends StatefulWidget {
-  const _StatusDot({required this.color, required this.pulse});
-
-  final Color color;
-  final bool pulse;
-
-  @override
-  State<_StatusDot> createState() => _StatusDotState();
-}
-
-class _StatusDotState extends State<_StatusDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1800),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.pulse) _c.repeat();
-  }
-
-  @override
-  void didUpdateWidget(_StatusDot old) {
-    super.didUpdateWidget(old);
-    if (widget.pulse && !_c.isAnimating) _c.repeat();
-    if (!widget.pulse && _c.isAnimating) _c.reset();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 14,
-      height: 14,
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (_, _) => Stack(
-          alignment: Alignment.center,
-          children: [
-            if (widget.pulse)
-              Container(
-                width: 6 + 8 * _c.value,
-                height: 6 + 8 * _c.value,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.color.withValues(alpha: 0.35 * (1 - _c.value)),
-                ),
-              ),
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: widget.color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// The connect button: a glowing ring that breathes while connected.
 class _PowerRing extends StatefulWidget {
   const _PowerRing({
     required this.on,
+    required this.tone,
     this.add = false,
     required this.size,
     required this.label,
@@ -608,6 +561,9 @@ class _PowerRing extends StatefulWidget {
   });
 
   final bool on;
+
+  /// The state's colour once connected (green, amber or red).
+  final Color tone;
   final bool add;
   final double size;
   final String label;
@@ -655,54 +611,72 @@ class _PowerRingState extends State<_PowerRing>
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Outer glow.
+            // Outer glow in the state's colour (connected) or the brand's
+            // (an invitation to connect).
             AnimatedContainer(
-              duration: const Duration(milliseconds: 500),
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeOutCubic,
               width: s,
               height: s,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: vpsCoral.withValues(alpha: widget.on ? 0.30 : 0),
-                    blurRadius: widget.on ? 48 : 0,
+                    color: (widget.on ? widget.tone : vpsCoral).withValues(
+                      alpha: widget.on ? 0.32 : 0.22,
+                    ),
+                    blurRadius: widget.on ? 56 : 36,
                   ),
                 ],
               ),
             ),
-            // Rotating gradient ring.
+            // Rotating ring, in the state's colour while connected.
             AnimatedBuilder(
               animation: _spin,
               builder: (_, _) => Transform.rotate(
                 angle: _spin.value * 2 * math.pi,
                 child: CustomPaint(
                   size: Size(s, s),
-                  painter: _RingPainter(on: widget.on, track: p.line),
+                  painter: _RingPainter(
+                    on: widget.on,
+                    track: p.line,
+                    tone: widget.tone,
+                  ),
                 ),
               ),
             ),
-            // Face.
+            // Face: the filled brand button invites "connect"; once
+            // connected it goes quiet and the colour moves to the ring.
             AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOutCubic,
               width: s * 0.7,
               height: s * 0.7,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: widget.on ? p.accentGradient : null,
-                color: widget.on ? null : p.track,
-                border: widget.on ? null : Border.all(color: p.line),
-                boxShadow: widget.on ? null : p.raise,
+                gradient: widget.on ? null : p.accentGradient,
+                color: widget.on ? p.cardHi : null,
+                border: Border.all(
+                  color: widget.on
+                      ? widget.tone.withValues(alpha: 0.45)
+                      : const Color(0x00000000),
+                  width: 1.5,
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (widget.add)
-                    VpsIconView(VpsIcon.plus, size: s * 0.24, color: p.accent)
+                    VpsIconView(
+                      VpsIcon.plus,
+                      size: s * 0.24,
+                      color: const Color(0xFFFFFFFF),
+                    )
                   else
                     CustomPaint(
                       size: Size.square(s * 0.2),
                       painter: _PowerGlyph(
-                        widget.on ? const Color(0xFFFFFFFF) : p.accent,
+                        widget.on ? widget.tone : const Color(0xFFFFFFFF),
                       ),
                     ),
                   SizedBox(height: s * 0.03),
@@ -712,7 +686,7 @@ class _PowerRingState extends State<_PowerRing>
                       p,
                       size: 13,
                       weight: FontWeight.w600,
-                      color: widget.on ? const Color(0xFFFFFFFF) : p.text,
+                      color: widget.on ? p.text : const Color(0xFFFFFFFF),
                     ),
                   ),
                 ],
@@ -725,11 +699,47 @@ class _PowerRingState extends State<_PowerRing>
   }
 }
 
+/// The exit country as a two-letter tile (Windows has no flag emoji).
+class _CountryBadge extends StatelessWidget {
+  const _CountryBadge({required this.code, required this.color});
+
+  final String code;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    return Container(
+      width: 42,
+      height: 32,
+      alignment: Alignment.center,
+      decoration: ShapeDecoration(
+        color: color.withValues(alpha: p.dark ? 0.16 : 0.12),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(9),
+          side: BorderSide(color: color.withValues(alpha: 0.35)),
+        ),
+      ),
+      child: Text(
+        code.toUpperCase(),
+        style: vpsText(
+          p,
+          size: 14,
+          weight: FontWeight.w700,
+          color: color,
+          spacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
 class _RingPainter extends CustomPainter {
-  _RingPainter({required this.on, required this.track});
+  _RingPainter({required this.on, required this.track, required this.tone});
 
   final bool on;
   final Color track;
+  final Color tone;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -758,16 +768,21 @@ class _RingPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5
         ..strokeCap = StrokeCap.round
-        ..shader = const SweepGradient(
+        ..shader = SweepGradient(
           endAngle: start + sweep,
-          colors: [Color(0x00FF8A70), vpsCoralSoft, vpsCoralDeep, vpsViolet],
-          stops: [0, 0.35, 0.7, 1],
+          colors: [
+            tone.withValues(alpha: 0),
+            tone.withValues(alpha: 0.7),
+            tone,
+          ],
+          stops: const [0, 0.55, 1],
         ).createShader(rect),
     );
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) => old.on != on || old.track != track;
+  bool shouldRepaint(_RingPainter old) =>
+      old.on != on || old.track != track || old.tone != tone;
 }
 
 class _PowerGlyph extends CustomPainter {
@@ -845,89 +860,84 @@ class _Stats extends ConsumerWidget {
     final groups = ref.watch(currentGroupsStateProvider).value;
     final main = mainGroup(groups);
     if (main != null && ref.watch(isStartProvider)) vpsAutoTestOnce(ref, main);
-    final latency = main == null
-        ? null
-        : ref.watch(delayProvider(proxyName: main.name, testUrl: main.testUrl));
-    final line = main == null
-        ? null
-        : friendlyLineName(
-            context,
-            ref.watch(selectedProxyNameProvider(main.name)) ?? '',
-          );
-    final tiles = [
+    // Share of the plan still left, for the ring (null: unlimited/unknown).
+    double? leftShare;
+    if (member != null && !member.unlimited && member.quotaGb > 0) {
+      final quota = member.quotaGb * 1024 * 1024 * 1024;
+      leftShare = (1 - member.used / quota).clamp(0.0, 1.0);
+    } else if (member == null && sub != null && sub.total > 0) {
+      leftShare = (1 - (sub.upload + sub.download) / sub.total).clamp(0.0, 1.0);
+    }
+    final tiles = <Widget>[
+      // Down and up in one tile: one number big, the other its footnote.
       _Stat(
         icon: VpsIcon.arrowDown,
-        label: tr(context, '下载', 'Down'),
+        label: tr(context, '实时速度', 'Speed'),
         value: '${now.down.traffic.show}/s',
-        spark: [for (final t in recent) t.down],
-      ),
-      _Stat(
-        icon: VpsIcon.arrowUp,
-        label: tr(context, '上传', 'Up'),
-        value: '${now.up.traffic.show}/s',
-        spark: [for (final t in recent) t.up],
+        foot: '↑ ${now.up.traffic.show}/s',
+        spark: [for (final t in recent) t.down + t.up],
+        sparkColor: p.good,
       ),
       _Stat(
         icon: VpsIcon.sparkle,
         label: tr(context, '本次流量', 'This session'),
         value: (total.up + total.down).traffic.show,
       ),
-      if (left != null || expire != null)
+      if (left != null)
         _Stat(
           icon: VpsIcon.shield,
-          label: left != null
-              ? tr(context, '剩余流量', 'Data left')
-              : tr(context, '到期', 'Expires'),
-          value: left ?? expire!,
-          foot: left != null ? expire : null,
-        )
-      else
-        // Uptime is already in the hero; the line's latency says more here.
-        _Stat(
-          icon: VpsIcon.bolt,
-          label: tr(context, '当前延迟', 'Latency'),
-          value: switch (latency) {
-            null => '—',
-            0 => '…',
-            < 0 => tr(context, '超时', 'Timeout'),
-            final d => '$d ms',
-          },
-          foot: line,
+          label: tr(context, '剩余流量', 'Data left'),
+          value: left,
+          ring: leftShare,
+          ringColor: leftShare == null
+              ? p.accent
+              : leftShare < 0.1
+              ? p.bad
+              : leftShare < 0.25
+              ? p.warn
+              : p.good,
         ),
+      if (expire != null)
+        _Stat(
+          icon: VpsIcon.info,
+          label: tr(context, '到期', 'Expires'),
+          value: expire,
+        ),
+      // Latency is not repeated here: the hero's capsule already shows it.
     ];
-    return VpsCard(
-      padding: EdgeInsets.zero,
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final cols = c.maxWidth >= 680 ? 4 : 2;
-          final rows = <Widget>[];
-          for (var i = 0; i < tiles.length; i += cols) {
-            final slice = tiles.sublist(i, math.min(i + cols, tiles.length));
-            rows.add(
-              Container(
-                decoration: BoxDecoration(
-                  border: i > 0 ? Border(top: BorderSide(color: p.line)) : null,
-                ),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final (j, t) in slice.indexed) ...[
-                        if (j > 0) Container(width: 1, color: p.line),
-                        Expanded(child: t),
-                      ],
-                    ],
-                  ),
-                ),
+    // Separate tiles with air between them (like iOS widgets), not one
+    // table with rules: each number reads as its own thing.
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = c.maxWidth >= 680 ? tiles.length : 2;
+        const gap = 12.0;
+        final rows = <Widget>[];
+        for (var i = 0; i < tiles.length; i += cols) {
+          final slice = tiles.sublist(i, math.min(i + cols, tiles.length));
+          if (i > 0) rows.add(const SizedBox(height: gap));
+          rows.add(
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (j, t) in slice.indexed) ...[
+                    if (j > 0) const SizedBox(width: gap),
+                    Expanded(
+                      child: VpsCard(padding: EdgeInsets.zero, child: t),
+                    ),
+                  ],
+                  // Keep the last row's tiles the same width as above.
+                  for (var k = slice.length; k < cols; k++) ...[
+                    const SizedBox(width: gap),
+                    const Expanded(child: SizedBox.shrink()),
+                  ],
+                ],
               ),
-            );
-          }
-          return ClipRSuperellipse(
-            borderRadius: BorderRadius.circular(16),
-            child: Column(children: rows),
+            ),
           );
-        },
-      ),
+        }
+        return Column(children: rows);
+      },
     );
   }
 }
@@ -939,6 +949,9 @@ class _Stat extends StatelessWidget {
     required this.value,
     this.foot,
     this.spark,
+    this.sparkColor,
+    this.ring,
+    this.ringColor,
   });
 
   final VpsIcon icon;
@@ -948,74 +961,153 @@ class _Stat extends StatelessWidget {
 
   /// Recent samples drawn as a soft area chart under the number.
   final List<num>? spark;
+  final Color? sparkColor;
+
+  /// 0–1 drawn as a ring beside the number (data left of the plan).
+  final double? ring;
+  final Color? ringColor;
 
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final spark = this.spark;
-    return Stack(
-      children: [
-        if (spark != null && spark.length > 1)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 40,
-            child: IgnorePointer(
-              child: CustomPaint(painter: _SparkPainter(spark, p.accent)),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  VpsIconView(icon, size: 14, color: p.muted),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: vpsText(
-                        p,
-                        size: 12,
-                        color: p.soft,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
+    final ring = this.ring;
+    final text = Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      child: Row(
+        children: [
+          Expanded(child: _text(p)),
+          if (ring != null) ...[
+            const SizedBox(width: 10),
+            TweenAnimationBuilder<double>(
+              tween: Tween(end: ring),
+              duration: const Duration(milliseconds: 1100),
+              curve: Curves.easeOutCubic,
+              builder: (_, v, _) => CustomPaint(
+                size: const Size.square(46),
+                painter: _RingGauge(
+                  value: v,
+                  color: ringColor ?? p.accent,
+                  track: p.line,
+                ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                value,
+            ),
+          ],
+        ],
+      ),
+    );
+    return ClipRSuperellipse(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        children: [
+          if (spark != null && spark.length > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 44,
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _SparkPainter(spark, sparkColor ?? p.accent),
+                ),
+              ),
+            ),
+          text,
+        ],
+      ),
+    );
+  }
+
+  Widget _text(VpsPalette p) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            VpsIconView(icon, size: 14, color: p.muted),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: vpsText(
                   p,
-                  size: 21,
-                  weight: FontWeight.w600,
-                  spacing: -0.4,
-                  tabular: true,
+                  size: 12,
+                  color: p.soft,
+                  weight: FontWeight.w500,
                 ),
               ),
-              if (foot != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    foot!,
-                    style: vpsText(p, size: 11.5, color: p.muted),
-                  ),
-                ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: vpsText(
+            p,
+            size: 22,
+            weight: FontWeight.w700,
+            spacing: -0.5,
+            tabular: true,
           ),
         ),
+        if (foot != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              foot!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: vpsText(p, size: 11.5, color: p.muted, tabular: true),
+            ),
+          ),
       ],
     );
   }
+}
+
+/// A round gauge: the track, then [value] of it in [color] from 12 o'clock.
+class _RingGauge extends CustomPainter {
+  _RingGauge({required this.value, required this.color, required this.track});
+
+  final double value;
+  final Color color;
+  final Color track;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 5.0;
+    final rect = (Offset.zero & size).deflate(stroke / 2);
+    canvas.drawArc(
+      rect,
+      0,
+      math.pi * 2,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = track,
+    );
+    if (value <= 0) return;
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      math.pi * 2 * value,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingGauge old) =>
+      old.value != value || old.color != color || old.track != track;
 }
 
 class _SparkPainter extends CustomPainter {

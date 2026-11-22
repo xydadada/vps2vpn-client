@@ -3,3 +3,18 @@ vps2vpn includes software licensed under the GNU General Public License v3.0:
   - mihomo (https://github.com/MetaCubeX/mihomo)
 The full license text is in LICENSE.txt next to this file. The corresponding
 source code of this build is available from the distributor on request.
+
+Fonts: Inter and Noto Sans SC, under the SIL Open Font License 1.1. Their
+copyright lines, what was changed and the full license are in OFL.txt next to
+this file.
+
+Service icons: YouTube, OpenAI, Google, GitHub, Gemini, Netflix, Prime Video,
+Spotify, TikTok, Discord and bilibili come from Simple Icons 13.0.0
+(https://github.com/simple-icons/simple-icons/tree/13.0.0/icons), released
+under CC0 1.0 Universal
+(https://github.com/simple-icons/simple-icons/blob/13.0.0/LICENSE.md).
+The Claude sun symbol is an original vector illustration for FlClash. The
+Disney+ entry uses a neutral play-and-plus glyph drawn for FlClash, because
+Simple Icons 13.0.0 carries no Disney+ icon; it is a generic streaming mark,
+not a reproduction of any Disney brand asset.
+Brand names and marks belong to their respective owners.

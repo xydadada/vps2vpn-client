@@ -361,18 +361,12 @@ class _ProxyCard extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: selected ? p.accent : const Color(0x00000000),
-              border: Border.all(
-                color: selected ? p.accent : p.muted,
-                width: 1.5,
-              ),
-            ),
+          _NodeTile(
+            label: switch (proxy.name) {
+              vpsSmartGroupName || vpsAIGroupName => null,
+              _ => vpsGuessCountry(proxy.name),
+            },
+            selected: selected,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -420,8 +414,8 @@ class _ProxyCard extends ConsumerWidget {
                   proxy.name == vpsSmartGroupName
                       ? tr(
                           context,
-                          '推荐 · 出口 IP 不变，协议受限自动切换',
-                          'Recommended · same exit IP, auto protocol switch',
+                          '推荐 · 自动换到能用的协议',
+                          'Recommended · switches protocol by itself',
                         )
                       : proxy.name == vpsAIGroupName
                       ? tr(context, 'AI 服务固定出口', 'Steady exit for AI')
@@ -442,18 +436,110 @@ class _ProxyCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            delayText,
-            style: vpsText(
-              p,
-              size: 12.5,
-              weight: FontWeight.w600,
-              color: delayColor,
-              tabular: true,
+          // Signal bars, as on a phone: three for fast, one for slow, none
+          // for no answer. Read before the number.
+          _Bars(
+            level: switch (delay) {
+              null || 0 => -1,
+              < 0 => 0,
+              < 200 => 3,
+              < 500 => 2,
+              _ => 1,
+            },
+            color: delayColor,
+            off: p.line,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 52,
+            child: Text(
+              delayText,
+              textAlign: TextAlign.right,
+              style: vpsText(
+                p,
+                size: 12.5,
+                weight: FontWeight.w600,
+                color: delayColor,
+                tabular: true,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A node's leading tile: its country code, or a spark for the smart and
+/// AI lines. Fills with the accent when chosen.
+class _NodeTile extends StatelessWidget {
+  const _NodeTile({required this.label, required this.selected});
+
+  final String? label;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final ink = selected ? p.accentInk : p.soft;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      width: 38,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: ShapeDecoration(
+        gradient: selected ? p.accentGradient : null,
+        color: selected ? null : p.track,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(11),
+          side: BorderSide(color: selected ? const Color(0x00000000) : p.line),
+        ),
+      ),
+      child: label == null
+          ? VpsIconView(VpsIcon.sparkle, size: 17, color: ink)
+          : Text(
+              label!,
+              style: vpsText(
+                p,
+                size: 12.5,
+                weight: FontWeight.w700,
+                color: ink,
+                spacing: 0.4,
+              ),
+            ),
+    );
+  }
+}
+
+/// Three rising bars, [level] of them lit (-1: not measured, all faint).
+class _Bars extends StatelessWidget {
+  const _Bars({required this.level, required this.color, required this.off});
+
+  final int level;
+  final Color color;
+  final Color off;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < 3; i++) ...[
+          if (i > 0) const SizedBox(width: 2.5),
+          AnimatedContainer(
+            duration: Duration(milliseconds: 300 + 80 * i),
+            curve: Curves.easeOutBack,
+            width: 4,
+            height: 6.0 + 4 * i,
+            decoration: BoxDecoration(
+              color: i < level ? color : off,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

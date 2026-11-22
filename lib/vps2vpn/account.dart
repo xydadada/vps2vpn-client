@@ -281,7 +281,8 @@ class VpsAccountCard extends ConsumerWidget {
               key: const ValueKey('vps-member-centre'),
               label: tr(context, '打开会员中心', 'Open member centre'),
               icon: VpsIcon.me,
-              filled: block == VpsAccountBlock.quota ||
+              filled:
+                  block == VpsAccountBlock.quota ||
                   block == VpsAccountBlock.expired,
               onTap: () => unawaited(
                 launchUrl(page, mode: LaunchMode.externalApplication),

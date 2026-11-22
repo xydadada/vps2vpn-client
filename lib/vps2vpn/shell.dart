@@ -3,6 +3,7 @@
 // is off.
 
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
@@ -47,6 +48,8 @@ class VpsShell extends StatelessWidget {
       style: Theme.of(context).bodyTextStyle.copyWith(
         decoration: TextDecoration.none,
         color: VpsPalette.of(context).text,
+        fontFamily: vpsFont,
+        fontFamilyFallback: vpsFontFallback,
       ),
       child: VpsBackdrop(
         child: LayoutBuilder(
@@ -118,64 +121,76 @@ class _SideNav extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
-    return Container(
-      width: 224,
-      decoration: BoxDecoration(
-        color: p.side,
-        border: Border(right: BorderSide(color: p.line)),
+    // Frosted glass, like the macOS sidebar: the state's light behind the
+    // window shows through, blurred, so the sidebar sits above the content
+    // instead of being a grey slab beside it.
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+        child: Container(
+          width: 224,
+          decoration: BoxDecoration(
+            color: p.side.withValues(alpha: p.dark ? 0.62 : 0.70),
+            border: Border(right: BorderSide(color: p.line)),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),
+          child: _sideColumn(context, p),
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: Row(
-              children: [
-                const VpsLogo(size: 30),
-                const SizedBox(width: 12),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'vps2vpn',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: vpsText(
-                          p,
-                          size: 16,
-                          weight: FontWeight.w700,
-                          spacing: 0.2,
-                        ),
+    );
+  }
+
+  Widget _sideColumn(BuildContext context, VpsPalette p) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: Row(
+            children: [
+              const VpsLogo(size: 30),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'vps2vpn',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: vpsText(
+                        p,
+                        size: 16,
+                        weight: FontWeight.w700,
+                        spacing: 0.2,
                       ),
-                      Text(
-                        tr(context, '私有网络', 'Private network'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: vpsText(p, size: 11.5, color: p.soft),
-                      ),
-                    ],
-                  ),
+                    ),
+                    Text(
+                      tr(context, '私有网络', 'Private network'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: vpsText(p, size: 11.5, color: p.soft),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+        for (final (i, (icon, label)) in _tabs(context).indexed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _NavItem(
+              icon: icon,
+              label: label,
+              selected: i == tab,
+              onTap: () => vpsTab.value = i,
             ),
           ),
-          const SizedBox(height: 30),
-          for (final (i, (icon, label)) in _tabs(context).indexed)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: _NavItem(
-                icon: icon,
-                label: label,
-                selected: i == tab,
-                onTap: () => vpsTab.value = i,
-              ),
-            ),
-          const Spacer(),
-          const _SideStatus(),
-        ],
-      ),
+        const Spacer(),
+        const _SideStatus(),
+      ],
     );
   }
 }
@@ -350,7 +365,7 @@ class _NavItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            VpsIconView(icon, size: 18, color: selected ? p.accent : p.soft),
+            VpsIconView(icon, size: 18, color: selected ? p.accent : p.muted),
             const SizedBox(width: 12),
             Flexible(
               child: Text(
@@ -380,67 +395,85 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    return Container(
-      height: 66,
-      padding: const EdgeInsets.all(6),
+    final shape = RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.circular(24),
+      side: BorderSide(color: p.line),
+    );
+    // Acrylic, as Fluent and iOS do for a bar floating over content: the
+    // page scrolls by underneath, blurred.
+    return DecoratedBox(
       decoration: ShapeDecoration(
-        color: p.dark ? const Color(0xE6181A2B) : const Color(0xF2FFFFFF),
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: p.line),
-        ),
+        shape: shape,
         shadows: [
           BoxShadow(
-            color: const Color(0xFF000000).withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF000000).withValues(alpha: 0.22),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          for (final (i, (icon, label)) in _tabs(context).indexed)
-            Expanded(
-              child: VpsPressable(
-                onTap: () => vpsTab.value = i,
-                selected: i == tab,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  decoration: ShapeDecoration(
-                    color: i == tab
-                        ? (p.dark
-                              ? const Color(0x14FFFFFF)
-                              : const Color(0xFFEEF0F3))
-                        : const Color(0x00000000),
-                    shape: RoundedSuperellipseBorder(
-                      borderRadius: BorderRadius.circular(18),
+      child: ClipRSuperellipse(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          child: Container(
+            height: 66,
+            padding: const EdgeInsets.all(6),
+            decoration: ShapeDecoration(
+              color: p.card.withValues(alpha: p.dark ? 0.72 : 0.78),
+              shape: shape,
+            ),
+            child: _bar(context, p),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _bar(BuildContext context, VpsPalette p) {
+    return Row(
+      children: [
+        for (final (i, (icon, label)) in _tabs(context).indexed)
+          Expanded(
+            child: VpsPressable(
+              onTap: () => vpsTab.value = i,
+              selected: i == tab,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                decoration: ShapeDecoration(
+                  color: i == tab
+                      ? (p.dark
+                            ? const Color(0x14FFFFFF)
+                            : const Color(0xFFEEF0F3))
+                      : const Color(0x00000000),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    VpsIconView(
+                      icon,
+                      size: 21,
+                      color: i == tab ? p.accent : p.muted,
                     ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      VpsIconView(
-                        icon,
-                        size: 21,
-                        color: i == tab ? p.accent : p.soft,
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      style: vpsText(
+                        p,
+                        size: 11,
+                        weight: FontWeight.w600,
+                        color: i == tab ? p.text : p.soft,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        label,
-                        style: vpsText(
-                          p,
-                          size: 11,
-                          weight: FontWeight.w600,
-                          color: i == tab ? p.text : p.soft,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -493,9 +526,9 @@ class VpsPage extends StatelessWidget {
                               title,
                               style: vpsText(
                                 p,
-                                size: wide ? 26 : 22,
-                                weight: FontWeight.w600,
-                                spacing: -0.5,
+                                size: wide ? 28 : 23,
+                                weight: FontWeight.w700,
+                                spacing: -0.7,
                               ),
                             ),
                             if (subtitle != null)
@@ -513,7 +546,9 @@ class VpsPage extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 22),
-                  ...children,
+                  // Blocks arrive one after another, top to bottom.
+                  for (final (i, child) in children.indexed)
+                    VpsEnter(index: i, child: child),
                 ],
               ),
             ),

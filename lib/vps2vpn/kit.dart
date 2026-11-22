@@ -5,6 +5,7 @@
 import 'dart:math' as math;
 
 import 'package:prism_ui/prism_ui.dart' show AppRadius, BuildContextExtension;
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -60,49 +61,51 @@ class VpsPalette {
   /// Raised surface on a track: the chosen segment.
   final Color thumb;
 
-  // Graphite, not navy: quieter, reads as a tool rather than a toy.
+  // Neutral greys in clear steps (page < sidebar < card < raised), the way
+  // macOS and iOS group content: colour is kept for state and the one main
+  // action, so green, amber and red read at a glance.
   static const _dark = VpsPalette._(
     dark: true,
-    bg: Color(0xFF0B0C0F),
-    side: Color(0xFF0E0F13),
-    card: Color(0xFF14161B),
-    cardHi: Color(0xFF181B21),
-    line: Color(0x14FFFFFF),
-    text: Color(0xFFECEDEF),
-    soft: Color(0xFF8B9099),
-    muted: Color(0xFF575C66),
+    bg: Color(0xFF0D0D10),
+    side: Color(0xFF111114),
+    card: Color(0xFF1A1A1E),
+    cardHi: Color(0xFF222227),
+    line: Color(0x17FFFFFF),
+    text: Color(0xFFF5F5F7),
+    soft: Color(0xFF9A9AA1),
+    muted: Color(0xFF636369),
     accent: Color(0xFFFF7A5C),
     accentInk: Color(0xFFFFFFFF),
     accentWash: Color(0x1FFF7A5C),
-    good: Color(0xFF5BD69A),
-    warn: Color(0xFFF0B44C),
-    bad: Color(0xFFF0716B),
-    glowA: Color(0x1FFF6F61),
-    glowB: Color(0x148B5CF6),
-    track: Color(0xFF0F1115),
-    thumb: Color(0xFF262931),
+    good: Color(0xFF32D74B),
+    warn: Color(0xFFFFB340),
+    bad: Color(0xFFFF5A52),
+    glowA: Color(0x00000000),
+    glowB: Color(0x00000000),
+    track: Color(0xFF131316),
+    thumb: Color(0xFF2C2C31),
   );
 
-  // Neutral paper, no tint: the accent alone carries the brand.
+  // Apple's grouped-content greys: cards float on a cool grey page.
   static const _light = VpsPalette._(
     dark: false,
-    bg: Color(0xFFF5F6F8),
-    side: Color(0xFFFBFBFC),
+    bg: Color(0xFFF2F2F7),
+    side: Color(0xFFF9F9FB),
     card: Color(0xFFFFFFFF),
     cardHi: Color(0xFFFFFFFF),
-    line: Color(0xFFE6E8EC),
-    text: Color(0xFF111318),
-    soft: Color(0xFF6B7280),
-    muted: Color(0xFFA3A8B1),
+    line: Color(0xFFE3E3E8),
+    text: Color(0xFF1D1D1F),
+    soft: Color(0xFF6E6E73),
+    muted: Color(0xFFAEAEB2),
     accent: Color(0xFFEF5B3C),
     accentInk: Color(0xFFFFFFFF),
     accentWash: Color(0xFFFDEEE9),
-    good: Color(0xFF15965E),
-    warn: Color(0xFFB7791F),
-    bad: Color(0xFFDC4A3F),
+    good: Color(0xFF1F9A3E),
+    warn: Color(0xFFC26A00),
+    bad: Color(0xFFD70015),
     glowA: Color(0x00000000),
     glowB: Color(0x00000000),
-    track: Color(0xFFEFF1F4),
+    track: Color(0xFFEBEBF0),
     thumb: Color(0xFFFFFFFF),
   );
 
@@ -140,6 +143,16 @@ bool vpsZh(BuildContext context) =>
 String tr(BuildContext context, String zh, String en) =>
     vpsZh(context) ? zh : en;
 
+/// Inter draws Latin letters and figures; Chinese falls through to Noto
+/// Sans SC (bundled, common characters), then the system's own.
+const vpsFont = 'Inter';
+const vpsFontFallback = [
+  'NotoSansSC',
+  'Microsoft YaHei UI',
+  'Microsoft YaHei',
+  'PingFang SC',
+];
+
 TextStyle vpsText(
   VpsPalette p, {
   double size = 14,
@@ -149,6 +162,8 @@ TextStyle vpsText(
   double? spacing,
   bool tabular = false,
 }) => TextStyle(
+  fontFamily: vpsFont,
+  fontFamilyFallback: vpsFontFallback,
   fontSize: size,
   fontWeight: weight,
   color: color ?? p.text,
@@ -320,10 +335,8 @@ class _VpsPressableState extends State<VpsPressable> {
                     : BorderSide.none,
               ),
             ),
-            child: AnimatedScale(
-              scale: enabled && _down ? 0.985 : (enabled && _hover ? 1.004 : 1),
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOut,
+            child: VpsSpringScale(
+              scale: enabled && _down ? 0.97 : (enabled && _hover ? 1.006 : 1),
               child: widget.child,
             ),
           ),
@@ -332,6 +345,89 @@ class _VpsPressableState extends State<VpsPressable> {
     );
   }
 }
+
+/// The spring every press and state change rides on: a little under-damped,
+/// so it settles with one soft overshoot, the way iOS controls do.
+final vpsSpring = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: 420,
+  ratio: 0.62,
+);
+
+/// Scales [child] towards [scale] on a spring. A new target mid-flight keeps
+/// the current speed instead of restarting, so quick presses never stutter.
+class VpsSpringScale extends StatefulWidget {
+  const VpsSpringScale({super.key, required this.scale, required this.child});
+
+  final double scale;
+  final Widget child;
+
+  @override
+  State<VpsSpringScale> createState() => _VpsSpringScaleState();
+}
+
+class _VpsSpringScaleState extends State<VpsSpringScale>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController.unbounded(
+    vsync: this,
+    value: widget.scale,
+  );
+
+  @override
+  void didUpdateWidget(VpsSpringScale old) {
+    super.didUpdateWidget(old);
+    if (old.scale != widget.scale) {
+      _c.animateWith(
+        SpringSimulation(vpsSpring, _c.value, widget.scale, _c.velocity),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _c,
+    builder: (_, child) => Transform.scale(scale: _c.value, child: child),
+    child: widget.child,
+  );
+}
+
+/// Fades [child] in while it rises a few pixels, [index] beats after the
+/// page appears: a page's blocks arrive in order instead of all at once.
+/// Plays once, when the page is built.
+class VpsEnter extends StatelessWidget {
+  const VpsEnter({super.key, required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final delay = 0.09 * index.clamp(0, 8);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 520 + 50 * index.clamp(0, 8)),
+      curve: Interval(delay.clamp(0.0, 0.5), 1, curve: Curves.easeOutQuart),
+      builder: (_, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(
+          offset: Offset(0, 14 * (1 - v)),
+          child: child,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// The colour of the light behind the window: the connection's state, set
+/// by the overview. Null is the quiet brand light of "not connected".
+final vpsAmbient = ValueNotifier<Color?>(null);
 
 /// A pill button: filled (accent) or quiet (outline).
 class VpsButton extends StatelessWidget {
@@ -546,15 +642,50 @@ class VpsSegmented<T> extends StatelessWidget {
 }
 
 class VpsChip extends StatelessWidget {
-  const VpsChip({super.key, required this.label, this.color});
+  const VpsChip({
+    super.key,
+    required this.label,
+    this.color,
+    this.tinted = false,
+  });
 
   final String label;
   final Color? color;
+
+  /// A capsule washed in [color] with text in it: for the one state that
+  /// matters on a card, where a dot is too quiet.
+  final bool tinted;
 
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final c = color ?? p.accent;
+    if (tinted) {
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.fromLTRB(10, 5, 12, 5),
+        decoration: ShapeDecoration(
+          color: c.withValues(alpha: p.dark ? 0.16 : 0.12),
+          shape: const StadiumBorder(),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: vpsText(p, size: 12.5, weight: FontWeight.w600, color: c),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.fromLTRB(9, 4, 11, 4),
       decoration: ShapeDecoration(
@@ -928,24 +1059,44 @@ class VpsBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
+    // Two faint pools of the state's colour, one behind the content and one
+    // under the glass sidebar, cross-fading slowly when the state changes:
+    // the window itself says "connected" or "something is wrong".
     return ColoredBox(
       color: p.bg,
-      child: Stack(
-        children: [
-          if (p.dark) ...[
-            Positioned(
-              top: -320,
-              right: -220,
-              child: _Glow(color: p.glowA, size: 760),
-            ),
-            Positioned(
-              bottom: -360,
-              left: 120,
-              child: _Glow(color: p.glowB, size: 700),
-            ),
-          ],
-          Positioned.fill(child: child),
-        ],
+      child: ValueListenableBuilder<Color?>(
+        valueListenable: vpsAmbient,
+        builder: (context, tone, child) => TweenAnimationBuilder<Color?>(
+          tween: ColorTween(end: tone ?? p.accent),
+          duration: const Duration(milliseconds: 900),
+          curve: Curves.easeInOutCubic,
+          builder: (context, c, child) {
+            final color = c ?? p.accent;
+            return Stack(
+              children: [
+                Positioned(
+                  top: -360,
+                  right: -260,
+                  child: _Glow(
+                    color: color.withValues(alpha: p.dark ? 0.13 : 0.10),
+                    size: 820,
+                  ),
+                ),
+                Positioned(
+                  bottom: -380,
+                  left: -260,
+                  child: _Glow(
+                    color: color.withValues(alpha: p.dark ? 0.09 : 0.07),
+                    size: 720,
+                  ),
+                ),
+                Positioned.fill(child: child!),
+              ],
+            );
+          },
+          child: child,
+        ),
+        child: child,
       ),
     );
   }
