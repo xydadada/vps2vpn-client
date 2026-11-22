@@ -96,6 +96,22 @@ function Set-AppPrefs([hashtable]$settings) {
   $d.'flutter.config' = ($c | ConvertTo-Json -Depth 50 -Compress)
   $d | ConvertTo-Json -Depth 50 -Compress | Set-Content $prefs -Encoding utf8
 }
+function Edit-AppConfig([scriptblock]$edit) {
+  $d = Get-Content $prefs -Raw | ConvertFrom-Json
+  $c = $d.'flutter.config' | ConvertFrom-Json
+  & $edit $c
+  $d.'flutter.config' = ($c | ConvertTo-Json -Depth 50 -Compress)
+  $d | ConvertTo-Json -Depth 50 -Compress | Set-Content $prefs -Encoding utf8
+}
+function Set-Takeover([bool]$tun) {
+  Edit-AppConfig {
+    param($c)
+    if (-not $c.patchClashConfig.tun) { $c.patchClashConfig | Add-Member -Force tun ([pscustomobject]@{}) }
+    if (-not $c.networkProps) { $c | Add-Member -Force networkProps ([pscustomobject]@{}) }
+    $c.patchClashConfig.tun | Add-Member -Force enable $tun
+    $c.networkProps | Add-Member -Force systemProxy (-not $tun)
+  }
+}
 function Get-AppPort {
   $c = (Get-Content $prefs -Raw | ConvertFrom-Json).'flutter.config' | ConvertFrom-Json
   $port = $c.patchClashConfig.'mixed-port'
@@ -203,7 +219,7 @@ rules:
   foreach ($h in $holders) { $h.Refresh(); Check (-not $h.HasExited) "takeover on: port holder $($h.Id) was left alone" }
   Test-Through $port 'takeover on'
   $owner = (Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Select-Object -First 1).UserName
-  Check ($owner -match 'SYSTEM') "takeover on: the Helper runs the Core as SYSTEM (got $owner)"
+  "route: the Core runs as $owner" | Out-Host
   $reg = Get-ItemProperty $inetKey
   "system proxy: enable=$($reg.ProxyEnable) server=$($reg.ProxyServer)"
   Check ($reg.ProxyEnable -eq 1 -and "$($reg.ProxyServer)" -match ":$port(?:$|;)") "takeover on: system proxy points at port $port"
@@ -213,6 +229,28 @@ rules:
     $port = Start-App "restart $i"
     Test-Through $port "restart $i"
   }
+
+  # TUN: the Helper, registered on first use, runs the Core as SYSTEM. That
+  # Core must still reach the app's pipe, and traffic needs no proxy setting.
+  Stop-App
+  Set-Takeover $true
+  Start-Process $exe | Out-Null
+  $sys = Wait-Until 120 { Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match 'SYSTEM' }
+  Check $sys 'tun: the Helper runs the Core as SYSTEM'
+  Check ((Get-Service vps2vpnHelperService -ErrorAction SilentlyContinue).Status -eq 'Running') 'tun: the Helper service runs'
+  $adapter = Wait-Until 60 { Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -match 'Wintun|Meta|vps2vpn' } }
+  Check $adapter 'tun: the virtual adapter is up'
+  $before = Get-UpstreamCount
+  $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $probeUrl
+  $seen = Wait-Until 5 { (Get-UpstreamCount) -gt $before }
+  Check ($code -eq '204') "tun: curl with no proxy answers 204 (got $code)"
+  Check $seen 'tun: the request went out through the CI upstream proxy'
+  if (-not ($sys -and $adapter -and $seen)) {
+    Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { "route: adapter $($_.Name) [$($_.InterfaceDescription)] $($_.Status)" } | Out-Host
+    Show-Route | Out-Host
+  }
+  Stop-App
+  Set-Takeover $false
 
   # Two launches at once: one instance stays and works.
   Stop-App
