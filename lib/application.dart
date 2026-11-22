@@ -13,6 +13,8 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/vps2vpn/auto_update.dart';
+import 'package:fl_clash/vps2vpn/panel.dart'
+    show vpsLinkSource, vpsSubscriptionLink;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
@@ -91,24 +93,37 @@ class ApplicationState extends ConsumerState<Application> {
   }
 
   void _initLink() {
-    linkManager.initAppLinksListen((url) async {
+    linkManager.initAppLinksListen((raw) async {
       unawaited(window?.show());
-      final message = currentAppLocalizations.createProfileFromUrlTip(url);
-      final parts = message.split(url);
+      // A member centre address imports as its subscription.
+      final url = vpsSubscriptionLink(raw);
+      // The link's path is the subscription's secret: name only its host,
+      // so the question is short and safe on a shared screen.
+      final source = vpsLinkSource(url);
+      // This context sits above the app's Localizations, so ask the
+      // app's current language directly.
+      final zh = currentAppLocalizations.localeName.startsWith('zh');
+      String tr(String zhText, String en) => zh ? zhText : en;
       final res = await dialogs.showMessage(
-        title: currentAppLocalizations.addProfile,
+        title: tr('导入订阅', 'Import subscription'),
         message: TextSpan(
           children: [
-            TextSpan(text: parts.first),
+            if (source == null)
+              TextSpan(text: tr('要导入这个订阅吗？', 'Import this subscription?'))
+            else ...[
+              TextSpan(text: tr('要导入来自 ', 'Import the subscription from ')),
+              TextSpan(
+                text: source,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              TextSpan(text: tr(' 的订阅吗？', '?')),
+            ],
             TextSpan(
-              text: url,
-              style: TextStyle(
-                color: context.colorScheme.primary,
-                decoration: TextDecoration.underline,
-                decorationColor: context.colorScheme.primary,
+              text: tr(
+                '\n导入后，点概览页的连接按钮即可使用。',
+                '\nOnce imported, press Connect on the overview.',
               ),
             ),
-            if (parts.length > 1) TextSpan(text: parts.last),
           ],
         ),
       );

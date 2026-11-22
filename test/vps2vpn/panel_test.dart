@@ -61,6 +61,15 @@ void main() {
         expect(vpsSubscriptionLink(other), other);
       }
     });
+
+    test('the import question names only the host, never the secret path', () {
+      expect(
+        vpsLinkSource('https://panel.example.com:43470/s/$_tok?format=clash'),
+        'panel.example.com',
+      );
+      expect(vpsLinkSource('vless://uuid@host:443'), isNull);
+      expect(vpsLinkSource('not a link'), isNull);
+    });
   });
 
   test('reads the member fields the panel sends', () {

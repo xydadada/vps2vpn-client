@@ -57,6 +57,19 @@ Uri? vpsMemberPage(String subUrl) {
   return base.replace(pathSegments: [...base.pathSegments.take(2), '']);
 }
 
+/// Where a link to import comes from, for the "import?" question: only the
+/// host of a web address, never its path, which holds the subscription's
+/// secret. Null for anything else (share links and the like).
+String? vpsLinkSource(String link) {
+  final uri = Uri.tryParse(link.trim());
+  if (uri == null ||
+      (uri.scheme != 'http' && uri.scheme != 'https') ||
+      uri.host.isEmpty) {
+    return null;
+  }
+  return uri.host;
+}
+
 /// [link] as a subscription: the member centre's own address (`<sub>/`, or
 /// `<sub>/index.html`, as copied from the browser) is turned back into the
 /// subscription `<sub>`, keeping scheme, port and query. Anything else is

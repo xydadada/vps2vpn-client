@@ -170,17 +170,20 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    info == null
-                        ? (ipEntry.isLoading
-                              ? tr(context, '查询中…', 'Looking up…')
-                              : '—')
-                        : countryName(context, info.countryCode),
-                    style: vpsText(
-                      p,
-                      size: 26,
-                      weight: FontWeight.w600,
-                      spacing: -0.5,
+                  VpsBreathe(
+                    active: info == null && ipEntry.isLoading,
+                    child: Text(
+                      info == null
+                          ? (ipEntry.isLoading
+                                ? tr(context, '查询中…', 'Looking up…')
+                                : '—')
+                          : countryName(context, info.countryCode),
+                      style: vpsText(
+                        p,
+                        size: 26,
+                        weight: FontWeight.w700,
+                        spacing: -0.5,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -385,7 +388,10 @@ class _ServiceLine extends StatelessWidget {
                 style: vpsText(p, size: 12.5, color: p.soft),
               ),
             ),
-          VpsChip(label: statusText(context, entry), color: color),
+          VpsBreathe(
+            active: entry.value == null && entry.isLoading,
+            child: VpsChip(label: statusText(context, entry), color: color),
+          ),
         ],
       ),
     );

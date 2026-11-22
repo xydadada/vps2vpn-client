@@ -1042,10 +1042,8 @@ class _Stat extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        Text(
+        VpsRollingText(
           value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: vpsText(
             p,
             size: 22,

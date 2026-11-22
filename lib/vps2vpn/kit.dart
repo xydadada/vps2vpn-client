@@ -173,7 +173,7 @@ TextStyle vpsText(
 );
 
 /// The rounded surface every block sits on: glass in dark, paper in light.
-class VpsCard extends StatelessWidget {
+class VpsCard extends StatefulWidget {
   const VpsCard({
     super.key,
     required this.child,
@@ -192,26 +192,56 @@ class VpsCard extends StatelessWidget {
   final bool? selected;
 
   @override
+  State<VpsCard> createState() => _VpsCardState();
+}
+
+class _VpsCardState extends State<VpsCard> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final box = Container(
-      padding: padding,
+    final dark = context.colorScheme.brightness == Brightness.dark;
+    // Under the pointer the edge catches a little more light, like a lifted
+    // pane; the change is slight on purpose.
+    final edge = widget.highlight
+        ? p.accent.withValues(alpha: _hover ? 0.7 : 0.5)
+        : _hover
+        ? Color.alphaBlend(
+            (dark ? const Color(0xFFFFFFFF) : const Color(0xFF000000))
+                .withValues(alpha: dark ? 0.08 : 0.06),
+            p.line,
+          )
+        : p.line;
+    final box = AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: widget.padding,
       decoration: ShapeDecoration(
-        color: highlight ? p.cardHi : p.card,
+        color: widget.highlight ? p.cardHi : p.card,
         shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(radius),
-          side: BorderSide(
-            color: highlight ? p.accent.withValues(alpha: 0.5) : p.line,
-          ),
+          borderRadius: BorderRadius.circular(widget.radius),
+          side: BorderSide(color: edge),
         ),
         shadows: p.raise,
       ),
-      child: child,
+      child: widget.child,
     );
-    if (onTap == null) {
-      return selected == null ? box : Semantics(selected: selected, child: box);
+    final hovered = MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: box,
+    );
+    if (widget.onTap == null) {
+      return widget.selected == null
+          ? hovered
+          : Semantics(selected: widget.selected, child: hovered);
     }
-    return VpsPressable(onTap: onTap, selected: selected, child: box);
+    return VpsPressable(
+      onTap: widget.onTap,
+      selected: widget.selected,
+      child: hovered,
+    );
   }
 }
 
@@ -421,6 +451,107 @@ class VpsEnter extends StatelessWidget {
         ),
       ),
       child: child,
+    );
+  }
+}
+
+/// Breathes [child] between faint and full while [active]: "still working
+/// on it", without a spinner.
+class VpsBreathe extends StatefulWidget {
+  const VpsBreathe({super.key, required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<VpsBreathe> createState() => _VpsBreatheState();
+}
+
+class _VpsBreatheState extends State<VpsBreathe>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _c.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(VpsBreathe old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !_c.isAnimating) _c.repeat(reverse: true);
+    if (!widget.active && _c.isAnimating) {
+      _c.stop();
+      _c.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.active) return widget.child;
+    return FadeTransition(
+      opacity: Tween(
+        begin: 0.38,
+        end: 1.0,
+      ).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOutSine)),
+      child: widget.child,
+    );
+  }
+}
+
+/// [text] that rolls up into place when it changes, like a flip counter:
+/// live numbers move instead of blinking.
+class VpsRollingText extends StatelessWidget {
+  const VpsRollingText(
+    this.text, {
+    super.key,
+    required this.style,
+    this.maxLines = 1,
+  });
+
+  final String text;
+  final TextStyle style;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (current, previous) => Stack(
+        alignment: Alignment.centerLeft,
+        children: [...previous, ?current],
+      ),
+      transitionBuilder: (child, a) {
+        final incoming = child.key == ValueKey(text);
+        return ClipRect(
+          child: SlideTransition(
+            position: Tween(
+              begin: Offset(0, incoming ? 0.5 : -0.5),
+              end: Offset.zero,
+            ).animate(a),
+            child: FadeTransition(opacity: a, child: child),
+          ),
+        );
+      },
+      child: Text(
+        text,
+        key: ValueKey(text),
+        maxLines: maxLines,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      ),
     );
   }
 }

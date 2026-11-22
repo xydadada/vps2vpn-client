@@ -199,6 +199,19 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{{SOURCE_DIR}}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
+; vps2vpn:// links (the "open in vps2vpn" buttons on the member and deploy
+; pages) must work before the app has ever run: the app registers the scheme
+; for the current user only when it starts. HKA is HKLM here (admin install),
+; so every user of the PC gets it, including when a standard user elevated
+; with another account's password; the app's own HKCU entry, written to the
+; same path, takes precedence once it runs. Keep it in step with
+; url_command in plugins/rust_api/rust/src/launch/entries.rs.
+[Registry]
+Root: HKA; Subkey: "Software\Classes\vps2vpn"; ValueType: string; ValueName: ""; ValueData: "URL:vps2vpn"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\vps2vpn"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\vps2vpn\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{{EXECUTABLE_NAME}}"",0"
+Root: HKA; Subkey: "Software\Classes\vps2vpn\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{{EXECUTABLE_NAME}}"" ""%1"""
+
 [Icons]
 Name: "{autoprograms}\{{DISPLAY_NAME}}"; Filename: "{app}\{{EXECUTABLE_NAME}}"
 Name: "{autodesktop}\{{DISPLAY_NAME}}"; Filename: "{app}\{{EXECUTABLE_NAME}}"; Tasks: desktopicon
