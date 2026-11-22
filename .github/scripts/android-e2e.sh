@@ -58,6 +58,17 @@ for node in re.findall(r"<node [^>]*>", sys.stdin.read()):
   [ -n "$at" ] || return 1
   adb shell input tap $at
 }
+tap_field() {
+  local at
+  at=$(dump | python3 -I -c 'import re, sys
+for node in re.findall(r"<node [^>]*>", sys.stdin.read()):
+    if "android.widget.EditText" in node:
+        x1, y1, x2, y2 = map(int, re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", node).groups())
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        break')
+  [ -n "$at" ] || return 1
+  adb shell input tap $at
+}
 wait_tap() {
   for _ in $(seq 1 "${2:-15}"); do
     tap "$1" && return 0
@@ -73,7 +84,9 @@ through_vpn() {
   check '[[ "$reply" == *" 204"* ]]' "$1: a request from the phone answers 204 (got: ${reply%%$'\r'})"
   check '[ "$(wc -l < "$log")" -gt "$before" ]' "$1: it went out through the CI upstream proxy"
 }
-vpn_up() { adb shell ip -o link 2>/dev/null | grep -q 'tun'; }
+# tun0 and the like; the emulator always has an unrelated tunl0.
+vpn_up() { adb shell ip -o link 2>/dev/null | grep -qE '^[0-9]+: tun[0-9]+[:@]'; }
+front() { adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1; }
 
 adb wait-for-device
 check 'adb install -r -g "$APK" > "$OUT/install.log" 2>&1' 'APK installs'
@@ -83,7 +96,18 @@ adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&
 sleep 15
 shot first-start
 echo "screen: $(screen)"
-for _ in 1 2 3; do tap '^(agree|accept|i agree|同意|接受|确定)$' || break; sleep 3; done
+# The disclaimer's Agree asks for its statement typed out before Confirm.
+statement='The Software itself does not provide any proxy server, node, subscription, or network access service, and has no partnership, agency, or guarantee relationship with any provider of such services.'
+if wait_tap '^(agree|同意)$' 5; then
+  sleep 3
+  tap_field || echo 'no text field for the statement'
+  sleep 1
+  adb shell input text "'${statement// /%s}'"
+  sleep 2
+  echo "screen: $(screen)"
+  wait_tap '^(confirm|确认|确定)$' 5 || echo 'no confirm button after the statement'
+  sleep 5
+fi
 check 'adb shell pidof "$PKG" > /dev/null' 'the app is running after the first start'
 shot after-disclaimer
 echo "screen: $(screen)"
@@ -95,8 +119,8 @@ echo "screen: $(screen)"
 wait_tap '^(ok|confirm|add|确定|确认|添加)$' 5 || true
 check 'for _ in $(seq 1 20); do grep -q "GET /sub.yaml" "$OUT/sub-server.log" && break; sleep 1; done; grep -q "GET /sub.yaml" "$OUT/sub-server.log"' 'the app downloaded the subscription'
 sleep 5
-adb shell input keyevent KEYCODE_BACK
-sleep 2
+front
+sleep 3
 shot imported
 echo "screen: $(screen)"
 
