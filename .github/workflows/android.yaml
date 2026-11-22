@@ -108,7 +108,9 @@ jobs:
           [ -n "$KEYSTORE_B64" ] || { echo 'secret ANDROID_KEYSTORE_B64 is not set' >&2; exit 1; }
           umask 077
           printf '%s' "$KEYSTORE_B64" | base64 -d > android/app/keystore.jks
+          # flutter pub get leaves local.properties without a final newline.
           {
+            echo
             echo "storePassword=$KEYSTORE_PASSWORD"
             echo "keyPassword=$KEYSTORE_PASSWORD"
             echo "keyAlias=$KEY_ALIAS"
