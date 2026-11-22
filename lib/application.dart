@@ -114,7 +114,7 @@ class ApplicationState extends ConsumerState<Application> {
               TextSpan(text: tr('要导入来自 ', 'Import the subscription from ')),
               TextSpan(
                 text: source,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: TextStyle(color: context.colorScheme.primary),
               ),
               TextSpan(text: tr(' 的订阅吗？', '?')),
             ],

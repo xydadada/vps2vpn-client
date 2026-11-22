@@ -4,7 +4,8 @@
 
 import 'dart:math' as math;
 
-import 'package:prism_ui/prism_ui.dart' show AppRadius, BuildContextExtension;
+import 'package:prism_ui/prism_ui.dart'
+    show AppRadius, AppShape, BuildContextExtension;
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -798,7 +799,7 @@ class VpsChip extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(10, 5, 12, 5),
         decoration: ShapeDecoration(
           color: c.withValues(alpha: p.dark ? 0.16 : 0.12),
-          shape: const StadiumBorder(),
+          shape: AppShape.full,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

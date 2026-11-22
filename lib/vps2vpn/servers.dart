@@ -533,9 +533,11 @@ class _Bars extends StatelessWidget {
             curve: Curves.easeOutBack,
             width: 4,
             height: 6.0 + 4 * i,
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: i < level ? color : off,
-              borderRadius: BorderRadius.circular(2),
+              shape: const RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.all(Radius.circular(2)),
+              ),
             ),
           ),
         ],
