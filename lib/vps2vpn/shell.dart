@@ -7,10 +7,12 @@ import 'dart:io';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/check.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/mine.dart';
+import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -197,20 +199,27 @@ class _SideStatus extends ConsumerWidget {
     final now = on
         ? ref.watch(trafficsProvider).list.safeLast(const Traffic())
         : const Traffic();
-    final title = !hasProfile
-        ? tr(context, '未导入订阅', 'No subscription')
+    // Same order as the overview: a refused account or a silent line is not
+    // "connected", whatever the Core says.
+    final block = vpsAccountBlock(ref.watch(vpsMemberProvider).value);
+    final delay = group == null || !on
+        ? null
+        : ref.watch(
+            delayProvider(proxyName: group.name, testUrl: group.testUrl),
+          );
+    final lineDown = on && delay != null && delay < 0;
+    final (title, dotColor) = !hasProfile
+        ? (tr(context, '未导入订阅', 'No subscription'), p.muted)
+        : block != null
+        ? (vpsAccountBlockReason(context, block), p.bad)
         : suspended
-        ? tr(context, '已暂停', 'Paused')
+        ? (tr(context, '已暂停', 'Paused'), p.warn)
+        : lineDown
+        ? (tr(context, '线路无响应', 'Line not responding'), p.warn)
         : on
-        ? tr(context, '已连接', 'Connected')
-        : tr(context, '未连接', 'Not connected');
-    final dotColor = !hasProfile
-        ? p.muted
-        : suspended
-        ? p.warn
-        : on
-        ? p.good
-        : p.muted;
+        ? (tr(context, '已连接', 'Connected'), p.good)
+        : (tr(context, '未连接', 'Not connected'), p.muted);
+    final glow = dotColor == p.good;
     final small = vpsText(p, size: 11.5, color: p.soft, tabular: true);
     return VpsPressable(
       onTap: () => vpsTab.value = vpsTabHome,
@@ -236,7 +245,7 @@ class _SideStatus extends ConsumerWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: dotColor,
-                    boxShadow: on
+                    boxShadow: glow
                         ? [
                             BoxShadow(
                               color: p.good.withValues(alpha: 0.55),

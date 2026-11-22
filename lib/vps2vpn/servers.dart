@@ -230,9 +230,10 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
             ),
             const SizedBox(width: 12),
             _GroupTab(
+              // Says how the list is sorted now; a tap switches it.
               label: byLatency
-                  ? tr(context, '按延迟 ↑', 'By latency ↑')
-                  : tr(context, '默认顺序', 'Default order'),
+                  ? tr(context, '排序：延迟从低到高', 'Sort: fastest first')
+                  : tr(context, '排序：订阅原顺序', 'Sort: as subscribed'),
               selected: false,
               onTap: () => setState(() => _byLatency.value = !_byLatency.value),
             ),
