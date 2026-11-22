@@ -55,6 +55,9 @@ type lineSeen struct {
 }
 
 type lineWatch struct {
+	// Today only the watch's own ticker goroutine calls observe; the lock
+	// keeps the maps safe should a second caller (a manual check) appear.
+	mu       sync.Mutex
 	cooldown time.Duration
 	clock    func() time.Time
 	seen     map[string]lineSeen
@@ -78,6 +81,8 @@ func newLineWatch(cooldown time.Duration, clock func() time.Time) *lineWatch {
 // observe records where each group points now and answers the moves whose
 // connections should be closed.
 func (w *lineWatch) observe(groups []lineGroup) []lineMove {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	at := w.clock()
 	var moves []lineMove
 	present := make(map[string]bool, len(groups))
