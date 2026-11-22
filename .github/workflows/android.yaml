@@ -120,7 +120,12 @@ jobs:
       - name: Package
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
-        run: dart tool/package.dart android --arch universal --env stable -v
+          VPS2VPN_RELEASE_SIGNING: required
+        run: |
+          show() { ls -l android/app/keystore.jks || true; echo "local.properties keys: $(cut -d= -f1 android/local.properties 2>/dev/null | paste -sd' ')"; }
+          show
+          dart tool/package.dart android --arch universal --env stable -v
+          show
 
       - name: Name the APK for the panel
         id: name

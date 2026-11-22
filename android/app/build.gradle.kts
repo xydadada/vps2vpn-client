@@ -22,6 +22,16 @@ val hasReleaseSigning = releaseStoreFile.exists() &&
     releaseKeyAlias != null &&
     releaseKeyPassword != null
 
+if (System.getenv("VPS2VPN_RELEASE_SIGNING") == "required" && !hasReleaseSigning) {
+    val missing = listOfNotNull(
+        "app/keystore.jks".takeUnless { releaseStoreFile.exists() },
+        "storePassword".takeIf { releaseStorePassword == null },
+        "keyAlias".takeIf { releaseKeyAlias == null },
+        "keyPassword".takeIf { releaseKeyPassword == null },
+    )
+    throw GradleException("release signing is required; missing: ${missing.joinToString()}")
+}
+
 android {
     namespace = "com.follow.clash"
     compileSdk = libs.versions.compileSdk.get().toInt()
