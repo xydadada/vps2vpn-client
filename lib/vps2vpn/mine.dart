@@ -12,6 +12,7 @@ import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:flutter/services.dart';
@@ -40,9 +41,10 @@ class _LanCompatibilityRow extends ConsumerWidget {
       title: tr(context, '局域网兼容模式', 'LAN compatibility mode'),
       subtitle: tr(
         context,
-        '关闭严格路由。虚拟机（VirtualBox、Hyper-V）或局域网设备在虚拟网卡模式下无法使用时打开；打开后 DNS 和 IPv6 可能绕过代理',
-        'Turns strict route off. Use it if VMs (VirtualBox, Hyper-V) or LAN '
-            'devices break in TUN mode; DNS and IPv6 may then bypass the proxy',
+        '用虚拟网卡时，虚拟机（VirtualBox、Hyper-V）或局域网里的打印机、NAS 连不上，就打开它。代价是少量请求（域名查询、IPv6）可能不经过你的服务器',
+        'Turn on if, with the virtual adapter, VMs (VirtualBox, Hyper-V) or '
+            'printers and NAS on your network stop working. Some lookups and '
+            'IPv6 traffic may then skip your server',
       ),
       trailing: VpsSwitch(
         value: !strictRoute,
@@ -109,7 +111,8 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
       if (!mounted) return;
       // A plain URL, a share link, or a clash://install-config?url=… wrapper
       // (what many panels hand out) all come down to one subscription link.
-      final link = profileUrlFromQrCodes([data?.text]);
+      final raw = profileUrlFromQrCodes([data?.text]);
+      final link = raw == null ? null : vpsSubscriptionLink(raw);
       if (link == null) {
         setState(
           () => _note = tr(

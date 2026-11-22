@@ -57,6 +57,25 @@ Uri? vpsMemberPage(String subUrl) {
   return base.replace(pathSegments: [...base.pathSegments.take(2), '']);
 }
 
+/// [link] as a subscription: the member centre's own address (`<sub>/`, or
+/// `<sub>/index.html`, as copied from the browser) is turned back into the
+/// subscription `<sub>`, keeping scheme, port and query. Anything else is
+/// returned unchanged.
+String vpsSubscriptionLink(String link) {
+  final uri = Uri.tryParse(link.trim());
+  if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+    return link;
+  }
+  final segs = uri.pathSegments;
+  final page =
+      segs.length == 3 &&
+      segs[0] == 's' &&
+      _token.hasMatch(segs[1]) &&
+      (segs[2].isEmpty || segs[2] == 'index.html');
+  if (!page) return link;
+  return uri.replace(pathSegments: segs.take(2)).removeFragment().toString();
+}
+
 // Dart DateTime supports at most +/- 8,640,000,000,000,000 ms from epoch.
 // Convert only finite in-range *seconds* from remote panel JSON. One corrupt
 // optional timestamp must not make the entire member response unusable.

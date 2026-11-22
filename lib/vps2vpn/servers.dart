@@ -200,7 +200,11 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
       title: tr(context, '节点', 'Nodes'),
       subtitle: selectable
           ? tr(context, '点击切换节点，延迟实时更新', 'Tap to switch; latency updates live')
-          : tr(context, '该策略组自动选择节点', 'This group picks automatically'),
+          : tr(
+              context,
+              '这条线路会自动挑选节点，不需要手动切换',
+              'This line picks a node by itself; nothing to switch',
+            ),
       action: VpsButton(
         label: _testing
             ? tr(context, '测速中…', 'Testing…')

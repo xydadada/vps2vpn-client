@@ -36,6 +36,31 @@ void main() {
       expect(vpsMemberPage('https://example.com/sub?token=$_tok'), isNull);
       expect(vpsMemberPage(''), isNull);
     });
+
+    test('a member centre address copied from the browser imports as the '
+        'subscription', () {
+      expect(
+        vpsSubscriptionLink('https://1.2.3.4:43470/s/$_tok/'),
+        'https://1.2.3.4:43470/s/$_tok',
+      );
+      expect(
+        vpsSubscriptionLink('https://1.2.3.4:43470/s/$_tok/index.html#usage'),
+        'https://1.2.3.4:43470/s/$_tok',
+      );
+      expect(
+        vpsSubscriptionLink('http://1.2.3.4:43470/s/$_tok/?format=clash'),
+        'http://1.2.3.4:43470/s/$_tok?format=clash',
+      );
+      // Everything else is left alone.
+      for (final other in [
+        'https://1.2.3.4:43470/s/$_tok',
+        'https://1.2.3.4:43470/s/$_tok/api/',
+        'https://example.com/sub/',
+        'clash://install-config?url=x',
+      ]) {
+        expect(vpsSubscriptionLink(other), other);
+      }
+    });
   });
 
   test('reads the member fields the panel sends', () {
