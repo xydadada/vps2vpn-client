@@ -51,6 +51,10 @@ void main() {
         vpsSubscriptionLink('http://1.2.3.4:43470/s/$_tok/?format=clash'),
         'http://1.2.3.4:43470/s/$_tok?format=clash',
       );
+      expect(
+        vpsSubscriptionLink('https://1.2.3.4:43470/s/$_tok#invites'),
+        'https://1.2.3.4:43470/s/$_tok',
+      );
       // Everything else is left alone.
       for (final other in [
         'https://1.2.3.4:43470/s/$_tok',

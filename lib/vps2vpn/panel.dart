@@ -80,6 +80,14 @@ String vpsSubscriptionLink(String link) {
     return link;
   }
   final segs = uri.pathSegments;
+  // The subscription itself with a page anchor (`<sub>#invites`, copied
+  // from the member centre's address bar): the anchor is no part of it.
+  if (segs.length == 2 &&
+      segs[0] == 's' &&
+      _token.hasMatch(segs[1]) &&
+      uri.hasFragment) {
+    return uri.removeFragment().toString();
+  }
   final page =
       segs.length == 3 &&
       segs[0] == 's' &&
