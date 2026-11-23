@@ -11,6 +11,8 @@ import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/providers/database.dart';
 import 'package:fl_clash/providers/route_state.dart';
 import 'package:fl_clash/providers/state.dart';
+import 'package:fl_clash/state.dart';
+import 'package:fl_clash/vps2vpn/crash_restart.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +30,7 @@ class CoreManager extends ConsumerStatefulWidget {
 class _CoreContainerState extends ConsumerState<CoreManager>
     with CoreEventListener {
   CoreController get _core => ref.read(coreHandlerProvider);
+  final _crashRestarts = VpsCrashRestarts();
 
   // vps2vpn: see lib/common/tun_self_check.dart. Windows only, where FlClash
   // #3020 shows TUN "on" with no adapter.
@@ -257,9 +260,24 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     }
     ref.read(coreStatusProvider.notifier).value = CoreStatus.disconnected;
     ref.read(coreStopReasonProvider.notifier).value = message;
-    ref.read(setupActionProvider.notifier).onCoreLost();
+    final setup = ref.read(setupActionProvider.notifier)..onCoreLost();
     if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
       dialogs.showBanner(message, level: BannerLevel.error);
+    }
+    // vps2vpn: the system proxy still points at the dead Core, so the whole
+    // machine is offline until it is back. Bring it back without a click.
+    if (system.isDesktop && setup.wantsRunning && _crashRestarts.take()) {
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        if (!mounted ||
+            ref.read(coreStatusProvider) != CoreStatus.disconnected) {
+          return;
+        }
+        unawaited(
+          globalState.safeRun(
+            ref.read(coreActionProvider.notifier).restartCore,
+          ),
+        );
+      });
     }
     super.onCrash(message);
   }
