@@ -8,6 +8,9 @@ import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class Dialogs {
+  /// The newest error shown, so a page can repeat why its action failed.
+  ({String text, DateTime at})? lastErrorBanner;
+
   Dialogs._();
 
   // Focus sits in the route the user acts in, so an alert raised from a form
@@ -230,6 +233,9 @@ class Dialogs {
       return;
     }
     commonPrint.log('banner: $text');
+    if (level == BannerLevel.error) {
+      lastErrorBanner = (text: text, at: DateTime.now());
+    }
     final context = rootNavigatorKey.currentContext;
     if (context == null) {
       return;

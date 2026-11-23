@@ -1,6 +1,7 @@
 // vps2vpn home: one big connect button, where you exit, live speed,
 // plan usage, how you go online, and whether the AI sites open.
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -13,6 +14,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
+import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
@@ -21,6 +23,7 @@ import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:fl_clash/vps2vpn/takeover_notice.dart';
+import 'package:fl_clash/vps2vpn/tray_menu.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,15 +95,8 @@ Group? mainGroup(List<Group> groups) {
   return groups.isEmpty ? null : groups.first;
 }
 
-/// Whole system (virtual adapter) or the system proxy: exactly one of them.
-void useWholeSystem(WidgetRef ref, bool whole) {
-  ref
-      .read(patchClashConfigProvider.notifier)
-      .update((s) => s.copyWith.tun(enable: whole));
-  ref
-      .read(networkSettingProvider.notifier)
-      .update((s) => s.copyWith(systemProxy: !whole));
-}
+void useWholeSystem(WidgetRef ref, bool whole) =>
+    vpsUseWholeSystem(ref.read, whole);
 
 class VpsHomePage extends ConsumerWidget {
   const VpsHomePage({super.key});
@@ -115,6 +111,8 @@ class VpsHomePage extends ConsumerWidget {
       children: [
         const VpsTakeoverNotice(),
         const VpsSubscriptionNotice(),
+        // Android would announce every read of the clipboard.
+        if (!Platform.isAndroid) const VpsClipboardOffer(),
         const _Hero(),
         const SizedBox(height: 16),
         const _Stats(),
@@ -227,6 +225,67 @@ class _Hero extends ConsumerStatefulWidget {
 
 class _HeroState extends ConsumerState<_Hero> {
   late final OutboundIpProbe _probe;
+  bool _importing = false;
+  String? _importNote;
+
+  Future<void> _import() async {
+    if (_importing) return;
+    setState(() => _importing = true);
+    final result = await vpsImportClipboard(ref);
+    if (!mounted) return;
+    setState(() {
+      _importing = false;
+      _importNote = vpsImportNote(context, result);
+    });
+  }
+
+  static const _connectWindow = Duration(seconds: 15);
+  DateTime? _onSince;
+  Timer? _settle;
+  bool _tappedConnect = false;
+  bool _tappedStop = false;
+  String? _failure;
+
+  void _toggle() {
+    final starting = !ref.read(isStartProvider);
+    setState(() {
+      _tappedConnect = starting;
+      _tappedStop = !starting;
+      _failure = null;
+    });
+    ref.read(commonActionProvider.notifier).toggleRunning();
+  }
+
+  /// "Connected" waits for the line to answer once; a start the app rolled
+  /// back by itself says why, in place.
+  void _onStartChanged(bool? was, bool now) {
+    _settle?.cancel();
+    if (now) {
+      _onSince = DateTime.now();
+      _settle = Timer(_connectWindow, () {
+        if (mounted) setState(() {});
+      });
+      final group = mainGroup(ref.read(currentGroupsStateProvider).value);
+      if (group != null) {
+        unawaited(
+          ref.read(proxiesActionProvider.notifier).delayTestGroups([group]),
+        );
+      }
+      return;
+    }
+    _onSince = null;
+    if (was == true && _tappedConnect && !_tappedStop) {
+      final last = dialogs.lastErrorBanner;
+      final recent =
+          last != null &&
+          DateTime.now().difference(last.at) < const Duration(seconds: 30);
+      _failure = recent
+          ? last.text
+          : tr(context, '请再试一次。', 'Please try again.');
+    }
+    _tappedConnect = false;
+    _tappedStop = false;
+  }
 
   @override
   void initState() {
@@ -257,6 +316,7 @@ class _HeroState extends ConsumerState<_Hero> {
 
   @override
   void dispose() {
+    _settle?.cancel();
     _probe.unwatch(routedOutbound);
     super.dispose();
   }
@@ -264,6 +324,10 @@ class _HeroState extends ConsumerState<_Hero> {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
+    ref.listen(
+      isStartProvider,
+      (was, now) => setState(() => _onStartChanged(was, now)),
+    );
     final isStart = ref.watch(isStartProvider);
     final suspended = isStart && ref.watch(suspendProvider);
     final on = isStart && !suspended;
@@ -294,21 +358,37 @@ class _HeroState extends ConsumerState<_Hero> {
             delayProvider(proxyName: group.name, testUrl: group.testUrl),
           );
     final lineDown = on && delay != null && delay < 0;
+    final onSince = _onSince;
+    final connecting =
+        on &&
+        block == null &&
+        (delay == null || delay == 0) &&
+        onSince != null &&
+        DateTime.now().difference(onSince) < _connectWindow;
+    final failure = isStart || !hasProfile ? null : _failure;
     final (status, statusColor) = !hasProfile
         ? (tr(context, '未导入订阅', 'No subscription'), p.muted)
         : block != null
         ? (vpsAccountBlockReason(context, block), p.bad)
+        : failure != null
+        ? (tr(context, '没连上', 'Not connected'), p.bad)
+        : connecting
+        ? (tr(context, '连接中…', 'Connecting…'), p.muted)
         : suspended
         ? (tr(context, '已暂停', 'Paused'), p.warn)
         : lineDown
         ? (tr(context, '线路无响应', 'Line not responding'), p.warn)
         : on
         ? (tr(context, '已连接', 'Connected'), p.good)
-        : (tr(context, '未连接', 'Disconnected'), p.muted);
+        : (tr(context, '未连接', 'Not connected'), p.muted);
     // Connected, the headline is where you are (the capsule above it says
     // how well); otherwise what to do next.
     final title = !hasProfile
         ? tr(context, '导入订阅以开始', 'Import a subscription')
+        : failure != null
+        ? tr(context, '这次没连上', 'That did not connect')
+        : connecting
+        ? tr(context, '正在接入你的线路', 'Reaching your line')
         : on && info != null
         ? countryName(context, info.countryCode)
         : isStart
@@ -320,8 +400,10 @@ class _HeroState extends ConsumerState<_Hero> {
     // behind the window. Null is "not connected": the brand's own colour.
     final tone = !hasProfile
         ? null
-        : block != null
+        : block != null || failure != null
         ? p.bad
+        : connecting
+        ? null
         : suspended || lineDown
         ? p.warn
         : on
@@ -346,59 +428,76 @@ class _HeroState extends ConsumerState<_Hero> {
             ),
           };
     final sub = !hasProfile
-        ? tr(
-            context,
-            '粘贴管理员发给你的订阅链接，即可使用你的私有线路',
-            'Paste the subscription link the owner gave you to use your line',
-          )
+        ? _importNote ??
+              tr(
+                context,
+                '复制管理员发给你的订阅链接，再点"导入"',
+                'Copy the subscription link the owner gave you, then tap Import',
+              )
         : block != null
         ? vpsAccountBlockHint(context, block)
-        : suspended
-        ? tr(
-            context,
-            '连接已暂停，恢复后自动继续，也可点击"断开"停止',
-            'Connection paused; resumes automatically or tap Stop',
-          )
-        : lineDown
-        ? tr(
-            context,
-            '当前线路没有响应。到「节点」换一条，或到「检测」看看原因。',
-            'The line is not answering. Pick another in Nodes, or see Check.',
-          )
-        : on && mode == Mode.global
-        ? tr(
-            context,
-            '全部流量正经由你的服务器加密传输',
-            'All traffic is encrypted through your server',
-          )
-        : on
-        ? tr(
-            context,
-            '境外流量正经由你的服务器加密传输，国内网站直连',
-            'Traffic abroad goes encrypted through your server; local sites go direct',
-          )
-        : tr(
-            context,
-            '轻点"连接"，即刻接入你的私有线路',
-            'Tap Connect to use your private line',
-          );
+        : failure ??
+              (connecting
+                  ? tr(
+                      context,
+                      '正在启动并测试线路，通常几秒就好',
+                      'Starting up and testing the line; this takes a few seconds',
+                    )
+                  : suspended
+                  ? tr(
+                      context,
+                      '连接已暂停，恢复后自动继续，也可点击"断开"停止',
+                      'Connection paused; resumes automatically, or tap Disconnect',
+                    )
+                  : lineDown
+                  ? tr(
+                      context,
+                      '当前线路没有响应。到「节点」换一条，或到「检测」看看原因。',
+                      'The line is not answering. Pick another in Nodes, or see Check.',
+                    )
+                  : on && mode == Mode.global
+                  ? tr(
+                      context,
+                      '全部流量正经由你的服务器加密传输',
+                      'All traffic is encrypted through your server',
+                    )
+                  : on
+                  ? tr(
+                      context,
+                      '境外流量正经由你的服务器加密传输，国内网站直连',
+                      'Traffic abroad goes encrypted through your server; local sites go direct',
+                    )
+                  : tr(
+                      context,
+                      '轻点"连接"，即刻接入你的私有线路',
+                      'Tap Connect to use your private line',
+                    ));
 
     return LayoutBuilder(
       builder: (context, c) {
         final wide = c.maxWidth >= 640;
         final button = _PowerRing(
           on: on,
+          busy: connecting,
           tone: tone ?? p.good,
           add: !hasProfile,
           size: wide ? 148 : 132,
           label: !hasProfile
-              ? tr(context, '导入', 'Import')
-              : (isStart
-                    ? tr(context, '断开', 'Stop')
-                    : tr(context, '连接', 'Connect')),
-          onTap: hasProfile
-              ? () => ref.read(commonActionProvider.notifier).toggleRunning()
-              : () => vpsTab.value = vpsTabMe,
+              ? (_importing
+                    ? tr(context, '导入中…', 'Adding…')
+                    : tr(context, '导入', 'Import'))
+              : connecting
+              ? tr(context, '连接中…', 'Connecting…')
+              : isStart
+              ? tr(context, '断开', 'Disconnect')
+              : failure != null
+              ? tr(context, '重试', 'Retry')
+              : tr(context, '连接', 'Connect'),
+          onTap: !hasProfile
+              ? _import
+              : connecting
+              ? null
+              : _toggle,
         );
         final head = Column(
           crossAxisAlignment: wide
@@ -572,6 +671,7 @@ class _PowerRing extends StatefulWidget {
     required this.size,
     required this.label,
     required this.onTap,
+    this.busy = false,
   });
 
   final bool on;
@@ -581,7 +681,8 @@ class _PowerRing extends StatefulWidget {
   final bool add;
   final double size;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool busy;
 
   @override
   State<_PowerRing> createState() => _PowerRingState();
@@ -597,14 +698,23 @@ class _PowerRingState extends State<_PowerRing>
   @override
   void initState() {
     super.initState();
-    if (widget.on) _spin.repeat();
+    _sync();
   }
 
   @override
   void didUpdateWidget(_PowerRing old) {
     super.didUpdateWidget(old);
-    if (widget.on && !_spin.isAnimating) _spin.repeat();
-    if (!widget.on && _spin.isAnimating) _spin.stop();
+    if (old.busy != widget.busy || old.on != widget.on) _sync();
+  }
+
+  // Busy, the ring turns fast while the line is tried.
+  void _sync() {
+    _spin.duration = Duration(milliseconds: widget.busy ? 1200 : 6000);
+    if (widget.on) {
+      _spin.repeat();
+    } else {
+      _spin.stop();
+    }
   }
 
   @override

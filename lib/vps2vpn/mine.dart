@@ -10,9 +10,9 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
+import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
-import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:flutter/services.dart';
@@ -107,38 +107,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
     if (_pasting) return;
     setState(() => _pasting = true);
     try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final result = await vpsImportClipboard(ref);
       if (!mounted) return;
-      // A plain URL, a share link, or a clash://install-config?url=… wrapper
-      // (what many panels hand out) all come down to one subscription link.
-      final raw = profileUrlFromQrCodes([data?.text]);
-      final link = raw == null ? null : vpsSubscriptionLink(raw);
-      if (link == null) {
-        setState(
-          () => _note = tr(
-            context,
-            '剪贴板里没有订阅链接。请先复制管理员发给你的链接，再点这里。',
-            'No subscription link on the clipboard. Copy the link the owner gave you first.',
-          ),
-        );
-        return;
-      }
-      setState(() => _note = null);
-      final before = ref.read(profilesProvider).length;
-      await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
-      if (!mounted) return;
-      if (ref.read(profilesProvider).length > before) {
-        // Added: the next step is connecting, which lives on Home.
-        vpsTab.value = vpsTabHome;
-      } else {
-        setState(
-          () => _note = tr(
-            context,
-            '导入失败：请确认链接完整且服务器在线后重试。',
-            'Not added. Check the link is complete and the server is running.',
-          ),
-        );
-      }
+      setState(() => _note = vpsImportNote(context, result));
+      // Added: the next step is connecting, which lives on Home.
+      if (result == VpsImportResult.added) vpsTab.value = vpsTabHome;
     } finally {
       if (mounted) setState(() => _pasting = false);
     }
@@ -314,7 +287,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
             children: [
               VpsRow(
                 icon: VpsIcon.bolt,
-                title: tr(context, '智能线路', 'Smart lines'),
+                title: tr(context, '智能线路', 'Smart line'),
                 subtitle: tr(
                   context,
                   '自动用最快的服务器，不乱换出口 IP；AI 服务固定出口',

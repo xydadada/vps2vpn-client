@@ -119,8 +119,21 @@ class GlobalState {
         logLevel: LogLevel.warning,
       );
       final message = userFacingErrorMessage(e, currentAppLocalizations);
+      final raw = compactError(e);
       if (silence) {
-        dialogs.showBanner(message, level: BannerLevel.error);
+        dialogs.showBanner(
+          message,
+          level: BannerLevel.error,
+          // The words are ours; the Core's own text stays one tap away.
+          onTap: raw == message
+              ? null
+              : () => unawaited(
+                  dialogs.showAlert(
+                    title: title ?? currentAppLocalizations.tip,
+                    message: TextSpan(text: raw),
+                  ),
+                ),
+        );
       } else {
         unawaited(
           dialogs.showAlert(

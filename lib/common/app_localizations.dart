@@ -4,6 +4,7 @@ import 'package:fl_clash/common/network_error.dart';
 import 'package:fl_clash/core/desktop/launch_policy.dart';
 import 'package:fl_clash/core/method.dart';
 import 'package:fl_clash/l10n/l10n.dart';
+import 'package:fl_clash/vps2vpn/plain_errors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
@@ -157,8 +158,10 @@ String userFacingErrorMessage(Object error, AppLocalizations appLocalizations) {
           appLocalizations.ruleSetMixedTip,
         CoreMethodException(code: 'rule_set_invalid') =>
           appLocalizations.ruleSetInvalidTip,
-        CoreMethodException(:final message) => message,
-        _ => error.toString(),
+        CoreMethodException(:final message) =>
+          vpsPlainError(message, appLocalizations) ?? message,
+        _ =>
+          vpsPlainError(error.toString(), appLocalizations) ?? error.toString(),
       };
 }
 

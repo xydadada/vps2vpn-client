@@ -1,6 +1,7 @@
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/vps2vpn/tray_menu.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:rust_api/tray.dart';
 
@@ -107,7 +108,7 @@ class AppTray implements TrayPort {
         ),
         toolTip: trayState.safeMode
             ? currentAppLocalizations.safeModeAppTitle(appName)
-            : appName,
+            : vpsTrayTip(trayState, appName),
         menu: _buildMenu(trayState: trayState, read: read),
       ),
     );
@@ -148,6 +149,13 @@ class AppTray implements TrayPort {
       },
     );
 
+    final simple = vpsTrayMenu(
+      state: trayState,
+      read: read,
+      onShow: () => window?.show(),
+      onExit: systemAction.handleExit,
+    );
+    if (simple != null) return simple;
     return [
       showItem,
       TrayMenuCheckbox(
