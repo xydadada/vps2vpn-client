@@ -32,6 +32,10 @@ var (
 	eventListenerLock sync.RWMutex
 	eventListener     func([]byte)
 	listening         atomic.Bool
+	// tunLifecycle keeps one StartTun/StopTun/StartListener/StopListener whole:
+	// a StopTun between StartTun's TUN and its listener would leave one running.
+	// Taken before tunLock and configMu, never under them.
+	tunLifecycle sync.Mutex
 )
 
 type TunHandler struct {
@@ -261,6 +265,8 @@ func InvokeMethod(data string, reply func([]byte)) {
 
 func StartTun(callbacks TunCallbacks, fd int, stack, address, dns, options string) bool {
 	defer recoverExport("startTun")
+	tunLifecycle.Lock()
+	defer tunLifecycle.Unlock()
 	started := handleStartTun(callbacks, fd, stack, address, dns, options)
 	if !started {
 		return false
@@ -349,6 +355,8 @@ func deliverEvent(data []byte) {
 
 func StopTun() {
 	defer recoverExport("stopTun")
+	tunLifecycle.Lock()
+	defer tunLifecycle.Unlock()
 	handleStopTun()
 	if isRunning.Load() {
 		handleStopListener()
@@ -357,6 +365,8 @@ func StopTun() {
 
 func StartListener() {
 	defer recoverExport("startListener")
+	tunLifecycle.Lock()
+	defer tunLifecycle.Unlock()
 	if !isRunning.Load() {
 		handleStartListener()
 	}
@@ -364,6 +374,8 @@ func StartListener() {
 
 func StopListener() {
 	defer recoverExport("stopListener")
+	tunLifecycle.Lock()
+	defer tunLifecycle.Unlock()
 	if isRunning.Load() {
 		handleStopListener()
 	}
