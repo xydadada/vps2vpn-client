@@ -33,7 +33,6 @@ python3 -I "$HERE/coexist_upstream.py" "$log" 18080 &
 up=$!
 python3 -I -m http.server --bind 127.0.0.1 --directory "$work/sub" 18000 > "$OUT/sub-server.log" 2>&1 &
 sub=$!
-trap 'kill $up $sub 2>/dev/null' EXIT
 sleep 2
 
 shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null; }
@@ -79,6 +78,27 @@ vpn_up() { adb shell ip -o link 2>/dev/null | grep -qE '^[0-9]+: tun[0-9]+[:@]';
 front() { adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1; }
 
 adb wait-for-device
+# Run 7 lost the emulator a minute after the VPN came up with nothing in the
+# log: keep the phone's log and, every few seconds, whether adb still sees it,
+# the emulator's memory and CPU, and the runner's free memory.
+adb logcat -v time > "$OUT/logcat.txt" 2>&1 &
+logcat=$!
+(
+  while sleep 3; do
+    qemu=$(pgrep -f 'qemu-system' | head -1)
+    echo "$(date +%T) adb=$(adb get-state 2>&1 | tr -d '
+') qemu=${qemu:-gone} $( [ -n "$qemu" ] && ps -o rss=,pcpu= -p "$qemu") free_mb=$(free -m | awk '/Mem:/{print $7}')"
+  done
+) > "$OUT/host-watch.log" 2>&1 &
+watch=$!
+host_report() {
+  {
+    echo '== free'; free -m
+    echo '== dmesg'; sudo dmesg -T 2>/dev/null | tail -60
+    echo '== emulator crash data'; ls -la /tmp/android-runner 2>/dev/null
+  } > "$OUT/host-report.txt" 2>&1
+}
+trap 'host_report; kill $up $sub $logcat $watch 2>/dev/null' EXIT
 check 'adb install -r -g "$APK" > "$OUT/install.log" 2>&1' 'APK installs'
 check 'adb shell pm list packages | grep -q "package:$PKG\$"' "installed as $PKG"
 adb shell appops set "$PKG" ACTIVATE_VPN allow
@@ -114,6 +134,11 @@ for round in 1 2 3; do
   shot "connected-$round"
   echo "screen: $(screen)"
   check vpn_up "round $round: the VPN is up"
+  if ! adb get-state > /dev/null 2>&1; then
+    echo "the emulator went away during round $round; see host-watch.log and host-report.txt"
+    fails=$((fails + 1))
+    break
+  fi
   through_vpn "round $round"
   wait_tap '^(disconnect|断开|断开连接|stop|停止)$' 5 || tap '^(connected|已连接)$' || echo "no disconnect button found"
   for _ in $(seq 1 10); do vpn_up || break; sleep 2; done
