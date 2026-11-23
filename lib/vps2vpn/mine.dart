@@ -333,39 +333,41 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   },
                 ),
               ),
-              Container(height: 1, color: p.line),
-              VpsRow(
-                icon: VpsIcon.shield,
-                title: tr(context, '连接时自动接管', 'Take over on Connect'),
-                subtitle: tr(
-                  context,
-                  '自动关闭其他代理软件、避开被占用的端口、清理失效的系统代理',
-                  'Close other proxy apps, avoid taken ports, clear stale proxies',
-                ),
-                trailing: VpsSwitch(
-                  value: ref.watch(
-                    appSettingProvider.select((s) => s.takeover),
-                  ),
-                  onChanged: (v) => ref
-                      .read(appSettingProvider.notifier)
-                      .update((s) => s.copyWith(takeover: v)),
-                ),
-              ),
-              if (system.isWindows) ...[
+              if (system.isDesktop) ...[
                 Container(height: 1, color: p.line),
-                const _LanCompatibilityRow(),
-              ],
-              Container(height: 1, color: p.line),
-              VpsRow(
-                icon: VpsIcon.sun,
-                title: tr(context, '开机自启', 'Launch at startup'),
-                trailing: VpsSwitch(
-                  value: autoLaunch,
-                  onChanged: (v) => ref
-                      .read(appSettingProvider.notifier)
-                      .update((s) => s.copyWith(autoLaunch: v)),
+                VpsRow(
+                  icon: VpsIcon.shield,
+                  title: tr(context, '连接时自动接管', 'Take over on Connect'),
+                  subtitle: tr(
+                    context,
+                    '自动关闭其他代理软件、避开被占用的端口、清理失效的系统代理',
+                    'Close other proxy apps, avoid taken ports, clear stale proxies',
+                  ),
+                  trailing: VpsSwitch(
+                    value: ref.watch(
+                      appSettingProvider.select((s) => s.takeover),
+                    ),
+                    onChanged: (v) => ref
+                        .read(appSettingProvider.notifier)
+                        .update((s) => s.copyWith(takeover: v)),
+                  ),
                 ),
-              ),
+                if (system.isWindows) ...[
+                  Container(height: 1, color: p.line),
+                  const _LanCompatibilityRow(),
+                ],
+                Container(height: 1, color: p.line),
+                VpsRow(
+                  icon: VpsIcon.sun,
+                  title: tr(context, '开机自启', 'Launch at startup'),
+                  trailing: VpsSwitch(
+                    value: autoLaunch,
+                    onChanged: (v) => ref
+                        .read(appSettingProvider.notifier)
+                        .update((s) => s.copyWith(autoLaunch: v)),
+                  ),
+                ),
+              ],
               Container(height: 1, color: p.line),
               VpsRow(
                 icon: VpsIcon.gear,
@@ -557,52 +559,54 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
                   .update((s) => s.copyWith(allowLan: v)),
             ),
           ),
-          Container(height: 1, color: p.line),
-          VpsRow(
-            icon: VpsIcon.file,
-            title: tr(context, '终端代理', 'Terminal proxy'),
-            subtitle: tr(
-              context,
-              '复制命令到终端，让 git、npm、pip 等也走代理（本窗口有效）',
-              'Paste into a terminal so git, npm, pip use the proxy',
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(48, 0, 0, 14),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final (name, cmd) in commands)
-                    VpsButton(
-                      label: _copied == name
-                          ? tr(context, '已复制', 'Copied')
-                          : name,
-                      icon: VpsIcon.paste,
-                      onTap: () => _copy(name, cmd),
-                    ),
-                ],
+          if (system.isDesktop) ...[
+            Container(height: 1, color: p.line),
+            VpsRow(
+              icon: VpsIcon.file,
+              title: tr(context, '终端代理', 'Terminal proxy'),
+              subtitle: tr(
+                context,
+                '复制命令到终端，让 git、npm、pip 等也走代理（本窗口有效）',
+                'Paste into a terminal so git, npm, pip use the proxy',
               ),
             ),
-          ),
-          Container(height: 1, color: p.line),
-          VpsRow(
-            icon: VpsIcon.shield,
-            title: tr(context, '关闭窗口时留在托盘', 'Keep running in tray'),
-            subtitle: tr(
-              context,
-              '点 × 只隐藏窗口，连接不中断',
-              'Closing the window keeps the connection',
+            Padding(
+              padding: const EdgeInsets.fromLTRB(48, 0, 0, 14),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final (name, cmd) in commands)
+                      VpsButton(
+                        label: _copied == name
+                            ? tr(context, '已复制', 'Copied')
+                            : name,
+                        icon: VpsIcon.paste,
+                        onTap: () => _copy(name, cmd),
+                      ),
+                  ],
+                ),
+              ),
             ),
-            trailing: VpsSwitch(
-              value: tray,
-              onChanged: (v) => ref
-                  .read(appSettingProvider.notifier)
-                  .update((s) => s.copyWith(minimizeOnExit: v)),
+            Container(height: 1, color: p.line),
+            VpsRow(
+              icon: VpsIcon.shield,
+              title: tr(context, '关闭窗口时留在托盘', 'Keep running in tray'),
+              subtitle: tr(
+                context,
+                '点 × 只隐藏窗口，连接不中断',
+                'Closing the window keeps the connection',
+              ),
+              trailing: VpsSwitch(
+                value: tray,
+                onChanged: (v) => ref
+                    .read(appSettingProvider.notifier)
+                    .update((s) => s.copyWith(minimizeOnExit: v)),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -690,8 +694,8 @@ class _ProfileCard extends ConsumerWidget {
     final total = sub?.total ?? 0;
     final ratio = total > 0 ? math.min(1.0, used / total) : 0.0;
     String? expire;
-    if (sub != null && sub.expire > 0) {
-      final d = DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000);
+    final d = sub?.expireDate;
+    if (d != null) {
       expire = tr(
         context,
         '${d.year}-${_two(d.month)}-${_two(d.day)} 到期',

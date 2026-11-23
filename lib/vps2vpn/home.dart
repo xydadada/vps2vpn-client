@@ -849,8 +849,9 @@ class _Stats extends ConsumerWidget {
     String? left;
     String? expire;
     if (member != null) {
-      if (!member.unlimited && member.quotaGb > 0) {
-        final quota = (member.quotaGb * 1024 * 1024 * 1024).round();
+      if (!member.unlimited) {
+        final quota = (math.max(0, member.quotaGb) * 1024 * 1024 * 1024)
+            .round();
         left = math.max(0, quota - member.used).traffic.show;
       }
       if (member.expireAt != null) {
@@ -861,11 +862,9 @@ class _Stats extends ConsumerWidget {
         final remain = math.max(0, sub.total - sub.upload - sub.download);
         left = remain.traffic.show;
       }
-      if (sub != null && sub.expire > 0) {
-        expire = vpsExpiryText(
-          context,
-          DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000),
-        );
+      final expiry = sub?.expireDate;
+      if (expiry != null) {
+        expire = vpsExpiryText(context, expiry);
       }
     }
     final p = VpsPalette.of(context);
@@ -874,9 +873,9 @@ class _Stats extends ConsumerWidget {
     if (main != null && ref.watch(isStartProvider)) vpsAutoTestOnce(ref, main);
     // Share of the plan still left, for the ring (null: unlimited/unknown).
     double? leftShare;
-    if (member != null && !member.unlimited && member.quotaGb > 0) {
+    if (member != null && !member.unlimited) {
       final quota = member.quotaGb * 1024 * 1024 * 1024;
-      leftShare = (1 - member.used / quota).clamp(0.0, 1.0);
+      leftShare = quota > 0 ? (1 - member.used / quota).clamp(0.0, 1.0) : 0.0;
     } else if (member == null && sub != null && sub.total > 0) {
       leftShare = (1 - (sub.upload + sub.download) / sub.total).clamp(0.0, 1.0);
     }

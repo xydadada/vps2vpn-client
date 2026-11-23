@@ -32,10 +32,7 @@ _Usage? _usageOf(Profile? profile) {
   );
 }
 
-DateTime? _expiryOf(Profile? profile) {
-  final expire = profile?.subscriptionInfo?.expire ?? 0;
-  return expire > 0 ? DateTime.fromMillisecondsSinceEpoch(expire * 1000) : null;
-}
+DateTime? _expiryOf(Profile? profile) => profile?.subscriptionInfo?.expireDate;
 
 int _daysLeft(DateTime expiry) =>
     math.max(0, expiry.difference(DateTime.now()).inDays);
