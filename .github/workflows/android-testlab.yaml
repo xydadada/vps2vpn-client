@@ -12,8 +12,8 @@ on:
         description: Pre-release holding the Android APK
         default: test-android-1.0.26
       devices:
-        description: "gcloud --device values, separated by ';' (empty = only list the models)"
-        default: model=SC-51E,version=36;model=CPH2449,version=34
+        description: "gcloud --device values, separated by ';', e.g. model=SC-51E,version=36;model=CPH2449,version=34 (empty = only build and list the models; phones use the free daily quota)"
+        default: ''
 
 permissions:
   contents: read
@@ -24,6 +24,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
+      - name: Keep the project out of the log
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: '[ -z "$PROJECT" ] || echo "::add-mask::$PROJECT"'
+
       - name: Checkout the driver
         uses: actions/checkout@v4
         with:

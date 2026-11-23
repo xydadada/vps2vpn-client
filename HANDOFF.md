@@ -89,15 +89,18 @@
 
 ### Firebase Test Lab 真机测试（2026-11-23）
 
-- 工作流：`android-testlab.yaml`（只能手动触发）。输入 `tag`（默认 `test-android-1.0.26`，从这个预发布下载 `*-android-universal.apk`）、`devices`（默认 `model=SC-51E,version=36;model=CPH2449,version=34`，即 Galaxy S24 和 OnePlus 11；留空只列出可用真机型号）。
-- 登录方式：无密钥，用 Workload Identity。仓库变量 `GCP_WIF_PROVIDER`、`GCP_TESTLAB_SA`、`GCP_PROJECT_ID`（项目 `vps2vpn-testlab`）。
+- 工作流：`android-testlab.yaml`（只能手动触发）。输入 `tag`（默认 `test-android-1.0.26`，从这个预发布下载 `*-android-universal.apk`）、`devices`（默认空：只编译驱动、列出真机型号，不占额度；要跑真机就明确写，例如 `-f devices='model=SC-51E,version=36;model=CPH2449,version=34'`，即 Galaxy S24 和 OnePlus 11）。注意 `gh workflow run -f devices=` 传空值会被 gh 丢掉，所以默认值必须是空。
+- 登录方式：无密钥，用 Workload Identity。仓库变量 `GCP_WIF_PROVIDER`、`GCP_TESTLAB_SA`、`GCP_PROJECT_ID`（项目名在仓库变量里；工作流第一步把它遮掉，日志里不出现）。
 - 订阅：secret `TESTLAB_SUB_URL`，是测试服务器上专门开的 testlab 测试账户（不是任何用户的真实账户），十六进制编码后传给手机，日志里不打印。测试做完后管理员会话会停用这个账户；以后要再测，请管理员重新开一个并更新这个 secret。
 - 驱动：`.github/testlab/`，一个独立的 UiAutomator 测试 APK（`ConnectTest.java`）：同意免责声明 → 用 `vps2vpn://install-config?url=` 导入订阅 → 点连接 → 等 VPN 建立 → 60 秒内每 10 秒请求一次 generate_204 → 确认出口 IP 变了 → 断开。每一步用 `PASS  ...` 报告。
 - 运行：`gh workflow run android-testlab.yaml -R xydadada/vps2vpn-client --ref vps2vpn`。结果在 Firebase 控制台和运行的 `testlab` artifact 里。
 - 最后一次结果：运行 45149599952（2026-11-23，APK 来自 `test-android-1.0.26`）。**两台真机都失败**：`CPH2449-34`（OnePlus 11）和 `SC-51E-36`（Galaxy S24）都是"1 test cases failed"。GitHub 日志只有这张汇总表，看不到失败在哪一步（免责声明、导入、连接、上网还是断开）。详细结果（每一步的 `PASS` 行、logcat、录屏）在 Firebase 控制台项目 `vps2vpn-testlab` 的 Test Lab 历史 `vps2vpn-android` 里，原始文件在 Test Lab 的 GCS 结果桶里。
-- 工作流的两个已知小毛病（还没改）：
-  1. `gcloud ... | tee testlab.log` 没有 `set -o pipefail`，所以测试失败时 GitHub 上整个运行仍显示 success，要看日志里的表。
-  2. 没有把每台手机的 `instrumentation.results` 和 logcat 从 GCS 下载进 artifact；下次要查失败原因，先加一步 `gcloud storage cp` 把结果目录拷下来再上传。
+- 2026-11-23 已改（e2f64151 起）：
+  1. 测试失败时整个运行显示失败（`set -o pipefail`）。
+  2. "What each phone saw" 一步把每台手机的结果从 GCS 拷到运行器上，用 `.github/testlab/summary.py` 只挑出步骤行（`PASS`/`NOTE`）、失败原因和崩溃相关 logcat 行，遮掉订阅链接、它的主机和所有 IP 后打印并上传 `summary-*.txt`；原始结果不出 GCS。
+  3. 关了录屏（`--no-record-video`），订阅链接不会出现在视频里。
+  4. 驱动：导入确认框改为可选（模拟器上就没有）；按钮匹配 content-desc 的第一行；每个关键步骤前记录屏幕上的文字（`NOTE`），失败信息里也带上（同样脱敏）。
+- 运行 45165449899 是误触发（当时默认值还是两台真机，`-f devices=` 被丢掉），GitHub 上已取消，但 Google 侧的矩阵可能跑完了，占了当天的真机额度；testlab 账户已停用，测试会在导入后失败，没有意义，不用看。
 
 ### 安卓模拟器失败诊断（2026-11-23）
 
