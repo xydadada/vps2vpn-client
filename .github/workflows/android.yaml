@@ -215,7 +215,10 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          # -show-kernel: the guest's kernel console goes to this log. Run 7
+          # lost the phone half a minute after the VPN came up, with logcat
+          # cut off at once, as after a kernel panic.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
           script: bash .github/scripts/android-e2e.sh "$(ls apk/*.apk | head -1)" android-e2e
 
       - name: Upload results
