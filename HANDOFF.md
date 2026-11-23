@@ -6,7 +6,7 @@
 
 | 项目 | 值 |
 |---|---|
-| 最新正式版（Latest） | **v1.0.26**，commit `b8ba4d27f3961f84bb26a27fd1116bf6af497edc`（已告诉服务端，等它核对 SHA256 和 `.sig`） |
+| 最新正式版（Latest） | **v1.0.26**，commit `b8ba4d27f3961f84bb26a27fd1116bf6af497edc`（服务端已核对 SHA256、`.sig` 和 tag 指向） |
 | 上一版 | v1.0.25，commit `e784eef90b3d040cfede8ec3aee84a099295ae79`（服务端已核对） |
 | `vps2vpn` 分支头 | `b8ba4d27` 之后只有文档和 CI 提交（e2e/coexist 默认标签改成 v1.0.26），没有代码改动 |
 | 安卓 | 还没有正式 APK。矩阵运行 45115715910：API 31/33/34/35 全部同样失败（安装、启动、导入订阅 PASS，"VPN is up" FAIL，虚拟机冻住），见第 5 节末尾。运行 45118179316（publish=true）生成预发布 `test-android-1.0.26`，只当预发布，不转正 |
