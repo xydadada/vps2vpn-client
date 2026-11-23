@@ -1,0 +1,73 @@
+name: android-probe
+
+# Splits the emulator freeze seen after the app's VPN comes up: a bare tunnel
+# of the same shape that drops every packet (probe) against the released APK
+# (app). If the probe freezes too, it is the emulator, not the app.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Pre-release holding the APK for the app case'
+        default: test-android-1.0.26
+      api:
+        description: 'Emulator API level'
+        default: '34'
+
+permissions:
+  contents: read
+
+jobs:
+  emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [probe-9000, probe-1500, app]
+    steps:
+      - name: Checkout the test scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+
+      - name: Build the probe
+        if: startsWith(matrix.case, 'probe')
+        run: bash .github/android-probe/build.sh probe.apk
+
+      - name: Download the APK
+        if: matrix.case == 'app'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir apk
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --pattern 'SHA256SUMS-android.txt' --dir apk
+          (cd apk && sha256sum -c SHA256SUMS-android.txt)
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run ${{ matrix.case }}
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          CASE: ${{ matrix.case }}
+        with:
+          api-level: ${{ inputs.api }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
+          script: if [ "$CASE" = app ]; then bash .github/scripts/android-e2e.sh "$(ls apk/*.apk | head -1)" out; else bash .github/scripts/android-probe.sh probe.apk "${CASE#probe-}" out; fi
+
+      - name: Upload results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-probe-${{ matrix.case }}
+          path: out
+          if-no-files-found: ignore

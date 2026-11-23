@@ -86,8 +86,8 @@ logcat=$!
 (
   while sleep 3; do
     qemu=$(pgrep -f 'qemu-system' | head -1)
-    echo "$(date +%T) adb=$(adb get-state 2>&1 | tr -d '
-') qemu=${qemu:-gone} $( [ -n "$qemu" ] && ps -o rss=,pcpu= -p "$qemu") free_mb=$(free -m | awk '/Mem:/{print $7}')"
+    guest=$(timeout 4 adb shell echo ok 2>/dev/null | tr -dc a-z)
+    echo "$(date +%T) guest=${guest:-silent} qemu=${qemu:-gone} $( [ -n "$qemu" ] && ps -o rss=,pcpu= -p "$qemu") free_mb=$(free -m | awk '/Mem:/{print $7}')"
   done
 ) > "$OUT/host-watch.log" 2>&1 &
 watch=$!
@@ -95,7 +95,7 @@ host_report() {
   {
     echo '== free'; free -m
     echo '== dmesg'; sudo dmesg -T 2>/dev/null | tail -60
-    echo '== emulator crash data'; ls -la /tmp/android-runner 2>/dev/null
+    echo '== emulator crash data'; find /tmp/android-runner -ls 2>/dev/null; cp -r /tmp/android-runner "$OUT/runner" 2>/dev/null
   } > "$OUT/host-report.txt" 2>&1
 }
 trap 'host_report; kill $up $sub $logcat $watch 2>/dev/null' EXIT
