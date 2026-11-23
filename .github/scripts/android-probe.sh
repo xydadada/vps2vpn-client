@@ -48,7 +48,7 @@ for _ in $(seq 1 30); do
 done
 check '[ "$silent" -eq 0 ]' "the phone answered adb for 90 s with the tunnel up (silent $silent of 30)"
 check vpn_up 'the probe tunnel is still up'
-check 'grep -q "vpnprobe.*packets" "$OUT/logcat.txt"' 'packets reached the probe tunnel'
+check 'grep -q "vpnprobe.*packets [0-9]* last" "$OUT/logcat.txt"' 'packets reached the probe tunnel'
 grep 'vpnprobe' "$OUT/logcat.txt" | tail -5
 
 if [ "$fails" -gt 0 ]; then echo; echo "$fails check(s) failed"; exit 1; fi

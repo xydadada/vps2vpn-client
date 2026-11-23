@@ -98,7 +98,7 @@ host_report() {
     echo '== emulator crash data'; find /tmp/android-runner -ls 2>/dev/null; cp -r /tmp/android-runner "$OUT/runner" 2>/dev/null
   } > "$OUT/host-report.txt" 2>&1
 }
-trap 'host_report; kill $up $sub $logcat $watch 2>/dev/null' EXIT
+trap 'host_report; kill $up $sub $logcat $watch $device 2>/dev/null' EXIT
 check 'adb install -r -g "$APK" > "$OUT/install.log" 2>&1' 'APK installs'
 check 'adb shell pm list packages | grep -q "package:$PKG\$"' "installed as $PKG"
 adb shell appops set "$PKG" ACTIVATE_VPN allow
@@ -128,6 +128,10 @@ sleep 3
 shot imported
 echo "screen: $(screen)"
 
+# Twice a second from the phone itself, until it stops answering: whether
+# tun0 counters run away (a loop) and which threads hold the CPU.
+adb shell 'while true; do echo "== $(date +%T.%N | cut -c1-12) $(cat /proc/loadavg)"; grep -E "tun0|wlan0|eth0" /proc/net/dev; grep -E "MemAvailable" /proc/meminfo; top -b -n 1 -H -m 10 | head -n 16; sleep 0.5; done' > "$OUT/device-watch.log" 2>&1 &
+device=$!
 for round in 1 2 3; do
   wait_tap '^(connect|连接|tap to connect|点击连接|启动|start)$' 5 || echo "no connect button found"
   for _ in $(seq 1 15); do vpn_up && break; sleep 2; done

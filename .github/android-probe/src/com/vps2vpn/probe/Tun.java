@@ -36,9 +36,15 @@ public class Tun extends VpnService {
         new Thread(() -> {
             byte[] packet = new byte[65536];
             long count = 0;
+            long empty = 0;
             try (FileInputStream in = new FileInputStream(fd.getFileDescriptor())) {
-                while (in.read(packet) >= 0) {
-                    if (++count % 100 == 1) Log.i("vpnprobe", "packets " + count);
+                for (int n; (n = in.read(packet)) >= 0; ) {
+                    if (n == 0) {
+                        if (++empty % 100000 == 1) Log.i("vpnprobe", "empty reads " + empty);
+                        Thread.sleep(5);
+                        continue;
+                    }
+                    if (++count % 100 == 1) Log.i("vpnprobe", "packets " + count + " last " + n + " bytes");
                 }
             } catch (Exception error) {
                 Log.i("vpnprobe", "reader stopped after " + count, error);
