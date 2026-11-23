@@ -108,8 +108,22 @@ param(`$result)
 `$env:FLCLASH_ACCEPT_DISCLAIMER = '1'
 `$env:VPS2VPN_IMPORT_URL = 'http://127.0.0.1:$($script:subPort)/sub.yaml'
 `$app = Start-Process '$($script:exe)' -PassThru
-Start-Sleep 60
+Start-Sleep 40
 `$home_ = Join-Path `$env:APPDATA 'vps2vpn\vps2vpn'
+# Connect on the next start, as a user who set it to.
+`$prefs = Join-Path `$home_ 'shared_preferences.json'
+if (Test-Path `$prefs) {
+  # Only this account's copies: the admin's are closed to a standard account.
+  Get-Process vps2vpn, vps2vpnCore -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep 3
+  `$d = Get-Content `$prefs -Raw | ConvertFrom-Json
+  `$c = `$d.'flutter.config' | ConvertFrom-Json
+  `$c.appSettingProps | Add-Member -Force autoRun `$true
+  `$d.'flutter.config' = (`$c | ConvertTo-Json -Depth 50 -Compress)
+  `$d | ConvertTo-Json -Depth 50 -Compress | Set-Content `$prefs -Encoding utf8
+  `$app = Start-Process '$($script:exe)' -PassThru
+  Start-Sleep 45
+}
 `$r = [ordered]@{
   running = -not `$app.HasExited
   exitCode = if (`$app.HasExited) { `$app.ExitCode } else { `$null }
@@ -120,7 +134,7 @@ Start-Sleep 60
 }
 `$r | ConvertTo-Json | Set-Content `$result -Encoding utf8
 "@
-  $app = Invoke-AsUser $credential $run 'run' 120
+  $app = Invoke-AsUser $credential $run 'run' 180
   Check ($app -and $app.running) 'second account: vps2vpn starts and keeps running'
   if ($app) {
     "second account home: $($app.home), exit code: $($app.exitCode)"
