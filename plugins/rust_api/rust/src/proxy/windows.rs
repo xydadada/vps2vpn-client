@@ -36,13 +36,52 @@ use super::wininet::{bypass_list, local_pac_port, local_proxy_port};
 use super::{Target, PROXY_HOST};
 
 static APPLIED: AtomicBool = AtomicBool::new(false);
-static SETTINGS: Mutex<()> = Mutex::new(());
+static SETTINGS: Mutex<Option<Restore>> = Mutex::new(None);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Settings {
+    flags: u32,
+    server: String,
+    bypass: String,
+    pac: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Ours {
+    Server(String),
+    Pac(String),
+}
+
+impl Settings {
+    fn is(&self, ours: &Ours) -> bool {
+        match ours {
+            Ours::Server(server) => self.flags & PROXY_TYPE_PROXY != 0 && &self.server == server,
+            Ours::Pac(url) => self.flags & PROXY_TYPE_AUTO_PROXY_URL != 0 && &self.pac == url,
+        }
+    }
+}
+
+struct Restore {
+    ours: Ours,
+    saved: Vec<(Option<String>, Settings)>,
+}
 
 pub fn start(target: &Target) -> bool {
     watch_session_end();
-    let _settings = lock_settings();
+    let mut state = lock_settings();
     // A start that reports failure can still have written the setting.
     APPLIED.store(true, Ordering::SeqCst);
+    let ours = match target {
+        Target::Manual { port, .. } => Ours::Server(format!("{PROXY_HOST}:{port}")),
+        Target::Pac { url } => Ours::Pac(url.clone()),
+    };
+    match state.as_mut() {
+        Some(restore) => restore.ours = ours,
+        None => {
+            let saved = snapshot(&ours);
+            *state = Some(Restore { ours, saved });
+        }
+    }
     match target {
         Target::Manual {
             port,
@@ -67,16 +106,157 @@ pub fn start(target: &Target) -> bool {
 }
 
 pub fn stop() -> bool {
-    let _settings = lock_settings();
-    stop_locked()
+    let mut state = lock_settings();
+    stop_locked(&mut state)
 }
 
-fn stop_locked() -> bool {
-    let stopped = apply_to_connections(&mut [flags_option(PROXY_TYPE_DIRECT)]);
+fn stop_locked(state: &mut Option<Restore>) -> bool {
+    let stopped = match state.take() {
+        None => apply_to_connections(&mut [flags_option(PROXY_TYPE_DIRECT)]),
+        Some(restore) => {
+            let restored = restore_connections(&restore);
+            if !restored {
+                *state = Some(restore);
+            }
+            restored
+        }
+    };
     if stopped {
         APPLIED.store(false, Ordering::SeqCst);
     }
     stopped
+}
+
+fn snapshot(ours: &Ours) -> Vec<(Option<String>, Settings)> {
+    let mut saved = Vec::new();
+    for_each_connection(|connection| {
+        if let Some(mut settings) = read_settings(connection) {
+            // Left by an earlier run of this app: nothing to go back to.
+            if settings.is(ours) {
+                settings.flags = PROXY_TYPE_DIRECT;
+            }
+            saved.push((connection_name(connection), settings));
+        }
+        true
+    });
+    saved
+}
+
+fn restore_connections(restore: &Restore) -> bool {
+    let mut changed = false;
+    let restored = for_each_connection(|connection| {
+        let Some(current) = read_settings(connection) else {
+            return false;
+        };
+        let name = connection_name(connection);
+        let saved = restore
+            .saved
+            .iter()
+            .find(|(saved_name, _)| *saved_name == name)
+            .map(|(_, settings)| settings);
+        match restored_settings(&current, &restore.ours, saved, |port| {
+            !is_port_listening(port)
+        }) {
+            Some(target) if target != current => {
+                changed = true;
+                write_settings(connection, &target)
+            }
+            _ => true,
+        }
+    });
+    let notified = !changed || notify_settings_changed();
+    restored && notified
+}
+
+/// What a stop writes back: `None` leaves a connection someone else changed
+/// since this run's start alone. A saved local proxy or PAC whose port no
+/// longer listens (the app the takeover closed) is not brought back.
+fn restored_settings(
+    current: &Settings,
+    ours: &Ours,
+    saved: Option<&Settings>,
+    mut is_released: impl FnMut(u16) -> bool,
+) -> Option<Settings> {
+    if !current.is(ours) {
+        return None;
+    }
+    let Some(saved) = saved else {
+        return Some(Settings {
+            flags: PROXY_TYPE_DIRECT,
+            ..current.clone()
+        });
+    };
+    let mut flags = saved.flags | PROXY_TYPE_DIRECT;
+    if flags & PROXY_TYPE_PROXY != 0
+        && local_proxy_port(&saved.server).is_some_and(&mut is_released)
+    {
+        flags &= !PROXY_TYPE_PROXY;
+    }
+    if flags & PROXY_TYPE_AUTO_PROXY_URL != 0
+        && local_url_port(&saved.pac).is_some_and(&mut is_released)
+    {
+        flags &= !PROXY_TYPE_AUTO_PROXY_URL;
+    }
+    Some(Settings {
+        flags,
+        ..saved.clone()
+    })
+}
+
+/// The port of any `http://127.0.0.1:<port>/...` URL, another app's PAC too.
+fn local_url_port(url: &str) -> Option<u16> {
+    let rest = url
+        .strip_prefix("http://")?
+        .strip_prefix(PROXY_HOST)?
+        .strip_prefix(':')?;
+    let port = rest.split(['/', '?']).next()?;
+    local_proxy_port(&format!("{PROXY_HOST}:{port}"))
+}
+
+fn connection_name(connection: PWSTR) -> Option<String> {
+    (!connection.is_null()).then(|| unsafe { read_wide_string(connection) })
+}
+
+fn read_settings(connection: PWSTR) -> Option<Settings> {
+    let mut options = [
+        flags_option(0),
+        string_option(INTERNET_PER_CONN_PROXY_SERVER, null_mut()),
+        string_option(INTERNET_PER_CONN_PROXY_BYPASS, null_mut()),
+        string_option(INTERNET_PER_CONN_AUTOCONFIG_URL, null_mut()),
+    ];
+    let mut list = option_list(connection, &mut options);
+    let mut size = size_of::<INTERNET_PER_CONN_OPTION_LISTW>() as u32;
+    let queried = unsafe {
+        InternetQueryOptionW(
+            null(),
+            INTERNET_OPTION_PER_CONNECTION_OPTION,
+            (&mut list as *mut INTERNET_PER_CONN_OPTION_LISTW).cast(),
+            &mut size,
+        ) != 0
+    };
+    let [server, bypass, pac] =
+        [1, 2, 3].map(|i| unsafe { take_global_string(options[i].Value.pszValue) });
+    queried.then(|| Settings {
+        flags: unsafe { options[0].Value.dwValue },
+        server,
+        bypass,
+        pac,
+    })
+}
+
+fn write_settings(connection: PWSTR, settings: &Settings) -> bool {
+    let mut server = wide(&settings.server);
+    let mut bypass = wide(&settings.bypass);
+    let mut pac = wide(&settings.pac);
+    set_options(
+        connection,
+        &mut [
+            flags_option(settings.flags),
+            string_option(INTERNET_PER_CONN_PROXY_SERVER, server.as_mut_ptr()),
+            string_option(INTERNET_PER_CONN_PROXY_BYPASS, bypass.as_mut_ptr()),
+            string_option(INTERNET_PER_CONN_AUTOCONFIG_URL, pac.as_mut_ptr()),
+        ],
+    )
 }
 
 /// Clears a `127.0.0.1:<port>` proxy or PAC URL that nothing listens behind. The
@@ -113,7 +293,7 @@ pub extern "C" fn flclash_clear_stale_proxy_count() -> i32 {
     clear_stale().map_or(-1, |count| count as i32)
 }
 
-fn lock_settings() -> MutexGuard<'static, ()> {
+fn lock_settings() -> MutexGuard<'static, Option<Restore>> {
     SETTINGS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -499,8 +679,8 @@ unsafe extern "system" fn session_window_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     if message == WM_ENDSESSION && wparam != 0 && APPLIED.load(Ordering::SeqCst) {
-        let _settings = lock_settings();
-        stop_locked();
+        let mut settings = lock_settings();
+        stop_locked(&mut settings);
         return 0;
     }
     DefWindowProcW(window, message, wparam, lparam)
@@ -539,6 +719,77 @@ mod tests {
     fn leaves_a_server_alone_while_the_proxy_is_switched_off() {
         let cleared = stale_cleared_flags(PROXY_TYPE_DIRECT, "127.0.0.1:7890", "", |_| true);
         assert_eq!(cleared, PROXY_TYPE_DIRECT);
+    }
+
+    fn settings(flags: u32, server: &str, pac: &str) -> Settings {
+        Settings {
+            flags,
+            server: server.into(),
+            bypass: "<local>".into(),
+            pac: pac.into(),
+        }
+    }
+
+    fn ours() -> Ours {
+        Ours::Server("127.0.0.1:7890".into())
+    }
+
+    #[test]
+    fn a_stop_puts_back_the_proxy_that_was_there_before() {
+        let current = settings(MANUAL, "127.0.0.1:7890", "");
+        for before in [
+            settings(MANUAL, "proxy.corp.example:8080", ""),
+            settings(MANUAL, "127.0.0.1:10808", ""),
+            settings(PAC, "", "http://127.0.0.1:10810/pac/proxy.js"),
+            settings(PROXY_TYPE_DIRECT, "old:1", ""),
+        ] {
+            let restored = restored_settings(&current, &ours(), Some(&before), |_| false);
+            assert_eq!(restored, Some(before.clone()), "{before:?}");
+        }
+    }
+
+    #[test]
+    fn a_stop_does_not_bring_back_a_local_proxy_whose_app_is_gone() {
+        let current = settings(MANUAL, "127.0.0.1:7890", "");
+        let pac = "http://127.0.0.1:33331/commands/pac";
+        let before = settings(MANUAL | PAC, "127.0.0.1:7897", pac);
+        let restored = restored_settings(&current, &ours(), Some(&before), |port| port == 7897);
+        assert_eq!(restored, Some(settings(PAC, "127.0.0.1:7897", pac)));
+        let restored = restored_settings(&current, &ours(), Some(&before), |_| true);
+        assert_eq!(restored.unwrap().flags, PROXY_TYPE_DIRECT);
+    }
+
+    #[test]
+    fn a_stop_leaves_a_proxy_someone_set_after_this_run() {
+        let before = settings(MANUAL, "proxy.corp.example:8080", "");
+        for current in [
+            settings(MANUAL, "127.0.0.1:10808", ""),
+            settings(PROXY_TYPE_DIRECT, "127.0.0.1:7890", ""),
+            settings(PAC, "127.0.0.1:7890", "http://127.0.0.1:10810/pac/"),
+        ] {
+            let restored = restored_settings(&current, &ours(), Some(&before), |_| true);
+            assert_eq!(restored, None, "{current:?}");
+        }
+    }
+
+    #[test]
+    fn a_stop_with_nothing_saved_turns_the_proxy_off() {
+        let current = settings(MANUAL, "127.0.0.1:7890", "");
+        let restored = restored_settings(&current, &ours(), None, |_| false).unwrap();
+        assert_eq!(restored.flags, PROXY_TYPE_DIRECT);
+        let pac = Ours::Pac("http://127.0.0.1:51234/flclash.pac?v=3".into());
+        let current = settings(PAC, "", "http://127.0.0.1:51234/flclash.pac?v=3");
+        let restored = restored_settings(&current, &pac, None, |_| false).unwrap();
+        assert_eq!(restored.flags, PROXY_TYPE_DIRECT);
+    }
+
+    #[test]
+    fn reads_the_port_of_any_local_url() {
+        assert_eq!(local_url_port("http://127.0.0.1:10810/pac/proxy.js"), Some(10810));
+        assert_eq!(local_url_port("http://127.0.0.1:33331?x"), Some(33331));
+        assert_eq!(local_url_port("http://127.0.0.1:33331"), Some(33331));
+        assert_eq!(local_url_port("http://10.0.0.1:80/pac"), None);
+        assert_eq!(local_url_port("https://127.0.0.1:443/pac"), None);
     }
 
     #[test]
