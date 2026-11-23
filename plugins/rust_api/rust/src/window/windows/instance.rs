@@ -1,6 +1,8 @@
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::sync::OnceLock;
+
+use crate::ipc::access::pipe_acl::{current_user_sid, process_user_sid};
 use windows_sys::Win32::Foundation::{
     CloseHandle, GetLastError, ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS, HWND, LPARAM,
 };
@@ -75,10 +77,19 @@ pub fn activate_message() -> u32 {
     })
 }
 
+fn user_sid() -> Option<&'static str> {
+    static SID: OnceLock<Option<String>> = OnceLock::new();
+    SID.get_or_init(current_user_sid).as_deref()
+}
+
 // The handle stays open for the life of the process. An elevated owner's
-// mutex is denied to a non-elevated launch: taken all the same.
+// mutex is denied to a non-elevated launch: taken all the same. Local\ is one
+// per session, and accounts that share a desktop each get their own.
 fn claim_instance() -> bool {
-    let name = instance_name("Local\\vps2vpn.instance:");
+    let name = instance_name(&format!(
+        "Local\\vps2vpn.instance:{}:",
+        user_sid().unwrap_or_default()
+    ));
     let mutex = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
     let error = unsafe { GetLastError() };
     if mutex.is_null() {
@@ -124,6 +135,10 @@ unsafe extern "system" fn match_running_window(window: HWND, lparam: LPARAM) -> 
     }
     let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
     if process.is_null() {
+        return 1;
+    }
+    if process_user_sid(process).as_deref() != user_sid() {
+        CloseHandle(process);
         return 1;
     }
     let mut image = vec![0u16; search.executable.encode_utf16().count() + 1];

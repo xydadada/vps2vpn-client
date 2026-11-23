@@ -1,5 +1,5 @@
 #[cfg(not(target_os = "android"))]
-mod access;
+pub(crate) mod access;
 #[cfg(not(target_os = "android"))]
 mod frame;
 #[cfg(not(target_os = "android"))]

@@ -55,10 +55,19 @@ pub(crate) mod pipe_acl {
     }
 
     pub fn current_user_sid() -> Option<String> {
-        // SAFETY: Win32 calls on our own token into buffers that outlive them.
+        // SAFETY: the pseudo handle of this process is always valid.
+        unsafe { process_user_sid(GetCurrentProcess()) }
+    }
+
+    /// The account a process runs as; None when its token is closed to us.
+    ///
+    /// # Safety
+    /// `process` must be a live handle with query access.
+    pub unsafe fn process_user_sid(process: HANDLE) -> Option<String> {
+        // SAFETY: Win32 calls on the given token into buffers that outlive them.
         unsafe {
             let mut token: HANDLE = null_mut();
-            if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+            if OpenProcessToken(process, TOKEN_QUERY, &mut token) == 0 {
                 return None;
             }
             let mut length = 0u32;
