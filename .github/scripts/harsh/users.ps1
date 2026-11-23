@@ -112,7 +112,9 @@ Start-Sleep 60
 `$home_ = Join-Path `$env:APPDATA 'vps2vpn\vps2vpn'
 `$r = [ordered]@{
   running = -not `$app.HasExited
+  exitCode = if (`$app.HasExited) { `$app.ExitCode } else { `$null }
   home = `$home_
+  files = @(Get-ChildItem `$home_ -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { `$_.FullName.Substring(`$home_.Length) })
   profiles = @(Get-ChildItem (Join-Path `$home_ 'profiles') -File -ErrorAction SilentlyContinue).Count
   prefs = Test-Path (Join-Path `$home_ 'shared_preferences.json')
 }
@@ -121,7 +123,10 @@ Start-Sleep 60
   $app = Invoke-AsUser $credential $run 'run' 120
   Check ($app -and $app.running) 'second account: vps2vpn starts and keeps running'
   if ($app) {
-    "second account home: $($app.home)"
+    "second account home: $($app.home), exit code: $($app.exitCode)"
+    "second account files: $($app.files -join ', ')"
+    Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-3) } -ErrorAction SilentlyContinue |
+      Where-Object { $_.Message -match 'vps2vpn' } | Select-Object -First 5 | ForEach-Object { "event $($_.Id) $($_.ProviderName): $($_.Message -replace '\s+', ' ')" }
     Check ($app.home -match [regex]::Escape($userName)) 'second account: its data lives under the path with Chinese and a space'
     Check ($app.profiles -gt 0) 'second account: the subscription imported'
   }
