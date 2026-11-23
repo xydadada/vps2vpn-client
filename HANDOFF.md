@@ -6,10 +6,10 @@
 
 | 项目 | 值 |
 |---|---|
-| 最新正式版（Latest） | **v1.0.25**，commit `e784eef90b3d040cfede8ec3aee84a099295ae79` |
+| 最新正式版（Latest） | **v1.0.25**，commit `e784eef90b3d040cfede8ec3aee84a099295ae79`（服务端已核对 SHA256 和 `.sig`） |
 | 上一版 | v1.0.24，commit `83f3a7be1d270529538a6484568270b790abe73b` |
 | `vps2vpn` 分支头 | 在 v1.0.25 之后多了：安卓测试脚本修复、C-32（Linux 自启），下一版带上 |
-| 安卓 | 第七轮在跑（运行 45092375494），预发布 `test-android-1.0.25`，见第 5 节 |
+| 安卓 | 第七轮（运行 45092375494）停在构建阶段时会话结束，结果没看；还没有正式 APK，见第 5 节 |
 
 | 版本 | 内容 | 构建 | 升级测试 | 共存测试 | 源码检查 |
 |---|---|---|---|---|---|
@@ -77,7 +77,11 @@
 
 - 工作流：`android.yaml`，`build` 任务出正式签名 APK（secrets `ANDROID_KEYSTORE_B64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS`；缺签名直接失败），带 `publish=true` 时同时生成 `.sig` 并发预发布 `test-android-<版本>`；`emulator` 任务在模拟器上跑 `.github/scripts/android-e2e.sh`。签名证书 SHA-256：`b3836548bd44b5b20c84461b95bd71c6030af3709cdad107df1cd753c7e64505`。
 - 第五、六轮失败的真正原因：Flutter 按钮在 uiautomator 里是 `text=""` + `content-desc="Agree"`，脚本拼成 `" Agree"`，`^...$` 精确匹配一直不中，"同意"从来没点到。已修（`c39238d0`）：去掉空字段；没点到时把界面树存成 `missed-*.xml` 放进 `android-e2e` artifact。
-- 第七轮：运行 45092375494，代码 `c39238d0`（应用代码和 Windows 1.0.25 一样）。通过后把预发布转正，文件名 `vps2vpn-1.0.25-android-universal.apk`，带 `.sig` 和 `SHA256SUMS-android.txt`，告诉服务端填 `files.android`。如果模拟器还有失败，先看 artifact 里的截图和 `missed-*.xml`。
+- 第七轮：运行 45092375494，代码 `c39238d0`（应用代码和 Windows 1.0.25 一样），带 `publish=true`。交接时还在构建，结果没看。接手后：
+  1. `gh run view 45092375494 -R xydadada/vps2vpn-client` 看 `emulator` 任务是否全部 PASS（日志里搜 `PASS ` / `FAIL `）。
+  2. 失败就下载 `android-e2e` artifact 到新的空目录，看截图和 `missed-*.xml`，修脚本或应用后重跑 `gh workflow run android.yaml --ref vps2vpn -f publish=true`。
+  3. 通过后，独立验 `vps2vpn-1.0.25-android-universal.apk` 的 SHA256 和 `.sig`（同第 2 节第 4 步），再把预发布 `test-android-1.0.25` 改成正式发布（不设 Latest，Latest 留给 Windows 版）。
+  4. 把确切文件名 `vps2vpn-1.0.25-android-universal.apk` 告诉服务端，服务端会配置 `files.android` 并核对签名。
 
 ## 6. TUN 对照测试（C-17 用过的）
 
