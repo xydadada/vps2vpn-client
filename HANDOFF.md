@@ -149,6 +149,8 @@
 4. **C-12**（= C8-07 前半）：macOS 网络/唤醒监听是桩实现。CI 没有 macOS，也不发 macOS 版，暂缓。
 5. 清理：删掉第 3 节里标"可以删"的分支；清掉没用的 arb 文案（`disclaimerAcknowledgeTitle`、`disclaimerAcknowledgeTip`）。
 
+6. **新功能计划**：见仓库根目录 [`ROADMAP.md`](ROADMAP.md)（2026-11-23 用户定）。顺序：1.0.28 → UI 第一批（截图、剪贴板导入、连接中状态、大白话错误、托盘、用词表）→ ROADMAP 第一节（出口 IP 检测，然后 Claude 专项）→ 第六节。规则测试做之前先问用户；需要服务端配合的（流量排行 `features.traffic_rank`、一键反馈、设备管理、节点状态）等服务端会话把接口字段写进 ROADMAP 再接；WARP 和抗封锁先写评估给用户看。做完一项在 ROADMAP 里标"已完成（版本号）"。
+
 ## 8. 不能做的事
 
 - **不在本机安装或运行发布版客户端**。它会接管代理软件、关掉用户自己的 FlClash。本机只构建；升级、共存测试只在 GitHub Actions 里跑。
