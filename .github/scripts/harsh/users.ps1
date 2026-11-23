@@ -12,7 +12,7 @@ New-Item -ItemType Directory -Force $shared | Out-Null
 & icacls $shared /grant '*S-1-5-32-545:(OI)(CI)M' | Out-Null
 
 function Get-LocalGroupName($sid) {
-  ([Security.Principal.SecurityIdentifier]$sid).Translate([Security.Principal.NTAccount]).Value.Split('')[-1]
+  ([Security.Principal.SecurityIdentifier]$sid).Translate([Security.Principal.NTAccount]).Value.Split([char]92)[-1]  # [char]92 is the backslash in BUILTIN\Users
 }
 
 function Invoke-AsUser($credential, $script, $name, $seconds = 120) {

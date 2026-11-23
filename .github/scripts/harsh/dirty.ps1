@@ -92,6 +92,11 @@ try {
   Check (Import-FirstRun) 'subscription imported on first run'
   Set-AppPrefs @{ autoRun = $true; takeover = $false; acceptedDisclaimerVersion = 1 }
   Set-Mode $false $true
+  # The other apps are still starting and some of them set or clear the
+  # system proxy themselves; what we must give back is what was there just
+  # before vps2vpn connected.
+  $p0 = Get-WinInetProxy
+  Show-Proxy 'before vps2vpn, takeover off'
   $port = Start-App 'takeover off'
   Check ($port -notin $taken) "takeover off: kept off the taken ports $($taken -join ', ') (on $port)"
   Test-Through $port 'takeover off'
@@ -100,7 +105,8 @@ try {
   Send-EndSession | Out-Null
   Start-Sleep 3
   $p = Get-WinInetProxy
-  Check (($p.Flags -band $PROXY) -and $p.Server -eq '127.0.0.1:7891') "takeover off: the other app's system proxy came back ($($p.Server))"
+  Show-Proxy 'after vps2vpn, takeover off'
+  Check (($p.Flags -band $PROXY) -eq ($p0.Flags -band $PROXY) -and $p.Server -eq $p0.Server) "takeover off: the other app's system proxy came back (flags $($p0.Flags) -> $($p.Flags), $($p0.Server) -> $($p.Server))"
   Stop-App
 
   # TUN while the other TUN is up: no loop, and the other one still works after.
