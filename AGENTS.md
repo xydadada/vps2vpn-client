@@ -17,6 +17,7 @@ Read these only when the task touches their area:
   local plugins.
 - [.agents/setting-changes.md](.agents/setting-changes.md): whether a changed setting is patched live, re-applies the
   profile, or asks for an Android VPN restart.
+- [.agents/wording.md](.agents/wording.md): the one Chinese and English word per idea for user-facing text.
 - [.agents/surfaces.md](.agents/surfaces.md): fill levels, selection and status colors, and the few borders that
   remain, for any change to how a surface is colored.
 - [.agents/ios-measurements.md](.agents/ios-measurements.md): measured iOS values the iOS-style surfaces and motion
