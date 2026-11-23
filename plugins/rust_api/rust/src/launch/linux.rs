@@ -6,7 +6,30 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub fn autostart_enabled(id: &str, _executable: &str) -> bool {
     home()
         .and_then(|home| desktop_file(&home, id))
-        .is_some_and(|file| file.exists())
+        .and_then(|file| fs::read_to_string(file).ok())
+        .is_some_and(|entry| entry_starts(&entry))
+}
+
+/// A session skips an entry marked `Hidden=true` (the XDG spec's "deleted")
+/// or, on GNOME, `X-GNOME-Autostart-enabled=false`.
+fn entry_starts(entry: &str) -> bool {
+    let mut in_entry = false;
+    for line in entry.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_entry = line == "[Desktop Entry]";
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        match (in_entry, key.trim(), value.trim()) {
+            (true, "Hidden", "true") | (true, "X-GNOME-Autostart-enabled", "false") => {
+                return false;
+            }
+            _ => {}
+        }
+    }
+    true
 }
 
 pub fn set_autostart(id: &str, display_name: &str, executable: &str, enabled: bool) -> bool {
@@ -213,6 +236,26 @@ mod tests {
         assert!(entry.contains("\nName=\\sApp\\nHidden=true\n"));
         assert!(entry.contains("\nExec=\"/tmp/a\\nb\\tapp\"\n"));
         assert_eq!(entry.lines().count(), 7);
+    }
+
+    #[test]
+    fn an_entry_the_desktop_hid_does_not_start() {
+        let ours = desktop_entry("App", "/opt/app").unwrap();
+        assert!(entry_starts(&ours));
+        let with = |extra: &str| format!("{ours}{extra}");
+        assert!(!entry_starts(&with("Hidden=true")));
+        assert!(!entry_starts(&with("X-GNOME-Autostart-enabled = false")));
+        assert!(entry_starts(&with("Hidden=false")));
+        assert!(entry_starts(&with("[Desktop Action x]\nHidden=true")));
+
+        let home = temp_home("hidden");
+        assert!(write_autostart(&home, "App", "App", "/opt/app", true));
+        let file = desktop_file(&home, "App").unwrap();
+        fs::write(&file, with("Hidden=true")).unwrap();
+        assert!(!entry_starts(&fs::read_to_string(&file).unwrap()));
+        assert!(write_autostart(&home, "App", "App", "/opt/app", true));
+        assert!(entry_starts(&fs::read_to_string(&file).unwrap()));
+        fs::remove_dir_all(home).unwrap();
     }
 
     #[test]
