@@ -33,11 +33,12 @@ use windows_sys::Win32::System::Registry::{
     KEY_SET_VALUE, REG_DWORD, REG_OPTION_VOLATILE,
 };
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+    GetExitCodeProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
 const AF_INET: u32 = 2;
 const SECURITY_MANDATORY_MEDIUM_RID: u32 = 0x2000;
+const STILL_ACTIVE: u32 = 259;
 /// Hyper-V and WinNAT reserve ranges that can cover any fixed port; only admins
 /// write this volatile key under the service's own, and a reboot clears it.
 const PORT_KEY: &str = r"SYSTEM\CurrentControlSet\Services\vps2vpnHelperService\Runtime";
@@ -59,6 +60,12 @@ impl Drop for Handle {
 }
 
 pub fn process_sid(pid: u32) -> IoResult<String> {
+    open_process_sid(pid).map(|(_, sid)| sid)
+}
+
+/// The process behind `pid` and its account. While the returned handle stays
+/// open, Windows cannot give `pid` to another process.
+fn open_process_sid(pid: u32) -> IoResult<(Handle, String)> {
     // SAFETY: both handles are owned by a Handle; the u64 buffer gives the
     // pointer-bearing TOKEN_USER the alignment it needs.
     unsafe {
@@ -96,8 +103,15 @@ pub fn process_sid(pid: u32) -> IoResult<String> {
             return Err(Error::last_os_error());
         }
         let user = &*(buffer.as_ptr() as *const TOKEN_USER);
-        sid_to_string(user.User.Sid)
+        let sid = sid_to_string(user.User.Sid)?;
+        Ok((process, sid))
     }
+}
+
+fn is_running(process: &Handle) -> bool {
+    let mut code = 0u32;
+    // SAFETY: the handle is open and was opened with query rights.
+    unsafe { GetExitCodeProcess(process.0, &mut code) != 0 && code == STILL_ACTIVE }
 }
 
 /// Rejects AppContainer, restricted, and sub-Medium integrity tokens so a
@@ -259,7 +273,22 @@ fn is_owner_connection(stream: &TcpStream, owner_sid: &str) -> bool {
     let Some(pid) = client_pid(&connections, client, server) else {
         return false;
     };
-    matches!(process_sid(pid), Ok(sid) if same_sid(&sid, owner_sid))
+    // The client could exit and its PID go to another account's process
+    // between the table and OpenProcess. So hold the process open, which keeps
+    // the PID from being reused, and only then ask the table again: the
+    // connection must still belong to this very process.
+    let Ok((process, sid)) = open_process_sid(pid) else {
+        return false;
+    };
+    if !same_sid(&sid, owner_sid) || !is_running(&process) {
+        return false;
+    }
+    let Ok(connections) = tcp_connections() else {
+        return false;
+    };
+    let still_owner = client_pid(&connections, client, server) == Some(pid);
+    drop(process);
+    still_owner
 }
 
 /// Loopback TCP has no peer credential, so the TCP table names the process
