@@ -1,0 +1,92 @@
+name: vps2vpn Android on real phones
+
+# Firebase Test Lab (project in vars.GCP_PROJECT_ID, keyless sign-in through
+# workload identity). The emulator froze once the app's VPN came up, on every
+# API and stack, while a bare tunnel did not; this asks real phones.
+# The subscription comes from secrets.TESTLAB_SUB_URL (a test account on the
+# test server) and is handed over hex-encoded; nothing prints it.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Pre-release holding the Android APK
+        default: test-android-1.0.26
+      devices:
+        description: "gcloud --device values, separated by ';' (empty = only list the models)"
+        default: model=oriole,version=33
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  testlab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout the driver
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/testlab
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.0'
+
+      - name: Build the driver
+        working-directory: .github/testlab
+        run: gradle --no-daemon assembleDebug assembleDebugAndroidTest
+
+      - name: Download the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*-android-universal.apk' -D apk
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TESTLAB_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Physical phones on offer
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud firebase test android models list --project "$PROJECT" \
+            --filter='form=PHYSICAL' --format='table(id,brand,name,supportedVersionIds.list())' || true
+
+      - name: Install, import, connect on real phones
+        if: inputs.devices != ''
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          SUB: ${{ secrets.TESTLAB_SUB_URL }}
+          DEVICES: ${{ inputs.devices }}
+        run: |
+          [ -n "$SUB" ] || { echo 'secret TESTLAB_SUB_URL is not set' >&2; exit 1; }
+          hex=$(printf '%s' "$SUB" | xxd -p | tr -d '\n')
+          args=()
+          IFS=';' read -ra devices <<< "$DEVICES"
+          for d in "${devices[@]}"; do args+=(--device "$d"); done
+          gcloud firebase test android run --project "$PROJECT" --type instrumentation \
+            --app .github/testlab/driver/build/outputs/apk/debug/driver-debug.apk \
+            --test .github/testlab/driver/build/outputs/apk/androidTest/debug/driver-debug-androidTest.apk \
+            --additional-apks "$(ls apk/*.apk | head -1)" \
+            --environment-variables "sub=$hex" \
+            --timeout 8m --num-flaky-test-attempts 0 \
+            --results-history-name vps2vpn-android "${args[@]}" 2>&1 | tee testlab.log
+
+      - name: Upload the summary
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: testlab
+          path: testlab.log
+          if-no-files-found: ignore
