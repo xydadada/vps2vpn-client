@@ -8,8 +8,9 @@
 |---|---|
 | 最新正式版（Latest） | **v1.0.25**，commit `e784eef90b3d040cfede8ec3aee84a099295ae79`（服务端已核对 SHA256 和 `.sig`） |
 | 上一版 | v1.0.24，commit `83f3a7be1d270529538a6484568270b790abe73b` |
-| `vps2vpn` 分支头 | 在 v1.0.25 之后多了：安卓测试脚本修复、C-32（Linux 自启），下一版带上 |
-| 安卓 | 第七轮（运行 45092375494）停在构建阶段时会话结束，结果没看；还没有正式 APK，见第 5 节 |
+| `vps2vpn` 分支头 | 版本提交 `b8ba4d27`（chore: version 1.0.26）+ 本文档提交。1.0.26 = C-32 + 第 9 份审计 C9-01..05 + 安卓脚本修复 |
+| 1.0.26 发布 | **进行中，没发完**：构建运行 45116238235（publish=true，生成预发布 `test-1.0.26`）。之后按第 2 节流程：校验 SHA256、`.sig`、加载标志 → `e2e.yaml -f tag=test-1.0.26 -f from=v1.0.25` → `coexist.yaml -f tag=test-1.0.26 -f rounds=3` → 提升为 v1.0.26（`--target b8ba4d27…`，用完整 SHA）→ e2e/coexist 默认标签改 1.0.26 → 告诉服务端。源码检查用推本文档后那次 verify（代码与 b8ba4d27 相同） |
+| 安卓 | 还没有正式 APK。诊断结论见第 5 节末尾；矩阵测试运行 45115715910（API 31/33/34/35，各自产物 `android-e2e-api<N>`）结果待看 |
 
 | 版本 | 内容 | 构建 | 升级测试 | 共存测试 | 源码检查 |
 |---|---|---|---|---|---|
@@ -83,6 +84,13 @@
   3. 通过后，独立验 `vps2vpn-1.0.25-android-universal.apk` 的 SHA256 和 `.sig`（同第 2 节第 4 步），再把预发布 `test-android-1.0.25` 改成正式发布（不设 Latest，Latest 留给 Windows 版）。
   4. 把确切文件名 `vps2vpn-1.0.25-android-universal.apk` 告诉服务端，服务端会配置 `files.android` 并核对签名。
 
+### 安卓模拟器失败诊断（2026-11-23）
+
+- 现象（API 34，google_apis，x86_64）：安装、启动、导入订阅都 PASS；点连接后 VPN 确实建立（上游代理日志能看到手机流量），约 1 秒后 logcat 和内核输出（`-show-kernel`）同时停止，没有任何 panic/Oops；adb 在约 30 秒后掉线，之后 qemu 进程退出。宿主机内存充足（约 11 GB 空闲），dmesg 无异常。
+- 判断：虚拟机整个冻住（不是应用崩溃、不是内存不足），可能是这个镜像/模拟器与 TUN 流量的问题，也可能是应用 TUN 设置触发的。
+- 下一步：看运行 45115715910 各 API 结果。若别的 API 能过，就把 `android.yaml` 的矩阵改成那个 API（去掉矩阵），重新跑并发布（注意 `test-android-1.0.25` 已存在，1.0.26 会生成 `test-android-1.0.26`）。若都冻住，再查应用的 TUN 栈/MTU（`android/service/.../VpnService.kt`），例如换 stack 试。
+- 诊断产物：`host-watch.log`（每 3 秒 adb/qemu/内存）、`host-report.txt`、`logcat.txt`。
+
 ## 6. TUN 对照测试（C-17 用过的）
 
 - `coexist.yaml` 的 TUN 阶段：应用配置改成开 TUN、关系统代理，检查 120 秒内 Core 以 SYSTEM 运行（Helper 拉起）、Helper 服务 Running、名字含 Wintun/Meta/vps2vpn 的网卡 Up，然后 `curl --noproxy '*'` 拿到 204 且上游代理日志看到这次请求。订阅规则里有 `PROCESS-NAME,python.exe,DIRECT`，否则 CI 上游代理自己的流量会被 TUN 绕回去。
@@ -94,7 +102,7 @@
 1. **安卓正式 APK**：等第七轮结果（第 5 节）。
 2. **下一版 1.0.26**：带上 C-32（Linux 自启识别 `Hidden=true`，只影响 Linux）和安卓脚本修复。不急，有新修复时一起发。
 3. **C-12**（= C8-07 前半）：macOS 网络/唤醒监听是桩实现。CI 没有 macOS，也不发 macOS 版，暂缓。
-4. Helper 按 PID 反查进程的 TOCTOU（C8-08 第 2 条）；安卓 StartTun/StopTun 监听状态竞争（C8-08 第 3 条，影响小）。
+4. （C8-08 第 2、3 条已在 1.0.26 随 C9-04、C9-03 修掉。）
 5. 清理：删掉第 3 节里标"可以删"的分支；清掉没用的 arb 文案。
 
 ## 8. 不能做的事
@@ -113,6 +121,16 @@
 - 有的文件是 CRLF（如 `lib/views/disclaimer.dart`、`.github/scripts/android-e2e.sh`、Rust 源码），编辑后要保持原来的换行。
 
 ## 9. 审计核实结论
+
+### 第 9 份（基准 v1.0.25）客户端部分
+
+| 编号 | 结论 | 说明 |
+|---|---|---|
+| C9-01 | 真的，1.0.26 已修 | ⚡ 智能线路、🤖 AI 专线写死 UDP 优先；现在按订阅自带 fallback 组里同一服务器 Reality 与 Hysteria2/TUIC 的先后决定（tcp_first 开时 Reality 在前），没有这种组的订阅仍 UDP 优先；Reality 补指纹改按类型判断。没照搬补丁：补丁遍历 map 顺序不定，这里按组内顺序确定 |
+| C9-02 | 真的，1.0.26 已修 | 链接、文件名、版本只校验一次，下载锁跨直连和代理两次尝试；只对 `Exception` 走代理重试 |
+| C9-03 | 真的，1.0.26 已修 | 安卓四个导出函数加同一把锁（先于 tunLock/configMu） |
+| C9-04 | 真的（窗口很窄），1.0.26 已修 | 打开进程后保持句柄（PID 不会被复用），确认进程存活，再查一次 TCP 表确认连接仍属该进程 |
+| C9-05 | 真的，1.0.26 已修 | 建不出只限本人的描述符就不建管道（实际几乎不会发生） |
 
 ### 第 7 份（报告称第 8 轮，基准 v1.0.23）
 
