@@ -19,7 +19,19 @@ function Invoke-AsUser($credential, $script, $name, $seconds = 120) {
   $file = Join-Path $shared "$name.ps1"
   $result = Join-Path $shared "$name.json"
   Remove-Item $result -ErrorAction SilentlyContinue
-  Set-Content $file $script -Encoding utf8
+  # Start-Process -Credential hands the child OUR environment, so APPDATA and
+  # USERPROFILE would still name runneradmin's folders. Take the account's own
+  # from its loaded profile before anything else runs.
+  $lines = $script -split "`n", 2
+  $prelude = @'
+foreach ($pair in @(('APPDATA', 'ApplicationData'), ('LOCALAPPDATA', 'LocalApplicationData'), ('USERPROFILE', 'UserProfile'))) {
+  $path = [Environment]::GetFolderPath($pair[1])
+  if ($path) { Set-Item "Env:$($pair[0])" $path }
+}
+$env:TEMP = $env:TMP = Join-Path $env:LOCALAPPDATA 'Temp'
+New-Item -ItemType Directory -Force $env:TEMP | Out-Null
+'@
+  Set-Content $file ($lines[0] + "`n" + $prelude + "`n" + $lines[1]) -Encoding utf8
   $p = Start-Process pwsh -Credential $credential -LoadUserProfile -WorkingDirectory $shared -WindowStyle Hidden -PassThru `
     -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $file, $result
   if (-not $p.WaitForExit($seconds * 1000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
