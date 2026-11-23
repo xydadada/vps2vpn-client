@@ -120,7 +120,7 @@ fn listen(address: &str) -> io::Result<Listener> {
         .name(address.to_fs_name::<GenericFilePath>()?)
         .try_overwrite(true)
         .max_spin_time(STALE_SOCKET_RETRY_LIMIT);
-    let listener = access::owner_only(options).create_tokio()?;
+    let listener = access::owner_only(options)?.create_tokio()?;
     access::restrict_socket(address)?;
     Ok(listener)
 }

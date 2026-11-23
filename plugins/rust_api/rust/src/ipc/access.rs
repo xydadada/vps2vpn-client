@@ -4,26 +4,30 @@ use std::io;
 
 /// Linux carries an `fchmod` on the unbound socket over to the file `bind`
 /// creates; other Unixes reject it and get `restrict_socket` after `bind`.
-pub fn owner_only(options: ListenerOptions<'_>) -> ListenerOptions<'_> {
+/// On Windows no pipe is made without our own descriptor: the default one lets
+/// any account read and hold the only instance.
+pub fn owner_only(options: ListenerOptions<'_>) -> io::Result<ListenerOptions<'_>> {
     #[cfg(target_os = "linux")]
     {
         use interprocess::os::unix::local_socket::ListenerOptionsExt as _;
 
-        options.mode(0o600)
+        Ok(options.mode(0o600))
     }
     #[cfg(windows)]
     {
         use interprocess::os::windows::local_socket::ListenerOptionsExt as _;
 
-        match pipe_acl::descriptor() {
-            Some(descriptor) => options.security_descriptor(descriptor),
-            // The default descriptor still limits writes to this user and SYSTEM.
-            None => options,
-        }
+        let descriptor = pipe_acl::descriptor().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "could not build the owner-only pipe descriptor",
+            )
+        })?;
+        Ok(options.security_descriptor(descriptor))
     }
     #[cfg(not(any(target_os = "linux", windows)))]
     {
-        options
+        Ok(options)
     }
 }
 
@@ -120,6 +124,7 @@ pub(crate) mod pipe_acl {
             let listener = super::super::owner_only(
                 ListenerOptions::new().name(name.clone().to_ns_name::<GenericNamespaced>().unwrap()),
             )
+            .expect("the owner-only descriptor")
             .create_sync()
             .expect("pipe with the narrowed descriptor");
             let client = std::thread::spawn(move || {
