@@ -17,6 +17,9 @@ on:
       apis:
         description: 'Emulator API levels, as a JSON list'
         default: '[31, 33, 34, 35]'
+      gpus:
+        description: 'Emulator GPU modes, as a JSON list (the app froze the phone with swiftshader_indirect; a bare tunnel did not)'
+        default: '["swiftshader_indirect"]'
 
 permissions:
   contents: read
@@ -211,6 +214,7 @@ jobs:
       fail-fast: false
       matrix:
         api: ${{ fromJSON(inputs.apis) }}
+        gpu: ${{ fromJSON(inputs.gpus) }}
     steps:
       - name: Checkout the test scripts
         uses: actions/checkout@v4
@@ -239,7 +243,7 @@ jobs:
           # -show-kernel: the guest's kernel console goes to this log. Run 7
           # lost the phone half a minute after the VPN came up, with logcat
           # cut off at once, as after a kernel panic.
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
+          emulator-options: -no-window -gpu ${{ matrix.gpu }} -no-snapshot -noaudio -no-boot-anim -show-kernel
           script: bash .github/scripts/android-e2e.sh "$(ls apk/*.apk | head -1)" android-e2e
 
       - name: Upload results
@@ -247,6 +251,6 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: android-e2e-api${{ matrix.api }}
+          name: android-e2e-api${{ matrix.api }}-${{ matrix.gpu }}
           path: android-e2e
           if-no-files-found: ignore
