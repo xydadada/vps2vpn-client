@@ -16,6 +16,7 @@ import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
+import 'package:fl_clash/vps2vpn/screenshots.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
@@ -250,6 +251,7 @@ class _HeroState extends ConsumerState<_Hero> {
       if (testLink != null && ref.read(profilesProvider).isEmpty) {
         ref.read(profilesActionProvider.notifier).addProfileFromLink(testLink);
       }
+      vpsStartShots(ProviderScope.containerOf(context, listen: false));
     });
   }
 

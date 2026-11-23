@@ -1,0 +1,94 @@
+name: vps2vpn screenshots
+
+# Every page of a Windows build, photographed by the app itself
+# (.github/scripts/shots.ps1), and with "before" set, side by side with
+# another build. A build is a release tag or the run id of a vps2vpn.yaml run.
+on:
+  workflow_dispatch:
+    inputs:
+      after:
+        description: Build to photograph (release tag or vps2vpn.yaml run id)
+        required: true
+      before:
+        description: Build to compare with (optional)
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  shots:
+    strategy:
+      fail-fast: false
+      matrix:
+        which: [after, before]
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - name: Which build
+        id: build
+        shell: pwsh
+        env:
+          AFTER: ${{ inputs.after }}
+          BEFORE: ${{ inputs.before }}
+          WHICH: ${{ matrix.which }}
+        run: |
+          $source = if ($env:WHICH -eq 'after') { $env:AFTER } else { $env:BEFORE }
+          "source=$source" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        if: steps.build.outputs.source != ''
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Download the build
+        if: steps.build.outputs.source != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE: ${{ steps.build.outputs.source }}
+        run: |
+          if ($env:SOURCE -match '^\d+$') {
+            gh run download $env:SOURCE -R $env:GITHUB_REPOSITORY -n vps2vpn-windows -D app
+          } else {
+            gh release download $env:SOURCE -R $env:GITHUB_REPOSITORY -p '*-windows-amd64-setup.exe' -D app
+          }
+          Get-ChildItem app -Recurse -File | ForEach-Object { "$($_.Name) $($_.Length)" }
+
+      - name: Photograph every page
+        if: steps.build.outputs.source != ''
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem app -Recurse -Filter '*-setup.exe' | Select-Object -First 1).FullName
+          ./.github/scripts/shots.ps1 -Setup $setup -Out out
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.build.outputs.source != ''
+        with:
+          name: shots-${{ matrix.which }}
+          path: out
+          if-no-files-found: ignore
+
+  compare:
+    needs: shots
+    if: inputs.before != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shots-*
+          path: shots
+      - name: Side by side
+        run: |
+          python3 -m venv "$RUNNER_TEMP/pil"
+          "$RUNNER_TEMP/pil/bin/pip" install --quiet 'pillow==11.3.0'
+          "$RUNNER_TEMP/pil/bin/python" -I .github/scripts/shots_compare.py shots/shots-before/pages shots/shots-after/pages compare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots-compare
+          path: compare
+          if-no-files-found: ignore

@@ -15,6 +15,7 @@ import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/vps2vpn/auto_update.dart';
 import 'package:fl_clash/vps2vpn/panel.dart'
     show vpsLinkSource, vpsSubscriptionLink;
+import 'package:fl_clash/vps2vpn/screenshots.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
@@ -202,11 +203,13 @@ class ApplicationState extends ConsumerState<Application> {
             GlobalWidgetsLocalizations.delegate,
           ],
           builder: (context, child) {
-            return buildManagerStack(
-              isDesktop: system.isDesktop,
-              onConnectivityChanged: _handleConnectivityChanged,
-              terminateSignals: _terminateSignals,
-              child: child!,
+            return vpsShotBoundary(
+              buildManagerStack(
+                isDesktop: system.isDesktop,
+                onConnectivityChanged: _handleConnectivityChanged,
+                terminateSignals: _terminateSignals,
+                child: child!,
+              ),
             );
           },
           title: appName,
