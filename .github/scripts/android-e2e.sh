@@ -50,7 +50,7 @@ tap() {
   at=$(dump | python3 -I -c 'import re, sys
 pattern = re.compile(sys.argv[1], re.I)
 for node in re.findall(r"<node [^>]*>", sys.stdin.read()):
-    label = " ".join(re.findall(r" (?:text|content-desc)=\"([^\"]*)\"", node))
+    label = " ".join(t.strip() for t in re.findall(r" (?:text|content-desc)=\"([^\"]*)\"", node) if t.strip())
     if pattern.search(label):
         x1, y1, x2, y2 = map(int, re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", node).groups())
         print((x1 + x2) // 2, (y1 + y2) // 2)
@@ -63,6 +63,7 @@ wait_tap() {
     tap "$1" && return 0
     sleep 2
   done
+  dump > "$OUT/missed-$(date +%s).xml"
   return 1
 }
 through_vpn() {
