@@ -161,12 +161,14 @@ typedef VpsRun =
     Future<ProcessResult> Function(String executable, List<String> args);
 
 Future<ProcessResult> _run(String executable, List<String> args) =>
-    Process.run(_system32(executable), args);
+    Process.run(vpsSystemTool(executable, windows: Platform.isWindows), args);
 
 /// Windows tools by their System32 path, so a tasklist.exe or reg.exe in the
-/// working directory or earlier on PATH is never run instead.
-String _system32(String tool) {
-  if (!Platform.isWindows) return tool;
+/// working directory or earlier on PATH is never run instead. A path, such as
+/// this app's own executable, is run as given.
+@visibleForTesting
+String vpsSystemTool(String tool, {bool windows = true}) {
+  if (!windows || tool.contains(RegExp(r'[\\/:]'))) return tool;
   final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';
   return '$root\\System32\\$tool.exe';
 }
@@ -559,7 +561,11 @@ int? loopbackProxyPort(VpsSystemProxy? proxy) {
     );
     if (uri != null &&
         uri.hasPort &&
-        const ['127.0.0.1', 'localhost', '::1'].contains(uri.host)) {
+        const [
+          '127.0.0.1',
+          'localhost',
+          '::1',
+        ].contains(uri.host.toLowerCase())) {
       return uri.port;
     }
   }

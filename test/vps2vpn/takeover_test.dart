@@ -63,6 +63,14 @@ void main() {
         isNull,
       );
       expect(loopbackProxyPort(null), isNull);
+      expect(loopbackProxyPort(proxy('LOCALHOST:7897')), 7897);
+    });
+
+    test('runs a Windows tool from System32, a path as given', () {
+      expect(vpsSystemTool('tasklist'), endsWith(r'\System32\tasklist.exe'));
+      const app = r'C:\Program Files\vps2vpn\vps2vpn.exe';
+      expect(vpsSystemTool(app), app);
+      expect(vpsSystemTool('tasklist', windows: false), 'tasklist');
     });
 
     test('names the owner by its product name, or its image', () async {
