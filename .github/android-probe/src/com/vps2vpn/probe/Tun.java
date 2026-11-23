@@ -2,6 +2,7 @@ package com.vps2vpn.probe;
 
 import android.content.Intent;
 import android.net.IpPrefix;
+import android.net.ProxyInfo;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
@@ -25,6 +26,9 @@ public class Tun extends VpnService {
                 .addRoute("0.0.0.0", 0);
             if (Build.VERSION.SDK_INT >= 33) {
                 builder.excludeRoute(new IpPrefix(InetAddress.getByName("10.0.0.0"), 8));
+            }
+            if (intent != null && intent.getBooleanExtra("proxy", false)) {
+                builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", 7890));
             }
             tun = builder.establish();
         } catch (Exception error) {

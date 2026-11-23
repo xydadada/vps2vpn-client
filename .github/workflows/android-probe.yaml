@@ -2,12 +2,12 @@ name: android-probe
 
 # Splits the emulator freeze seen after the app's VPN comes up: a bare tunnel
 # of the same shape that drops every packet (probe) against the released APK
-# (app). If the probe freezes too, it is the emulator, not the app.
+# (app), on emulators of different size and system image.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Pre-release holding the APK for the app case'
+        description: 'Pre-release holding the APK for the app cases'
         default: test-android-1.0.26
       api:
         description: 'Emulator API level'
@@ -23,7 +23,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [probe-9000, probe-1500, app]
+        include:
+          - {case: probe-9000, target: google_apis, ram: '', cores: 2}
+          - {case: probe-proxy, target: google_apis, ram: '', cores: 2}
+          - {case: app, target: google_apis, ram: '', cores: 2}
+          - {case: app, target: google_apis, ram: 4096M, cores: 2}
+          - {case: app, target: google_apis, ram: 4096M, cores: 4}
+          - {case: app, target: default, ram: '', cores: 2}
+    name: ${{ matrix.case }} ${{ matrix.target }} ram=${{ matrix.ram || 'default' }} cores=${{ matrix.cores }}
     steps:
       - name: Checkout the test scripts
         uses: actions/checkout@v4
@@ -58,16 +65,18 @@ jobs:
         with:
           api-level: ${{ inputs.api }}
           arch: x86_64
-          target: google_apis
+          target: ${{ matrix.target }}
+          ram-size: ${{ matrix.ram }}
+          cores: ${{ matrix.cores }}
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -show-kernel
-          script: if [ "$CASE" = app ]; then bash .github/scripts/android-e2e.sh "$(ls apk/*.apk | head -1)" out; else bash .github/scripts/android-probe.sh probe.apk "${CASE#probe-}" out; fi
+          script: if [ "$CASE" = app ]; then bash .github/scripts/android-e2e.sh "$(ls apk/*.apk | head -1)" out; elif [ "$CASE" = probe-proxy ]; then bash .github/scripts/android-probe.sh probe.apk 9000 out proxy; else bash .github/scripts/android-probe.sh probe.apk "${CASE#probe-}" out; fi
 
       - name: Upload results
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: android-probe-${{ matrix.case }}
+          name: android-probe-${{ matrix.case }}-${{ matrix.target }}-${{ matrix.ram || 'default' }}-${{ matrix.cores }}
           path: out
           if-no-files-found: ignore

@@ -2,12 +2,13 @@
 # The control for android-e2e.sh: brings up a tunnel shaped like the app's
 # (198.18.0.1/30, DNS 198.18.0.2, all IPv4 but 10/8) that only drops what it
 # reads, sends some traffic into it, then checks the phone stays alive.
-# usage: android-probe.sh <probe apk> <mtu> [out dir]
+# usage: android-probe.sh <probe apk> <mtu> [out dir] [proxy: also set the VPN HTTP proxy]
 set -uo pipefail
 [ -n "${GITHUB_ACTIONS:-}" ] || { echo 'CI only: this drives an emulator' >&2; exit 2; }
 APK=$1
 MTU=$2
 OUT=${3:-android-probe}
+PROXY=${4:-}
 PKG=com.vps2vpn.probe
 mkdir -p "$OUT"
 fails=0
@@ -30,7 +31,7 @@ trap 'cp -r /tmp/android-runner "$OUT/runner" 2>/dev/null; kill $logcat $watch 2
 
 check 'adb install -r -g "$APK" > "$OUT/install.log" 2>&1' 'probe installs'
 adb shell appops set "$PKG" ACTIVATE_VPN allow
-adb shell am start -n "$PKG/.Main" --ei mtu "$MTU" > /dev/null
+adb shell am start -n "$PKG/.Main" --ei mtu "$MTU" --ez proxy "$([ "$PROXY" = proxy ] && echo true || echo false)" > /dev/null
 for _ in $(seq 1 10); do vpn_up && break; sleep 2; done
 check vpn_up "the probe tunnel is up (mtu $MTU)"
 adb shell ip addr show tun0 > "$OUT/tun0.txt" 2>&1
