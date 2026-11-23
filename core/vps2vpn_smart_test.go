@@ -1,6 +1,7 @@
 package core
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/metacubex/mihomo/config"
@@ -189,5 +190,43 @@ func TestVps2vpnEnhanceSkipsADirectFirstSelectGroup(t *testing.T) {
 	proxy := vpsGroup(raw, "Proxy")["proxies"].([]any)
 	if len(proxy) == 0 || proxy[0] != vpsSmartGroup {
 		t.Fatalf("main selector = %v, want the smart line first", proxy)
+	}
+}
+
+func TestVps2vpnEnhanceFollowsTheSubscriptionsTCPFirst(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		fallback []any
+		want     []string
+	}{
+		{"tcp_first on", []any{"SG-REALITY", "SG-HY2", "US-HY2"}, []string{"SG-REALITY", "SG-HY2", "US-HY2"}},
+		{"tcp_first off", []any{"SG-HY2", "SG-REALITY", "US-HY2"}, []string{"SG-HY2", "SG-REALITY", "US-HY2"}},
+		{"no fallback group", nil, []string{"SG-HY2", "SG-REALITY", "US-HY2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vpsOn(t)
+			raw := vpsTestRaw("MATCH,Proxy")
+			if tc.fallback != nil {
+				raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
+					"name": "auto", "type": "fallback", "proxies": tc.fallback,
+				})
+			}
+			vps2vpnEnhance(raw, 0)
+			for _, group := range []string{vpsSmartGroup, vpsAIGroup} {
+				got := vpsGroup(raw, group)["proxies"].([]string)
+				if !slices.Equal(got, tc.want) {
+					t.Fatalf("%s = %v, want %v", group, got, tc.want)
+				}
+			}
+			// Only the Reality line gets a fingerprint, whichever order won.
+			if fp := raw.Proxy[0]["client-fingerprint"]; fp != "chrome" {
+				t.Fatalf("Reality fingerprint = %v, want chrome", fp)
+			}
+			for _, p := range raw.Proxy[1:] {
+				if _, has := p["client-fingerprint"]; has {
+					t.Fatalf("%v got a fingerprint", p["name"])
+				}
+			}
+		})
 	}
 }

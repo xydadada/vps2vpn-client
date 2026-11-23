@@ -63,8 +63,29 @@ type vpsEnhanceResult struct {
 	addedRules    int
 }
 
+// vpsIsReality reports a VLESS line with Reality, which wants a TLS fingerprint.
+func vpsIsReality(p map[string]any) bool {
+	rawType, _ := p["type"].(string)
+	if strings.ToLower(strings.TrimSpace(rawType)) != "vless" {
+		return false
+	}
+	opts, ok := p["reality-opts"].(map[string]any)
+	return ok && opts != nil
+}
+
+// vpsIsUDPLine reports a QUIC line (Hysteria, TUIC), the ones UDP throttling hurts.
+func vpsIsUDPLine(p map[string]any) bool {
+	rawType, _ := p["type"].(string)
+	switch strings.ToLower(strings.TrimSpace(rawType)) {
+	case "hysteria2", "hysteria", "tuic":
+		return true
+	}
+	return false
+}
+
 // vpsLineRank: lower is tried first; -1 means not a line to the outside.
-func vpsLineRank(p map[string]any) int {
+// tcpFirst puts Reality ahead of the QUIC lines, as the panel's tcp_first does.
+func vpsLineRank(p map[string]any, tcpFirst bool) int {
 	rawType, ok := p["type"].(string)
 	if !ok {
 		return -1
@@ -75,9 +96,15 @@ func vpsLineRank(p map[string]any) int {
 	}
 	switch t {
 	case "hysteria2", "hysteria", "tuic":
+		if tcpFirst {
+			return 1
+		}
 		return 0
 	case "vless":
-		if opts, ok := p["reality-opts"].(map[string]any); ok && opts != nil {
+		if vpsIsReality(p) {
+			if tcpFirst {
+				return 0
+			}
 			return 1
 		}
 		return 2
@@ -89,6 +116,60 @@ func vpsLineRank(p map[string]any) int {
 		return -1
 	}
 	return 3
+}
+
+// vpsSubscriptionTCPFirst reads the order the subscription itself chose: the
+// first fallback group that holds a Reality and a QUIC line of one server
+// decides, by which of the two it lists first. A vps2vpn panel with tcp_first
+// on lists Reality first; without such a group the QUIC lines lead.
+func vpsSubscriptionTCPFirst(raw *config.RawConfig) bool {
+	byName := make(map[string]map[string]any, len(raw.Proxy))
+	for _, p := range raw.Proxy {
+		if name := vpsName(p); name != "" {
+			byName[name] = p
+		}
+	}
+	for _, g := range raw.ProxyGroup {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(g["type"]))) != "fallback" {
+			continue
+		}
+		var names []string
+		switch values := g["proxies"].(type) {
+		case []any:
+			for _, v := range values {
+				if name, ok := v.(string); ok {
+					names = append(names, name)
+				}
+			}
+		case []string:
+			names = values
+		}
+		reality := map[string]bool{}
+		udp := map[string]bool{}
+		for _, name := range names {
+			p, ok := byName[name]
+			if !ok {
+				continue
+			}
+			server := vpsProxyServer(p)
+			if server == "" {
+				continue
+			}
+			switch {
+			case vpsIsReality(p):
+				if udp[server] {
+					return false
+				}
+				reality[server] = true
+			case vpsIsUDPLine(p):
+				if reality[server] {
+					return true
+				}
+				udp[server] = true
+			}
+		}
+	}
+	return false
 }
 
 func vpsName(p map[string]any) string {
@@ -371,13 +452,14 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	}
 	var lines []line
 	servers := map[string]int{}
+	tcpFirst := vpsSubscriptionTCPFirst(raw)
 	for i, p := range raw.Proxy {
-		rank := vpsLineRank(p)
+		rank := vpsLineRank(p, tcpFirst)
 		name := vpsName(p)
 		if rank < 0 || name == "" {
 			continue
 		}
-		if rank == 1 {
+		if vpsIsReality(p) {
 			if fp, _ := p["client-fingerprint"].(string); fp == "" {
 				p["client-fingerprint"] = "chrome"
 				result.fingerprinted = append(result.fingerprinted, i)
