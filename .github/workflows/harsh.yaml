@@ -50,10 +50,10 @@ jobs:
             @('chen08209/FlClash', 'v0.9.4', 'FlClash-0.9.4-windows-amd64-portable.zip', 'flclash.zip', '8fab8ab4edead33a6c6d4f249fd90a287acbf66a99cc5bd207fcfc034f3b1224', 'dirty'),
             @('2dust/v2rayN', '7.25.6', 'v2rayN-windows-64.zip', 'v2rayn.zip', '9b94718c2a214a246b04dec84b9a27f1f0ced8489c2dd25eb80a0fbb806bd13f', 'dirty'),
             @('hiddify/hiddify-app', 'v5.9.15', 'Hiddify-Windows-Portable-x64.zip', 'hiddify.zip', '3b1b15ba141dfc6103a6f0b11c11c845bcb3aad6fb0644376433006a31c9bcef', 'dirty'),
-            @('MatsuriDayo/nekoray', '4.0.1', 'nekoray-4.0.1-2024-12-12-windows64.zip', 'nekoray.zip', '', 'dirty'),
-            @('shadowsocks/shadowsocks-windows', '4.4.1.0', 'Shadowsocks-4.4.1.0.zip', 'shadowsocks.zip', '', 'dirty'),
+            @('MatsuriDayo/nekoray', '4.0.1', 'nekoray-4.0.1-2024-12-12-windows64.zip', 'nekoray.zip', 'a492224792c38bd1a3b7a5438b1431c5cb4260f55e9a121db3b2ce1603f7664a', 'dirty'),
+            @('shadowsocks/shadowsocks-windows', '4.4.1.0', 'Shadowsocks-4.4.1.0.zip', 'shadowsocks.zip', '62b74a688d22bfdf20f673a351580029d7b9de67c6facc9a5613b22b3f798968', 'dirty'),
             @('SagerNet/sing-box', 'v1.14.4', 'sing-box-1.14.4-windows-amd64.zip', 'sing-box.zip', '99185d75d314a07dbba4a130c8ad986cbeb629a07927975636b341ca61f991df', 'dirty protocols'),
-            @('jagt/clumsy', '0.3', 'clumsy-0.3-win64-a.zip', 'clumsy.zip', '', 'chaos')
+            @('jagt/clumsy', '0.3', 'clumsy-0.3-win64-a.zip', 'clumsy.zip', 'f50dc734148815831c67d9fc2c246c22d421c53dcea51e26eee905b0b2806c27', 'chaos')
           )
           foreach ($t in $all) {
             if (-not ($t[5] -split ' ' -contains $env:SCENARIO)) { continue }

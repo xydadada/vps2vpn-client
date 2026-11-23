@@ -111,10 +111,10 @@ $script:dir = Join-Path $env:ProgramFiles 'vps2vpn'
 $script:exe = Join-Path $script:dir 'vps2vpn.exe'
 $script:appHome = Join-Path $env:APPDATA 'vps2vpn\vps2vpn'
 $script:prefs = Join-Path $script:appHome 'shared_preferences.json'
-$script:out = $null
+$script:appOut = $null
 
 function Install-App($setup, $out) {
-  $script:out = $out
+  $script:appOut = $out
   $p = Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "`"/LOG=$(Join-Path $out 'install.log')`"" -Wait -PassThru
   Check ($p.ExitCode -eq 0) "vps2vpn installer exit code 0 (got $($p.ExitCode))"
 }
@@ -170,8 +170,8 @@ function Test-AppAlive($what) {
   Check ($app -and $app.Responding) "$what`: vps2vpn.exe is running and its window answers"
 }
 function Copy-AppLogs {
-  if (-not $script:out) { return }
-  $dest = Join-Path $script:out 'app'
+  if (-not $script:appOut) { return }
+  $dest = Join-Path $script:appOut 'app'
   New-Item -ItemType Directory -Force $dest | Out-Null
   foreach ($d in @($script:appHome, (Join-Path $env:LOCALAPPDATA 'vps2vpn'))) {
     Get-ChildItem $d -Recurse -File -Include '*.log', '*.txt', 'config.yaml' -ErrorAction SilentlyContinue |
