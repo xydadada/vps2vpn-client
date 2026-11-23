@@ -1,0 +1,99 @@
+name: vps2vpn harsh Windows checks
+
+# A release on Windows runners made hostile on purpose (.github/scripts/harsh/).
+# Third-party apps: official releases at pinned versions and SHA256.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag that carries the setup .exe
+        required: true
+        default: v1.0.26
+      scenarios:
+        description: Scenarios, as a JSON list
+        default: '["proxy-restore", "dirty", "chaos", "users", "soak", "protocols"]'
+
+permissions:
+  contents: read
+
+jobs:
+  harsh:
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJSON(inputs.scenarios) }}
+        os: [windows-2025]
+        include:
+          - {scenario: proxy-restore, os: windows-2022}
+          - {scenario: dirty, os: windows-2022}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout the test scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Download vps2vpn and the tools
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D app -- $env:TAG
+          New-Item -ItemType Directory -Force tools | Out-Null
+          # repo, tag, asset, saved as, sha256 ('' = not published upstream: print it to pin)
+          $all = @(
+            @('clash-verge-rev/clash-verge-rev', 'v2.5.10', 'Clash.Verge_2.5.10_x64-setup.exe', 'verge-setup.exe', '929da9303b643b80ce309ab29f618e37a5562f515d1fa55ebf5b86c822504450', 'dirty'),
+            @('chen08209/FlClash', 'v0.9.4', 'FlClash-0.9.4-windows-amd64-portable.zip', 'flclash.zip', '8fab8ab4edead33a6c6d4f249fd90a287acbf66a99cc5bd207fcfc034f3b1224', 'dirty'),
+            @('2dust/v2rayN', '7.25.6', 'v2rayN-windows-64.zip', 'v2rayn.zip', '9b94718c2a214a246b04dec84b9a27f1f0ced8489c2dd25eb80a0fbb806bd13f', 'dirty'),
+            @('hiddify/hiddify-app', 'v5.9.15', 'Hiddify-Windows-Portable-x64.zip', 'hiddify.zip', '3b1b15ba141dfc6103a6f0b11c11c845bcb3aad6fb0644376433006a31c9bcef', 'dirty'),
+            @('MatsuriDayo/nekoray', '4.0.1', 'nekoray-4.0.1-2024-12-12-windows64.zip', 'nekoray.zip', '', 'dirty'),
+            @('shadowsocks/shadowsocks-windows', '4.4.1.0', 'Shadowsocks-4.4.1.0.zip', 'shadowsocks.zip', '', 'dirty'),
+            @('SagerNet/sing-box', 'v1.14.4', 'sing-box-1.14.4-windows-amd64.zip', 'sing-box.zip', '99185d75d314a07dbba4a130c8ad986cbeb629a07927975636b341ca61f991df', 'dirty protocols'),
+            @('jagt/clumsy', '0.3', 'clumsy-0.3-win64-a.zip', 'clumsy.zip', '', 'chaos')
+          )
+          foreach ($t in $all) {
+            if (-not ($t[5] -split ' ' -contains $env:SCENARIO)) { continue }
+            $dl = Join-Path tools "dl-$($t[3])"
+            gh release download -R $t[0] -p $t[2] -D $dl -- $t[1]
+            $file = Join-Path $dl $t[2]
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            if ($t[4] -and $hash -ne $t[4]) { throw "$($t[2]): sha256 $hash, pinned $($t[4])" }
+            if (-not $t[4]) { "UNPINNED $($t[2]) sha256 $hash" } else { "verified $($t[2])" }
+            Move-Item $file (Join-Path tools $t[3])
+          }
+          if ($env:SCENARIO -eq 'chaos') { Expand-Archive tools/clumsy.zip tools/clumsy -Force }
+          Get-ChildItem app, tools -File | ForEach-Object { "$($_.Name) $($_.Length)" }
+
+      - name: Install WireGuard and OpenVPN
+        if: matrix.scenario == 'dirty'
+        shell: pwsh
+        run: |
+          choco install wireguard --version 0.5.3 -y --no-progress
+          choco install openvpn -y --no-progress
+          choco list --local-only wireguard openvpn
+
+      - name: Run ${{ matrix.scenario }}
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem app -Filter '*-setup.exe' | Select-Object -First 1).FullName
+          $script = "./.github/scripts/harsh/$env:SCENARIO.ps1"
+          switch ($env:SCENARIO) {
+            { $_ -in 'dirty', 'protocols' } { & $script -Setup $setup -Tools tools -Out out }
+            'chaos' { & $script -Setup $setup -Tools tools -Out out }
+            default { & $script -Setup $setup -Out out }
+          }
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+
+      - name: Upload results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: harsh-${{ matrix.scenario }}-${{ matrix.os }}
+          path: out
+          if-no-files-found: ignore

@@ -1,0 +1,121 @@
+# vps2vpn for a standard (non-admin) account whose name and profile path hold
+# Chinese and a space, running next to the admin who installed it; and that
+# account must not drive the admin's Helper or open the admin's Core pipe.
+param([Parameter(Mandatory)][string]$Setup, [string]$Out = 'harsh')
+. (Join-Path $PSScriptRoot 'lib.ps1')
+New-Item -ItemType Directory -Force $Out | Out-Null
+$Out = (Resolve-Path $Out).Path
+
+$userName = '测试 用户'
+$shared = 'C:\Users\Public\harsh'
+New-Item -ItemType Directory -Force $shared | Out-Null
+& icacls $shared /grant '*S-1-5-32-545:(OI)(CI)M' | Out-Null
+
+function Invoke-AsUser($credential, $script, $name, $seconds = 120) {
+  $file = Join-Path $shared "$name.ps1"
+  $result = Join-Path $shared "$name.json"
+  Remove-Item $result -ErrorAction SilentlyContinue
+  Set-Content $file $script -Encoding utf8
+  $p = Start-Process pwsh -Credential $credential -LoadUserProfile -WorkingDirectory $shared -WindowStyle Hidden -PassThru `
+    -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $file, $result
+  if (-not $p.WaitForExit($seconds * 1000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+  if (Test-Path $result) { Get-Content $result -Raw | ConvertFrom-Json } else { $null }
+}
+
+try {
+  Start-Upstream $Out
+  Install-App $Setup $Out
+
+  # The admin's own app with TUN: that registers the Helper for the admin.
+  Check (Import-FirstRun) 'admin: subscription imported on first run'
+  Set-AppPrefs @{ autoRun = $true; takeover = $false; acceptedDisclaimerVersion = 1 }
+  Set-Mode $true $false
+  Start-Process $script:exe | Out-Null
+  Check (Wait-Until 120 { (Get-Service vps2vpnHelperService -ErrorAction SilentlyContinue).Status -eq 'Running' }) 'admin: the Helper service runs'
+  $adminPort = Get-AppPort
+  Check (Wait-Until 60 { Get-ListenerName $adminPort }) "admin: the Core listens on $adminPort"
+  $pipes = @([IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { $_ -match 'FlClashCore_' })
+  "admin Core pipes: $($pipes.Count)"
+
+  # The standard account.
+  $chars = [char[]]'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  $password = (-join (1..20 | ForEach-Object { $chars | Get-Random })) + '!9a'
+  $secure = ConvertTo-SecureString $password -AsPlainText -Force
+  New-LocalUser -Name $userName -Password $secure -PasswordNeverExpires -AccountNeverExpires | Out-Null
+  Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $userName
+  $credential = [pscredential]::new("$env:COMPUTERNAME\$userName", $secure)
+  Check (-not (Get-LocalGroupMember -SID 'S-1-5-32-544' | Where-Object Name -match [regex]::Escape($userName))) 'the second account is not an administrator'
+
+  $probe = @"
+param(`$result)
+`$r = [ordered]@{ user = [Environment]::UserName; profile = `$env:USERPROFILE }
+try {
+  `$c = [System.Net.Sockets.TcpClient]::new()
+  `$c.Connect('127.0.0.1', 47990)
+  `$s = `$c.GetStream(); `$s.ReadTimeout = 5000
+  `$req = [Text.Encoding]::ASCII.GetBytes("GET /ping HTTP/1.1``r``nHost: 127.0.0.1``r``nConnection: close``r``n``r``n")
+  `$s.Write(`$req, 0, `$req.Length)
+  `$buf = New-Object byte[] 4096; `$n = `$s.Read(`$buf, 0, 4096)
+  `$r.helper = if (`$n -gt 0) { [Text.Encoding]::ASCII.GetString(`$buf, 0, `$n).Split("``n")[0].Trim() } else { 'closed' }
+} catch { `$r.helper = 'refused: ' + `$_.Exception.InnerException.Message + `$_.Exception.Message }
+`$r.pipes = @()
+foreach (`$p in [IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { `$_ -match 'FlClashCore_' }) {
+  try {
+    `$client = [IO.Pipes.NamedPipeClientStream]::new('.', (`$p -replace '^\\\\\.\\pipe\\', ''), [IO.Pipes.PipeDirection]::InOut)
+    `$client.Connect(3000); `$client.Dispose(); `$r.pipes += 'opened'
+  } catch { `$r.pipes += `$_.Exception.GetType().Name }
+}
+`$r | ConvertTo-Json | Set-Content `$result -Encoding utf8
+"@
+  $seen = Invoke-AsUser $credential $probe 'probe' 60
+  Check ($seen -and $seen.user -eq $userName) "the second account runs as $userName (profile $($seen.profile))"
+  if ($seen) {
+    "helper from the second account: $($seen.helper)"
+    Check ($seen.helper -notmatch ' 200') "the second account cannot use the admin's Helper ($($seen.helper))"
+    "pipes from the second account: $($seen.pipes -join ', ')"
+    Check (@($seen.pipes | Where-Object { $_ -eq 'opened' }).Count -eq 0) "the second account cannot open the admin's Core pipe ($($seen.pipes.Count) tried)"
+  }
+
+  # The second account runs vps2vpn itself, in proxy mode, beside the admin.
+  $run = @"
+param(`$result)
+`$env:FLCLASH_ACCEPT_DISCLAIMER = '1'
+`$env:VPS2VPN_IMPORT_URL = 'http://127.0.0.1:$($script:subPort)/sub.yaml'
+`$app = Start-Process '$($script:exe)' -PassThru
+Start-Sleep 60
+`$home_ = Join-Path `$env:APPDATA 'vps2vpn\vps2vpn'
+`$r = [ordered]@{
+  running = -not `$app.HasExited
+  home = `$home_
+  profiles = @(Get-ChildItem (Join-Path `$home_ 'profiles') -File -ErrorAction SilentlyContinue).Count
+  prefs = Test-Path (Join-Path `$home_ 'shared_preferences.json')
+}
+`$r | ConvertTo-Json | Set-Content `$result -Encoding utf8
+"@
+  $app = Invoke-AsUser $credential $run 'run' 120
+  Check ($app -and $app.running) 'second account: vps2vpn starts and keeps running'
+  if ($app) {
+    "second account home: $($app.home)"
+    Check ($app.home -match [regex]::Escape($userName)) 'second account: its data lives under the path with Chinese and a space'
+    Check ($app.profiles -gt 0) 'second account: the subscription imported'
+  }
+  $theirs = @(Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match [regex]::Escape($userName))
+  Check ($theirs.Count -gt 0) 'second account: its own Core runs under its own account'
+  if ($theirs) {
+    $ports = @(Get-NetTCPConnection -State Listen -OwningProcess $theirs[0].Id -ErrorAction SilentlyContinue | Where-Object LocalAddress -eq '127.0.0.1' | ForEach-Object LocalPort | Sort-Object -Unique)
+    "second account Core listens on: $($ports -join ', ')"
+    $mixed = $ports | Where-Object { $_ -ne $adminPort } | Select-Object -First 1
+    Check ($mixed -and $mixed -ne $adminPort) "second account: a port of its own ($mixed, admin on $adminPort)"
+    if ($mixed) { Test-Through $mixed 'second account' }
+  }
+  Check (Get-ListenerName $adminPort) "admin: still listening on $adminPort with the second account running"
+  Test-AppAlive 'admin'
+
+  Get-Process vps2vpn, vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Uninstall-App
+  Test-NothingLeft 'after uninstall'
+} finally {
+  Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match [regex]::Escape($userName) | Stop-Process -Force -ErrorAction SilentlyContinue
+  Remove-LocalUser -Name $userName -ErrorAction SilentlyContinue
+  Finish
+}
