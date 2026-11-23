@@ -58,17 +58,6 @@ for node in re.findall(r"<node [^>]*>", sys.stdin.read()):
   [ -n "$at" ] || return 1
   adb shell input tap $at
 }
-tap_field() {
-  local at
-  at=$(dump | python3 -I -c 'import re, sys
-for node in re.findall(r"<node [^>]*>", sys.stdin.read()):
-    if "android.widget.EditText" in node:
-        x1, y1, x2, y2 = map(int, re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", node).groups())
-        print((x1 + x2) // 2, (y1 + y2) // 2)
-        break')
-  [ -n "$at" ] || return 1
-  adb shell input tap $at
-}
 wait_tap() {
   for _ in $(seq 1 "${2:-15}"); do
     tap "$1" && return 0
@@ -96,15 +85,11 @@ adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&
 sleep 15
 shot first-start
 echo "screen: $(screen)"
-# The disclaimer's Agree asks for its statement typed out before Confirm.
-statement='The Software itself does not provide any proxy server, node, subscription, or network access service, and has no partnership, agency, or guarantee relationship with any provider of such services.'
+# The disclaimer's Agree asks for its statement ticked before Confirm.
 if wait_tap '^(agree|同意)$' 5; then
   sleep 3
-  tap_field || echo 'no text field for the statement'
+  wait_tap 'I have read and understand this statement|我已阅读并理解此声明' 5 || echo 'no statement to tick'
   sleep 1
-  adb shell input text "'${statement// /%s}'"
-  sleep 2
-  echo "screen: $(screen)"
   wait_tap '^(confirm|确认|确定)$' 5 || echo 'no confirm button after the statement'
   sleep 5
 fi
