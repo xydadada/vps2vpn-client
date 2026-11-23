@@ -74,7 +74,7 @@ jobs:
         run: |
           choco install wireguard --version 0.5.3 -y --no-progress
           choco install openvpn -y --no-progress
-          choco list --local-only wireguard openvpn
+          choco list wireguard openvpn
 
       - name: Run ${{ matrix.scenario }}
         shell: pwsh

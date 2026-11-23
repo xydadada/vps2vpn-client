@@ -11,6 +11,10 @@ $shared = 'C:\Users\Public\harsh'
 New-Item -ItemType Directory -Force $shared | Out-Null
 & icacls $shared /grant '*S-1-5-32-545:(OI)(CI)M' | Out-Null
 
+function Get-LocalGroupName($sid) {
+  ([Security.Principal.SecurityIdentifier]$sid).Translate([Security.Principal.NTAccount]).Value.Split('')[-1]
+}
+
 function Invoke-AsUser($credential, $script, $name, $seconds = 120) {
   $file = Join-Path $shared "$name.ps1"
   $result = Join-Path $shared "$name.json"
@@ -41,10 +45,19 @@ try {
   $chars = [char[]]'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
   $password = (-join (1..20 | ForEach-Object { $chars | Get-Random })) + '!9a'
   $secure = ConvertTo-SecureString $password -AsPlainText -Force
-  New-LocalUser -Name $userName -Password $secure -PasswordNeverExpires -AccountNeverExpires | Out-Null
-  Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $userName
+  # ADSI, not New-LocalUser: in pwsh 7 the LocalAccounts cmdlets go through
+  # Windows PowerShell compatibility, which split this name at its space.
+  $computer = [ADSI]"WinNT://$env:COMPUTERNAME,computer"
+  $account = $computer.Create('User', $userName)
+  $account.SetPassword($password)
+  $account.Put('UserFlags', 0x10000)  # password never expires
+  $account.SetInfo()
+  $usersGroup = Get-LocalGroupName 'S-1-5-32-545'
+  ([ADSI]"WinNT://$env:COMPUTERNAME/$usersGroup,group").Add("WinNT://$env:COMPUTERNAME/$userName,user")
   $credential = [pscredential]::new("$env:COMPUTERNAME\$userName", $secure)
-  Check (-not (Get-LocalGroupMember -SID 'S-1-5-32-544' | Where-Object Name -match [regex]::Escape($userName))) 'the second account is not an administrator'
+  $admins = ([ADSI]"WinNT://$env:COMPUTERNAME/$(Get-LocalGroupName 'S-1-5-32-544'),group").psbase.Invoke('Members') |
+    ForEach-Object { $_.GetType().InvokeMember('Name', 'GetProperty', $null, $_, $null) }
+  Check ($admins -notcontains $userName) 'the second account is not an administrator'
 
   $probe = @"
 param(`$result)
@@ -116,6 +129,6 @@ Start-Sleep 60
   Test-NothingLeft 'after uninstall'
 } finally {
   Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match [regex]::Escape($userName) | Stop-Process -Force -ErrorAction SilentlyContinue
-  Remove-LocalUser -Name $userName -ErrorAction SilentlyContinue
+  try { ([ADSI]"WinNT://$env:COMPUTERNAME,computer").Delete('User', $userName) } catch {}
   Finish
 }
