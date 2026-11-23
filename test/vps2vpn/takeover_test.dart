@@ -89,6 +89,49 @@ void main() {
     });
   });
 
+  group('another VPN', () {
+    const routes =
+        'Publish  Type      Met  Prefix                    Idx  Gateway/Interface Name\r\n'
+        '-------  --------  ---  ------------------------  ---  ------------------------\r\n'
+        'No       Manual    0    0.0.0.0/0                   5  192.0.2.1\r\n'
+        'No       Manual    0    0.0.0.0/1                  41  198.51.100.2\r\n'
+        'No       Manual    0    128.0.0.0/1                41  198.51.100.2\r\n'
+        'No       Manual    0    0.0.0.0/0                  52  wgci\r\n'
+        'No       System    256  192.0.2.0/24                5  Ethernet\r\n'
+        'No       Manual    0    0.0.0.0/1                  60  vps2vpn\r\n';
+    const interfaces =
+        'Idx     Met         MTU          State                Name\r\n'
+        '---  ----------  ----------  ------------  ---------------------------\r\n'
+        '  1          75  4294967295  connected     Loopback Pseudo-Interface 1\r\n'
+        '  5          25        1500  connected     Ethernet\r\n'
+        ' 41           0        9000  connected     other tun\r\n'
+        ' 52           5        1420  connected     wgci\r\n'
+        ' 60           0        9000  connected     vps2vpn\r\n';
+
+    test('reads the split and gateway-less default routes, not the card', () {
+      expect(parseVpnRouteIndexes(routes), {41, 52, 60});
+      expect(parseInterfaceNames(interfaces)[41], 'other tun');
+    });
+
+    test('names the other VPNs and never our own adapter', () async {
+      Future<ProcessResult> run(String exe, List<String> args) async =>
+          _ok(args.last == 'route' ? routes : interfaces);
+      expect(await scanOtherVpns(ownDevice: 'vps2vpn', run: run), [
+        'other tun',
+        'wgci',
+      ]);
+    });
+
+    test('a plain network card is no other VPN', () async {
+      Future<ProcessResult> run(String exe, List<String> args) async => _ok(
+        args.last == 'route'
+            ? 'No       Manual    0    0.0.0.0/0                   5  192.0.2.1\r\n'
+            : interfaces,
+      );
+      expect(await scanOtherVpns(ownDevice: 'vps2vpn', run: run), isEmpty);
+    });
+  });
+
   test('ignores lines that are not process rows', () {
     expect(parseRivals('INFO: No tasks are running\r\n'), isEmpty);
     expect(parseRivals(''), isEmpty);

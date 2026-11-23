@@ -44,6 +44,7 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
         portTo: last.portTo,
         clearedProxy: last.clearedProxy,
         dryRun: safeModeBuild,
+        otherVpns: last.otherVpns,
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -117,6 +118,17 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                 : takeover
                 ? '; Connect will close it'
                 : ' and will fight over your network settings'}',
+          );
+        }
+        if (r.otherVpns.isNotEmpty) {
+          warn = true;
+          zh.add(
+            '另一个 VPN（${r.otherVpns.join('、')}）也开着，两个 VPN 同时开可能上不了网，'
+            '请关掉其中一个',
+          );
+          en.add(
+            'Another VPN (${r.otherVpns.join(', ')}) is on too; with two VPNs '
+            'on, the internet may stop working. Turn one of them off',
           );
         }
         if (r.portTo != null) {

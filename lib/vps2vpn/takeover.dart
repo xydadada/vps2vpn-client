@@ -273,6 +273,64 @@ Future<int> pickPort(
   return preferred;
 }
 
+/// Interface indexes another VPN uses to take all IPv4 traffic, from
+/// `netsh interface ipv4 show route`: the split default routes (0.0.0.0/1,
+/// 128.0.0.0/1) such tunnels add, or a default route with no gateway (an
+/// on-link tunnel). A normal network card's default route has a gateway.
+@visibleForTesting
+Set<int> parseVpnRouteIndexes(String routes) {
+  final row = RegExp(
+    r'^\s*\S+\s+\S+\s+\d+\s+(0\.0\.0\.0/[01]|128\.0\.0\.0/1)\s+(\d+)\s+(.+?)\s*$',
+  );
+  final gateway = RegExp(r'^\d+\.\d+\.\d+\.\d+$');
+  final found = <int>{};
+  for (final line in routes.split(RegExp(r'\r?\n'))) {
+    final m = row.firstMatch(line);
+    if (m == null) continue;
+    if (m[1] == '0.0.0.0/0' && gateway.hasMatch(m[3]!)) continue;
+    found.add(int.parse(m[2]!));
+  }
+  return found;
+}
+
+/// Index → name, from `netsh interface ipv4 show interfaces`.
+@visibleForTesting
+Map<int, String> parseInterfaceNames(String interfaces) {
+  final row = RegExp(r'^\s*(\d+)\s+\d+\s+\d+\s+\S+\s+(.+?)\s*$');
+  return {
+    for (final line in interfaces.split(RegExp(r'\r?\n')))
+      if (row.firstMatch(line) case final m?) int.parse(m[1]!): m[2]!,
+  };
+}
+
+/// Other VPN adapters holding the whole internet now (another app's TUN,
+/// WireGuard, OpenVPN, ...), by name; never [ownDevice]. Our own TUN next to
+/// one of them fights it over every route and DNS, so the overview asks the
+/// user to turn one off. Empty off Windows or when netsh fails.
+Future<List<String>> scanOtherVpns({
+  required String ownDevice,
+  VpsRun run = _run,
+}) async {
+  if (!Platform.isWindows && identical(run, _run)) return const [];
+  try {
+    final routes = await run('netsh', ['interface', 'ipv4', 'show', 'route']);
+    if (routes.exitCode != 0) return const [];
+    final indexes = parseVpnRouteIndexes('${routes.stdout}');
+    if (indexes.isEmpty) return const [];
+    final r = await run('netsh', ['interface', 'ipv4', 'show', 'interfaces']);
+    if (r.exitCode != 0) return const [];
+    final names = parseInterfaceNames('${r.stdout}');
+    final own = ownDevice.toLowerCase();
+    return {
+      for (final i in indexes)
+        if (names[i] case final name?)
+          if (name.toLowerCase() != own) name,
+    }.toList()..sort();
+  } catch (_) {
+    return const [];
+  }
+}
+
 /// What the last takeover found and did, for the overview notice.
 class VpsTakeoverReport {
   const VpsTakeoverReport({
@@ -285,6 +343,7 @@ class VpsTakeoverReport {
     this.dryRun = false,
     this.respawned = const [],
     this.contender,
+    this.otherVpns = const [],
   });
 
   /// Other proxy apps seen and left alone (takeover off, or safe mode).
@@ -309,6 +368,9 @@ class VpsTakeoverReport {
 
   final String? contender;
 
+  /// Another VPN's adapters seen when connecting in TUN mode.
+  final List<String> otherVpns;
+
   bool get isEmpty =>
       running.isEmpty &&
       closed.isEmpty &&
@@ -316,7 +378,8 @@ class VpsTakeoverReport {
       portTo == null &&
       !clearedProxy &&
       respawned.isEmpty &&
-      contender == null;
+      contender == null &&
+      otherVpns.isEmpty;
 
   VpsTakeoverReport withGuardFindings({
     List<String>? respawned,
@@ -332,6 +395,7 @@ class VpsTakeoverReport {
     dryRun: dryRun,
     respawned: respawned ?? this.respawned,
     contender: contender ?? this.contender,
+    otherVpns: otherVpns,
   );
 }
 
@@ -420,6 +484,10 @@ Future<void> vpsBeforeConnect(Ref ref) async {
       cleared = await clearStaleSystemProxy();
     }
   }
+  final tun = ref.read(patchClashConfigProvider).tun;
+  final otherVpns = tun.enable
+      ? await scanOtherVpns(ownDevice: tun.device)
+      : const <String>[];
   if (!ref.mounted ||
       revision != _takeoverRevision ||
       !ref.read(isStartProvider)) {
@@ -433,6 +501,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
     portTo: to,
     clearedProxy: cleared,
     dryRun: safeModeBuild,
+    otherVpns: otherVpns,
   );
   _startGuard(ref);
 }
@@ -464,6 +533,7 @@ Future<void> vpsScanOnly() async {
     portTo: last.portTo,
     clearedProxy: last.clearedProxy,
     dryRun: safeModeBuild,
+    otherVpns: last.otherVpns,
   );
 }
 
