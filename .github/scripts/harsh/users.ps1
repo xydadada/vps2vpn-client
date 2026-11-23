@@ -24,10 +24,11 @@ function Invoke-AsUser($credential, $script, $name, $seconds = 120) {
   # from its loaded profile before anything else runs.
   $lines = $script -split "`n", 2
   $prelude = @'
-foreach ($pair in @(('APPDATA', 'ApplicationData'), ('LOCALAPPDATA', 'LocalApplicationData'), ('USERPROFILE', 'UserProfile'))) {
-  $path = [Environment]::GetFolderPath($pair[1])
-  if ($path) { Set-Item "Env:$($pair[0])" $path }
-}
+$env:USERPROFILE = [Environment]::GetFolderPath('UserProfile')
+$env:HOMEDRIVE = Split-Path $env:USERPROFILE -Qualifier
+$env:HOMEPATH = $env:USERPROFILE.Substring($env:HOMEDRIVE.Length)
+$env:APPDATA = Join-Path $env:USERPROFILE 'AppData\Roaming'
+$env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'AppData\Local'
 $env:TEMP = $env:TMP = Join-Path $env:LOCALAPPDATA 'Temp'
 New-Item -ItemType Directory -Force $env:TEMP | Out-Null
 '@
