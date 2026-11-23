@@ -67,9 +67,17 @@ func TestSmartBackupServerProtocolsStayTogether(t *testing.T) {
 		{"name": "C-fast", "type": "hysteria2", "server": "c.invalid"},
 	}
 	vps2vpnEnhance(raw, 0)
+	// The AI line keeps every line in server order; the smart line lists one
+	// member per server and B's two protocols stay together in B's group.
 	want := []string{"A-reality", "B-fast", "B-reality", "C-fast"}
-	if got := vpsGroup(raw, vpsSmartGroup)["proxies"]; !reflect.DeepEqual(got, want) {
+	if got := vpsGroup(raw, vpsAIGroup)["proxies"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("server order = %v, want %v", got, want)
+	}
+	if got := vpsGroup(raw, vpsSmartGroup)["proxies"]; !reflect.DeepEqual(got, []string{"A-reality", "B", "C-fast"}) {
+		t.Fatalf("smart members = %v", got)
+	}
+	if got := vpsGroup(raw, "B")["proxies"]; !reflect.DeepEqual(got, []string{"B-fast", "B-reality"}) {
+		t.Fatalf("B lines = %v", got)
 	}
 }
 

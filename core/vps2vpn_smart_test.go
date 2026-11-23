@@ -53,15 +53,14 @@ func TestVps2vpnEnhanceAddsSmartAndAI(t *testing.T) {
 	if smart == nil {
 		t.Fatal("no smart group")
 	}
-	got := smart["proxies"].([]string)
-	// The primary server (the subscription's first line, SG) keeps every
-	// protocol ahead of any other server, fast first: switching protocol
-	// never changes the exit IP. The US server is the last resort.
-	want := []string{"SG-HY2", "SG-REALITY", "US-HY2"}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("smart order %v, want %v", got, want)
-		}
+	// One member per server, the fastest wins: SG's protocols back each
+	// other up in one hidden group (fast first), so switching protocol never
+	// changes the exit IP. The US server has one line, listed as it is.
+	if got := smart["proxies"].([]string); !slices.Equal(got, []string{"SG", "US-HY2"}) {
+		t.Fatalf("smart members %v", got)
+	}
+	if got := vpsGroup(raw, "SG")["proxies"].([]string); !slices.Equal(got, []string{"SG-HY2", "SG-REALITY"}) {
+		t.Fatalf("SG lines %v", got)
 	}
 	if first := vpsGroup(raw, "Proxy")["proxies"].([]any)[0]; first != vpsSmartGroup {
 		t.Fatalf("selector first = %v", first)
@@ -212,11 +211,11 @@ func TestVps2vpnEnhanceFollowsTheSubscriptionsTCPFirst(t *testing.T) {
 				})
 			}
 			vps2vpnEnhance(raw, 0)
-			for _, group := range []string{vpsSmartGroup, vpsAIGroup} {
-				got := vpsGroup(raw, group)["proxies"].([]string)
-				if !slices.Equal(got, tc.want) {
-					t.Fatalf("%s = %v, want %v", group, got, tc.want)
-				}
+			if got := vpsGroup(raw, vpsAIGroup)["proxies"].([]string); !slices.Equal(got, tc.want) {
+				t.Fatalf("AI = %v, want %v", got, tc.want)
+			}
+			if got := vpsGroup(raw, "SG")["proxies"].([]string); !slices.Equal(got, tc.want[:2]) {
+				t.Fatalf("SG = %v, want %v", got, tc.want[:2])
 			}
 			// Only the Reality line gets a fingerprint, whichever order won.
 			if fp := raw.Proxy[0]["client-fingerprint"]; fp != "chrome" {
@@ -228,5 +227,105 @@ func TestVps2vpnEnhanceFollowsTheSubscriptionsTCPFirst(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestVpsLineStem(t *testing.T) {
+	for name, want := range map[string]string{
+		"🇺🇸 美国1 · 1.0x · Reality":      "🇺🇸 美国1 · 1.0x",
+		"🇺🇸 美国1 · 1.0x · TUIC-v5-IPv6": "🇺🇸 美国1 · 1.0x",
+		"🇺🇸 美国1 · 1.0x · HY2-IPv6":     "🇺🇸 美国1 · 1.0x",
+		"SG | Hysteria2":               "SG",
+		"Tokyo - VLESS - IPv6":         "Tokyo",
+		"US-HY2":                       "US-HY2",
+		"🇸🇬 新加坡 · 2.0x":                "🇸🇬 新加坡 · 2.0x",
+	} {
+		if got := vpsLineStem(name); got != want {
+			t.Errorf("stem(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func vpsReality(name, server string) map[string]any {
+	return map[string]any{"name": name, "type": "vless", "server": server, "port": 443,
+		"uuid": "11111111-2222-3333-4444-555555555555", "tls": true, "servername": "www.example.com",
+		"reality-opts": map[string]any{"public-key": "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"}}
+}
+
+func vpsHy2(name, server string) map[string]any {
+	return map[string]any{"name": name, "type": "hysteria2", "server": server, "port": 443, "password": "p"}
+}
+
+// Two servers: the smart line picks the faster server, with a tolerance so
+// it stays put on small changes, and each server's protocols (its IPv6 lines
+// too) back each other up inside one hidden group, so the exit IP only
+// changes when the whole server goes down or another is clearly faster.
+func TestVps2vpnSmartPicksTheFastestServer(t *testing.T) {
+	vpsOn(t)
+	raw := config.DefaultRawConfig()
+	raw.Proxy = []map[string]any{
+		vpsReality("US · Reality", "192.0.2.1"),
+		vpsHy2("US · Hysteria2", "192.0.2.1"),
+		vpsHy2("US · HY2-IPv6", "2001:db8::1"),
+		vpsReality("SG · Reality", "192.0.2.2"),
+		vpsHy2("SG · Hysteria2", "192.0.2.2"),
+	}
+	raw.ProxyGroup = []map[string]any{
+		{"name": "Proxy", "type": "select", "proxies": []any{"US · Reality", "SG · Reality"}},
+	}
+	raw.Rule = []string{"MATCH,Proxy"}
+	vps2vpnEnhance(raw, 0)
+
+	smart := vpsGroup(raw, vpsSmartGroup)
+	if smart["type"] != "url-test" || smart["tolerance"] != vpsSmartTolerance {
+		t.Fatalf("smart = %v, want a url-test with a tolerance", smart)
+	}
+	if got := smart["proxies"].([]string); !slices.Equal(got, []string{"US", "SG"}) {
+		t.Fatalf("smart members = %v, want one per server", got)
+	}
+	us := vpsGroup(raw, "US")
+	if us["type"] != "fallback" || us["hidden"] != true {
+		t.Fatalf("US group = %v, want a hidden fallback", us)
+	}
+	if got := us["proxies"].([]string); !slices.Equal(got, []string{"US · Hysteria2", "US · HY2-IPv6", "US · Reality"}) {
+		t.Fatalf("US lines = %v", got)
+	}
+	// AI keeps one fixed order of lines, the first server's first.
+	if got := vpsGroup(raw, vpsAIGroup)["proxies"].([]string); got[0] != "US · Hysteria2" || len(got) != 5 {
+		t.Fatalf("ai = %v", got)
+	}
+	if _, err := vpsParse(t, raw); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+}
+
+// A subscription that already has a fallback group per server lends it to
+// the smart line instead of a copy, and a name it uses is never taken over.
+func TestVps2vpnSmartReusesTheSubscriptionsServerGroups(t *testing.T) {
+	vpsOn(t)
+	raw := config.DefaultRawConfig()
+	raw.Proxy = []map[string]any{
+		vpsReality("US · Reality", "192.0.2.1"),
+		vpsHy2("US · Hysteria2", "192.0.2.1"),
+		vpsReality("SG · Reality", "192.0.2.2"),
+		vpsHy2("SG · Hysteria2", "192.0.2.2"),
+	}
+	raw.ProxyGroup = []map[string]any{
+		{"name": "Proxy", "type": "select", "proxies": []any{"US server", "SG"}},
+		{"name": "US server", "type": "fallback", "proxies": []any{"US · Reality", "US · Hysteria2"}},
+		{"name": "SG", "type": "select", "proxies": []any{"SG · Reality", "SG · Hysteria2"}},
+	}
+	raw.Rule = []string{"MATCH,Proxy"}
+	vps2vpnEnhance(raw, 0)
+
+	got := vpsGroup(raw, vpsSmartGroup)["proxies"].([]string)
+	if !slices.Equal(got, []string{"US server", "⚡ SG"}) {
+		t.Fatalf("smart members = %v", got)
+	}
+	if vpsGroup(raw, "SG")["type"] != "select" {
+		t.Fatal("the subscription's own SG group was replaced")
+	}
+	if _, err := vpsParse(t, raw); err != nil {
+		t.Fatalf("parse: %v", err)
 	}
 }

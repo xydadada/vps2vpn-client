@@ -414,8 +414,8 @@ class _ProxyCard extends ConsumerWidget {
                   proxy.name == vpsSmartGroupName
                       ? tr(
                           context,
-                          '推荐 · 自动换到能用的协议',
-                          'Recommended · switches protocol by itself',
+                          '推荐 · 自动用最快的服务器',
+                          'Recommended · uses the fastest server',
                         )
                       : proxy.name == vpsAIGroupName
                       ? tr(context, 'AI 服务固定出口', 'Steady exit for AI')

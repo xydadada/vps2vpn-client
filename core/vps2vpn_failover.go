@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
+	"github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
 	"github.com/metacubex/mihomo/tunnel/statistic"
@@ -29,7 +30,8 @@ const (
 	lineWatchCooldown = 30 * time.Second
 )
 
-// Every fallback group is watched, not only the two the app adds: a vps2vpn
+// Every fallback and url-test group is watched, not only the two the app adds
+// (the smart line is a url-test over one fallback group per server): a vps2vpn
 // panel's subscription routes AI sites through its own per-server fallback
 // groups (one server's protocols, so the exit IP stays put), and the app then
 // adds no AI group of its own.
@@ -201,8 +203,26 @@ func trackedConns() []lineConn {
 	return conns
 }
 
+// A group the watch follows: a fallback group, or the smart line's url-test,
+// which moves to another server when the one it is on goes down.
+type watchedGroup interface {
+	Now() string
+	Proxies() []constant.Proxy
+	MarshalJSON() ([]byte, error)
+}
+
+func asWatchedGroup(proxy constant.Proxy) (watchedGroup, bool) {
+	if group, ok := adapterAs[*outboundgroup.Fallback](proxy); ok {
+		return group, true
+	}
+	if group, ok := adapterAs[*outboundgroup.URLTest](proxy); ok {
+		return group, true
+	}
+	return nil, false
+}
+
 // The test URL is the group's own; a line's health is kept per URL.
-func fallbackTestURL(group *outboundgroup.Fallback) string {
+func groupTestURL(group watchedGroup) string {
 	data, err := group.MarshalJSON()
 	if err != nil {
 		return ""
@@ -227,7 +247,7 @@ func currentLineGroups() []lineGroup {
 	sort.Strings(names)
 	var groups []lineGroup
 	for _, name := range names {
-		group, ok := adapterAs[*outboundgroup.Fallback](proxies[name])
+		group, ok := asWatchedGroup(proxies[name])
 		if !ok {
 			continue
 		}
@@ -236,7 +256,7 @@ func currentLineGroups() []lineGroup {
 			id:   group,
 			now:  group.Now(),
 			alive: func(line string) bool {
-				url := fallbackTestURL(group)
+				url := groupTestURL(group)
 				for _, proxy := range group.Proxies() {
 					if proxy.Name() == line {
 						return proxy.AliveForTestUrl(url)

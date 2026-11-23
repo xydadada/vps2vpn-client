@@ -3,9 +3,12 @@ package core
 import (
 	"fmt"
 	"net/netip"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
+	"unicode/utf8"
 
 	"github.com/metacubex/mihomo/config"
 )
@@ -480,6 +483,20 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	if len(lines) < 2 || vpsNameTaken(raw, vpsSmartGroup) {
 		return result
 	}
+	// A server's IPv6 lines have their own address; the same name with the
+	// protocol taken off puts them with the server's other lines.
+	merged := map[string]int{}
+	for i := range lines {
+		stem := vpsLineStem(lines[i].name)
+		if stem == lines[i].name {
+			continue
+		}
+		if order, ok := merged[stem]; ok {
+			lines[i].server = order
+		} else {
+			merged[stem] = lines[i].server
+		}
+	}
 	sort.SliceStable(lines, func(i, j int) bool {
 		if lines[i].server != lines[j].server {
 			return lines[i].server < lines[j].server
@@ -487,20 +504,48 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 		return lines[i].rank < lines[j].rank
 	})
 	smart := make([]string, len(lines))
+	var perServer [][]string
 	for i, l := range lines {
 		smart[i] = l.name
+		if i == 0 || l.server != lines[i-1].server {
+			perServer = append(perServer, nil)
+		}
+		perServer[len(perServer)-1] = append(perServer[len(perServer)-1], l.name)
 	}
 	groupCount := len(raw.ProxyGroup)
-	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
-		"name":             vpsSmartGroup,
-		"type":             "fallback",
-		"proxies":          smart,
-		"url":              vpsProbeURL,
-		"interval":         60,
-		"timeout":          2500,
-		"max-failed-times": 2,
-		"lazy":             false,
-	})
+	if len(perServer) == 1 {
+		// One server: its protocols in order, the exit IP never changes.
+		raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
+			"name":             vpsSmartGroup,
+			"type":             "fallback",
+			"proxies":          smart,
+			"url":              vpsProbeURL,
+			"interval":         60,
+			"timeout":          2500,
+			"max-failed-times": 2,
+			"lazy":             false,
+		})
+	} else {
+		// Several servers: the fastest server, each one's protocols backing
+		// each other up (one server, one exit IP). The tolerance keeps it on
+		// the server it is on until another is clearly faster or it goes
+		// down, so the exit IP does not hop on every small change in delay.
+		members := make([]string, 0, len(perServer))
+		for _, names := range perServer {
+			members = append(members, vpsServerGroup(raw, names))
+		}
+		raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
+			"name":             vpsSmartGroup,
+			"type":             "url-test",
+			"proxies":          members,
+			"url":              vpsProbeURL,
+			"interval":         120,
+			"tolerance":        vpsSmartTolerance,
+			"timeout":          2500,
+			"max-failed-times": 2,
+			"lazy":             false,
+		})
+	}
 	result.addedGroups++
 	// Offer it first in the main selector: the first select group whose own
 	// first choice is a proxy. One that starts with DIRECT or REJECT (a
@@ -558,6 +603,103 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	raw.Rule = append(rules, raw.Rule[subStart:]...)
 	result.addedRules = len(vpsAIDomains)
 	return result
+}
+
+// How much faster (ms) another server has to answer before the smart line
+// moves to it while the one it is on still works.
+const vpsSmartTolerance = 150
+
+var vpsStemSplit = regexp.MustCompile(`^(.*?\S)(?:\s*[·|｜]\s*|\s+[-–—/]\s+)([^·|｜]+)$`)
+
+var vpsProtocolWords = []string{
+	"reality", "vless", "vmess", "trojan", "anytls", "hysteria", "hy2", "tuic",
+	"shadowsocks", "wireguard", "ipv4", "ipv6",
+}
+
+// vpsLineStem is a line's name without the protocol parts at its end:
+// "US1 · 1.0x · TUIC-v5-IPv6" → "US1 · 1.0x". A name with none comes back whole.
+func vpsLineStem(name string) string {
+	stem := strings.TrimSpace(name)
+	for {
+		m := vpsStemSplit.FindStringSubmatch(stem)
+		if m == nil {
+			return stem
+		}
+		tail := strings.ToLower(strings.TrimSpace(m[2]))
+		protocol := tail == "ss" || tail == "wg" || tail == "v4" || tail == "v6"
+		for _, word := range vpsProtocolWords {
+			protocol = protocol || strings.Contains(tail, word)
+		}
+		if !protocol {
+			return stem
+		}
+		stem = m[1]
+	}
+}
+
+// vpsServerGroup is what the smart line lists for one server's lines (best
+// protocol first): the line itself when it is the only one, a fallback group
+// of the subscription's that holds exactly these lines, or else a new hidden
+// fallback group of them.
+func vpsServerGroup(raw *config.RawConfig, names []string) string {
+	if len(names) == 1 {
+		return names[0]
+	}
+	want := slices.Clone(names)
+	slices.Sort(want)
+	for _, g := range raw.ProxyGroup {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(g["type"]))) != "fallback" {
+			continue
+		}
+		var have []string
+		switch values := g["proxies"].(type) {
+		case []any:
+			for _, v := range values {
+				name, _ := v.(string)
+				have = append(have, name)
+			}
+		case []string:
+			have = slices.Clone(values)
+		}
+		slices.Sort(have)
+		if _, hasUse := g["use"]; !hasUse && slices.Equal(have, want) && vpsName(g) != "" {
+			return vpsName(g)
+		}
+	}
+	stem := vpsLineStem(names[0])
+	if stem == names[0] {
+		// No protocol part to take off: what the names share ("SG-HY2",
+		// "SG-REALITY" → "SG").
+		prefix := names[0]
+		for _, n := range names[1:] {
+			for !strings.HasPrefix(n, prefix) {
+				_, size := utf8.DecodeLastRuneInString(prefix)
+				prefix = prefix[:len(prefix)-size]
+			}
+		}
+		if prefix = strings.TrimRight(prefix, " -_·|/"); prefix != "" {
+			stem = prefix
+		}
+	}
+	name := stem
+	for i := 1; vpsNameTaken(raw, name); i++ {
+		name = "⚡ " + stem
+		if i > 1 {
+			name = fmt.Sprintf("⚡ %s (%d)", stem, i)
+		}
+	}
+	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
+		"name":             name,
+		"type":             "fallback",
+		"proxies":          slices.Clone(names),
+		"url":              vpsProbeURL,
+		"interval":         60,
+		"timeout":          2500,
+		"max-failed-times": 2,
+		"lazy":             false,
+		"hidden":           true,
+	})
+	return name
 }
 
 // mihomo's built-in outbounds, which are no proxy line.

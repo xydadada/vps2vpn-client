@@ -900,8 +900,14 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
               .where((g) => g.type == GroupType.Selector && g.hidden != true)
               .firstOrNull ??
           groups.first;
+      // The smart line lists one group per server; their lines are what
+      // gets watched.
       final candidates = smart != null
-          ? [smart]
+          ? [
+              smart,
+              for (final g in groups)
+                if (smart.all.any((p) => p.name == g.name)) g,
+            ]
           : [
               fallback,
               for (final g in groups)

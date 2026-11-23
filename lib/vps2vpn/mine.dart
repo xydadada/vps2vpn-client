@@ -317,8 +317,8 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 title: tr(context, '智能线路', 'Smart lines'),
                 subtitle: tr(
                   context,
-                  '出口 IP 不变，协议受限时自动切换；AI 服务固定出口',
-                  'Same exit IP; switches protocol when one is blocked',
+                  '自动用最快的服务器，不乱换出口 IP；AI 服务固定出口',
+                  'Fastest server, steady exit IP; steady exit for AI',
                 ),
                 trailing: VpsSwitch(
                   value: smart,
