@@ -1,9 +1,6 @@
 package com.vps2vpn.testlab;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 import android.app.Instrumentation;
 import android.content.Context;
@@ -48,6 +45,7 @@ public class ConnectTest {
     private Instrumentation instrumentation;
     private UiDevice device;
     private Context context;
+    private final java.util.List<String> secrets = new java.util.ArrayList<>();
 
     @Test
     public void importConnectBrowseDisconnect() throws Exception {
@@ -58,6 +56,13 @@ public class ConnectTest {
         String hex = args.getString("sub");
         assertNotNull("no subscription argument", hex);
         String sub = new String(fromHex(hex), StandardCharsets.UTF_8);
+        secrets.add(hex);
+        secrets.add(sub);
+        secrets.add(Uri.encode(sub));
+        String host = Uri.parse(sub).getHost();
+        if (host != null && !host.isEmpty()) {
+            secrets.add(host);
+        }
         if (!sub.contains("format=")) {
             sub += (sub.contains("?") ? "&" : "?") + "format=clash";
         }
@@ -71,8 +76,9 @@ public class ConnectTest {
         assertNotNull("vps2vpn is not installed", launch);
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         context.startActivity(launch);
-        assertTrue("the app did not open", device.wait(Until.hasObject(By.pkg(PKG).depth(0)), 30_000));
+        check(device.wait(Until.hasObject(By.pkg(PKG).depth(0)), 30_000), "the app did not open");
         step("the app opened");
+        note("first screen");
 
         if (tap(".*(I have read and understand this statement|我已阅读并理解此声明).*", 10_000)) {
             sleep(1_000);
@@ -86,31 +92,75 @@ public class ConnectTest {
         view.setPackage(PKG);
         view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(view);
-        assertTrue("no import confirmation", tap("(ok|confirm|add|确定|确认|添加)", 15_000));
-        step("the import was confirmed");
+        sleep(4_000);
+        note("after the import link");
+        // The emulator run imports without any dialog; a confirmation is optional.
+        step("import confirmation tapped: " + tap("(ok|confirm|add|import|确定|确认|添加|导入)", 10_000));
         sleep(10_000);
+        context.startActivity(launch.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+        sleep(3_000);
+        note("before connecting");
 
-        assertTrue("no connect button", tap("(connect|连接|tap to connect|点击连接)", 20_000));
+        check(tap("(connect|连接|tap to connect|点击连接|启动|start)", 20_000), "no connect button");
         tap("(ok|确定)", 3_000);
-        assertTrue("the VPN did not come up", waitVpn(true, 45_000));
+        check(waitVpn(true, 45_000), "the VPN did not come up");
         step("the VPN is up");
+        note("connected");
 
         for (int i = 1; i <= 6; i++) {
             sleep(10_000);
-            assertTrue("the phone stopped answering after " + (i * 10) + " s", device.hasObject(By.pkg(PKG)) || device.getCurrentPackageName() != null);
-            assertEquals("generate_204 through the VPN at " + (i * 10) + " s", 204, status("http://connectivitycheck.gstatic.com/generate_204"));
+            check(device.hasObject(By.pkg(PKG)) || device.getCurrentPackageName() != null, "the phone stopped answering after " + (i * 10) + " s");
+            int code = status("http://connectivitycheck.gstatic.com/generate_204");
+            check(code == 204, "generate_204 through the VPN at " + (i * 10) + " s answered " + code);
             step("still up and answering at " + (i * 10) + " s");
         }
         String vpnIp = fetch("https://api.ipify.org");
-        assertNotNull("no public address through the VPN", vpnIp);
+        check(vpnIp != null, "no public address through the VPN");
         if (directIp != null) {
-            assertNotEquals("traffic did not leave through the line", directIp, vpnIp);
+            check(!directIp.equals(vpnIp), "traffic did not leave through the line");
         }
         step("traffic leaves through the line (address changed)");
 
-        tap("(disconnect|断开|断开连接|stop|停止|connected|已连接)", 10_000);
-        assertTrue("the VPN did not go down", waitVpn(false, 30_000));
+        if (!tap("(disconnect|断开|断开连接|stop|停止)", 5_000)) {
+            tap("(connected|已连接)", 5_000);
+        }
+        check(waitVpn(false, 30_000), "the VPN did not go down");
         step("the VPN is down after disconnecting");
+    }
+
+    private void check(boolean ok, String message) {
+        if (!ok) {
+            throw new AssertionError(message + " | screen: " + screen());
+        }
+    }
+
+    private void note(String where) {
+        String line = "NOTE  " + where + ": " + screen();
+        Log.i(TAG, line);
+        Bundle status = new Bundle();
+        status.putString(android.app.Instrumentation.REPORT_KEY_STREAMRESULT, line + "\n");
+        instrumentation.sendStatus(0, status);
+    }
+
+    /** The labels on screen, with the link, its host and any address blanked. */
+    private String screen() {
+        try {
+            java.io.ByteArrayOutputStream dump = new java.io.ByteArrayOutputStream();
+            device.dumpWindowHierarchy(dump);
+            java.util.regex.Matcher m = Pattern.compile(" (?:text|content-desc)=\"([^\"]+)\"").matcher(dump.toString("UTF-8"));
+            StringBuilder labels = new StringBuilder();
+            while (m.find() && labels.length() < 1500) {
+                labels.append(labels.length() == 0 ? "" : " | ").append(m.group(1).replace("&#10;", "/").replace('\n', '/'));
+            }
+            String text = labels.toString();
+            for (String secret : secrets) {
+                text = text.replace(secret, "<hidden>");
+            }
+            return text.replaceAll("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b", "x.x.x.x")
+                    .replaceAll("(?i)\\b[0-9a-f]{1,4}(:[0-9a-f]{0,4}){2,7}\\b", "x:x::x");
+        } catch (Exception e) {
+            return "(no dump: " + e.getClass().getSimpleName() + ")";
+        }
     }
 
     private void step(String message) {
@@ -121,7 +171,8 @@ public class ConnectTest {
     }
 
     private boolean tap(String regex, long timeoutMs) {
-        Pattern pattern = Pattern.compile("^" + regex + "$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        // Flutter puts a button's words in content-desc, sometimes with a second line under them.
+        Pattern pattern = Pattern.compile("^\\s*(?:" + regex + ")\\s*(?:\\n.*)?$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         long end = System.currentTimeMillis() + timeoutMs;
         do {
             for (BySelector selector : new BySelector[]{By.text(pattern), By.desc(pattern)}) {

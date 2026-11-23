@@ -69,8 +69,11 @@ jobs:
           SUB: ${{ secrets.TESTLAB_SUB_URL }}
           DEVICES: ${{ inputs.devices }}
         run: |
+          set -o pipefail
           [ -n "$SUB" ] || { echo 'secret TESTLAB_SUB_URL is not set' >&2; exit 1; }
           hex=$(printf '%s' "$SUB" | xxd -p | tr -d '\n')
+          echo "::add-mask::$hex"
+          echo "::add-mask::$(python3 -I -c 'import sys, urllib.parse; print(urllib.parse.urlsplit(sys.argv[1]).hostname or "")' "$SUB")"
           args=()
           IFS=';' read -ra devices <<< "$DEVICES"
           for d in "${devices[@]}"; do args+=(--device "$d"); done
@@ -79,8 +82,27 @@ jobs:
             --test .github/testlab/driver/build/outputs/apk/androidTest/debug/driver-debug-androidTest.apk \
             --additional-apks "$(ls apk/*.apk | head -1)" \
             --environment-variables "sub=$hex" \
-            --timeout 8m --num-flaky-test-attempts 0 \
+            --timeout 8m --num-flaky-test-attempts 0 --no-record-video --no-performance-metrics \
+            --results-dir "vps2vpn-android/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
             --results-history-name vps2vpn-android "${args[@]}" 2>&1 | tee testlab.log
+
+      # Raw results stay in the project's bucket; only a scrubbed summary leaves it.
+      - name: What each phone saw
+        if: always() && inputs.devices != ''
+        env:
+          SUB: ${{ secrets.TESTLAB_SUB_URL }}
+        run: |
+          bucket=$(grep -oE 'storage/browser/[^/]+/' testlab.log | head -1 | cut -d/ -f3)
+          [ -n "$bucket" ] || { echo 'no results bucket in the log'; exit 0; }
+          mkdir -p raw
+          gcloud storage cp -r "gs://$bucket/vps2vpn-android/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/*" raw/ || true
+          for dir in raw/*/; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            python3 -I .github/testlab/summary.py "$dir" > "summary-$name.txt"
+            echo "== $name"
+            cat "summary-$name.txt"
+          done
 
       - name: Upload the summary
         if: always()
@@ -88,5 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: testlab
-          path: testlab.log
+          path: |
+            testlab.log
+            summary-*.txt
           if-no-files-found: ignore
