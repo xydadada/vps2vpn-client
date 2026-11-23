@@ -81,9 +81,9 @@ try {
   $rivals = @(Get-Process clash-verge, verge-mihomo, FlClash, FlClashCore, v2rayN, xray, Hiddify, HiddifyCli, nekoray, nekobox_core, Shadowsocks, sing-box -ErrorAction SilentlyContinue | ForEach-Object Name | Sort-Object -Unique)
   "other proxy apps running: $($rivals -join ', ')"
   $taken = @(foreach ($port in 7890, 7891, 7897, 9090) {
-    $holder = Get-ListenerName $port
-    "port $port held by $holder" | Out-Host
-    if ($holder) { $port }
+    $by = Get-ListenerName $port
+    "port $port held by $by" | Out-Host
+    if ($by) { $port }
   })
   Check ((& curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $script:probeUrl) -eq '204') 'baseline: the internet works through the other TUN'
 
