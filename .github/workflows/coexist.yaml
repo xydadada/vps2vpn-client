@@ -19,7 +19,11 @@ permissions:
 
 jobs:
   coexist:
-    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - name: Checkout the test scripts
@@ -52,6 +56,6 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: coexist
+          name: coexist-${{ matrix.os }}
           path: coexist
           if-no-files-found: ignore

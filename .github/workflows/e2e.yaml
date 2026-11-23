@@ -1,7 +1,7 @@
 name: vps2vpn installer check
 
 # Installs an installer that was already built (attached to a release of this
-# repository) on a throwaway Windows runner and checks the takeover end to
+# repository) on throwaway Windows runners and checks the takeover end to
 # end. No build here, so it takes a few minutes.
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
         required: true
         default: v1.0.26
       from:
-        description: Older release to update from in the app's way (empty = skip)
+        description: Older releases to update from in the app's way, comma separated (empty = skip)
         required: false
         default: ''
 
@@ -19,8 +19,25 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      from: ${{ steps.from.outputs.list }}
+    steps:
+      - id: from
+        env:
+          FROM: ${{ inputs.from }}
+        run: |
+          list=$(printf '%s' "$FROM" | tr ', ' '\n\n' | sed '/^$/d' | jq -R . | jq -sc .)
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+          echo "update from: $list"
+
   e2e:
-    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - name: Checkout the test script
@@ -51,15 +68,21 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: e2e
+          name: e2e-${{ matrix.os }}
           path: e2e
           if-no-files-found: ignore
 
   upgrade:
     # The in-app update: an older release running, the new setup started the
     # way CommonAction.installUpdate starts it (see .github/scripts/upgrade-e2e.ps1).
-    if: ${{ inputs.from != '' }}
-    runs-on: windows-2022
+    needs: plan
+    if: ${{ needs.plan.outputs.from != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+        from: ${{ fromJSON(needs.plan.outputs.from) }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - name: Checkout the test script
@@ -72,7 +95,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-          FROM: ${{ inputs.from }}
+          FROM: ${{ matrix.from }}
           REPO: ${{ github.repository }}
         run: |
           gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D old -- $env:FROM
@@ -91,6 +114,6 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: upgrade
+          name: upgrade-${{ matrix.os }}-${{ matrix.from }}
           path: upgrade
           if-no-files-found: ignore
