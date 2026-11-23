@@ -58,6 +58,9 @@ public class ConnectTest {
         String hex = args.getString("sub");
         assertNotNull("no subscription argument", hex);
         String sub = new String(fromHex(hex), StandardCharsets.UTF_8);
+        if (!sub.contains("format=")) {
+            sub += (sub.contains("?") ? "&" : "?") + "format=clash";
+        }
 
         shell("appops set " + PKG + " ACTIVATE_VPN allow");
         shell("pm grant " + PKG + " android.permission.POST_NOTIFICATIONS");

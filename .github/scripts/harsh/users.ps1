@@ -112,7 +112,7 @@ Start-Sleep 60
     Check ($app.home -match [regex]::Escape($userName)) 'second account: its data lives under the path with Chinese and a space'
     Check ($app.profiles -gt 0) 'second account: the subscription imported'
   }
-  $theirs = @(Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match [regex]::Escape($userName))
+  $theirs = @(Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match ([regex]::Escape($userName)))
   Check ($theirs.Count -gt 0) 'second account: its own Core runs under its own account'
   if ($theirs) {
     $ports = @(Get-NetTCPConnection -State Listen -OwningProcess $theirs[0].Id -ErrorAction SilentlyContinue | Where-Object LocalAddress -eq '127.0.0.1' | ForEach-Object LocalPort | Sort-Object -Unique)
@@ -128,7 +128,7 @@ Start-Sleep 60
   Uninstall-App
   Test-NothingLeft 'after uninstall'
 } finally {
-  Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match [regex]::Escape($userName) | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match ([regex]::Escape($userName)) | Stop-Process -Force -ErrorAction SilentlyContinue
   try { ([ADSI]"WinNT://$env:COMPUTERNAME,computer").Delete('User', $userName) } catch {}
   Finish
 }

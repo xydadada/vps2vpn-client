@@ -162,7 +162,7 @@ try {
   # The machine itself in a bad state.
   $free = (Get-PSDrive C).Free
   $filler = 'C:\ci-disk-filler.bin'
-  $fill = [math]::Max(0, $free - 150MB)
+  $fill = [math]::Max([long]0, [long]$free - 150MB)  # [int]0 would pick the Int32 overload
   & fsutil file createnew $filler $fill | Out-Null
   "disk C: free now $([math]::Round((Get-PSDrive C).Free / 1MB)) MB"
   $port = Start-App 'disk nearly full'

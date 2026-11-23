@@ -13,7 +13,7 @@ on:
         default: test-android-1.0.26
       devices:
         description: "gcloud --device values, separated by ';' (empty = only list the models)"
-        default: model=oriole,version=33
+        default: model=SC-51E,version=36;model=CPH2449,version=34
 
 permissions:
   contents: read
