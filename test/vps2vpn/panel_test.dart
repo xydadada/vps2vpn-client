@@ -456,6 +456,87 @@ proxies:
     expect(dir.listSync(), isEmpty);
   });
 
+  test('one lock covers the direct try and the proxy retry', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release');
+    addTearDown(() => dir.delete(recursive: true));
+    final url = Uri.parse(
+      'https://panel.invalid/s/$_tok/download/vps2vpn-1.0.3-windows-amd64-setup.exe',
+    );
+    final gate = Completer<void>();
+    final reachedProxy = Completer<void>();
+    final transport = _ShortRelease()
+      ..onGet = (route) async {
+        if (route == 'DIRECT') throw const SocketException('unreachable');
+        reachedProxy.complete();
+        await gate.future;
+      };
+    await HttpOverrides.runZoned(() async {
+      final first = vpsDownloadRelease(
+        url,
+        dir,
+        currentVersion: '1.0.2',
+        proxyPort: 7897,
+      );
+      await reachedProxy.future;
+      // The first download is on its proxy retry: a second one to the same
+      // file is turned away and is not retried through the proxy either.
+      await expectLater(
+        vpsDownloadRelease(url, dir, currentVersion: '1.0.2', proxyPort: 7897),
+        throwsA(
+          isA<HttpException>().having(
+            (e) => e.message,
+            'message',
+            contains('already in progress'),
+          ),
+        ),
+      );
+      gate.complete();
+      await expectLater(first, throwsA(isA<HttpException>()));
+    }, createHttpClient: (_) => _ShortReleaseClient(transport));
+    expect(transport.routes, ['DIRECT', 'PROXY 127.0.0.1:7897']);
+    expect(dir.listSync(), isEmpty);
+  });
+
+  test('a program error is not retried through the proxy', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release');
+    addTearDown(() => dir.delete(recursive: true));
+    final transport = _ShortRelease()
+      ..onGet = (_) async => throw StateError('bug');
+    await HttpOverrides.runZoned(() async {
+      await expectLater(
+        vpsDownloadRelease(
+          Uri.parse(
+            'https://panel.invalid/s/$_tok/download/vps2vpn-1.0.3-windows-amd64-setup.exe',
+          ),
+          dir,
+          currentVersion: '1.0.2',
+          proxyPort: 7897,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    }, createHttpClient: (_) => _ShortReleaseClient(transport));
+    expect(transport.routes, ['DIRECT']);
+  });
+
+  test('a bad link is refused once, with no request at all', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release');
+    addTearDown(() => dir.delete(recursive: true));
+    final transport = _ShortRelease();
+    await HttpOverrides.runZoned(() async {
+      await expectLater(
+        vpsDownloadRelease(
+          Uri.parse(
+            'http://panel.invalid/s/$_tok/download/vps2vpn-1.0.3-windows-amd64-setup.exe',
+          ),
+          dir,
+          proxyPort: 7897,
+        ),
+        throwsA(isA<HttpException>()),
+      );
+    }, createHttpClient: (_) => _ShortReleaseClient(transport));
+    expect(transport.routes, isEmpty);
+  });
+
   test(
     'a release is only downloaded over HTTPS with a plain file name',
     () async {
@@ -486,6 +567,9 @@ proxies:
 class _ShortRelease {
   final urls = <Uri>[];
   final routes = <String?>[];
+
+  /// Runs before each request with its route; may throw or wait.
+  Future<void> Function(String? route)? onGet;
 }
 
 class _ShortReleaseClient implements HttpClient {
@@ -494,8 +578,10 @@ class _ShortReleaseClient implements HttpClient {
 
   @override
   Future<HttpClientRequest> getUrl(Uri url) async {
+    final route = findProxy?.call(url);
     transport.urls.add(url);
-    transport.routes.add(findProxy?.call(url));
+    transport.routes.add(route);
+    await transport.onGet?.call(route);
     return _ShortReleaseRequest();
   }
 

@@ -1003,7 +1003,8 @@ final _activeReleaseDownloads = <String>{};
 /// Staging is isolated, and overlapping downloads to the same destination
 /// are rejected even when callers spell that destination differently.
 /// Direct first, then through our own proxy at [proxyPort] (a panel reachable
-/// only over the VPN); a rejected signature is final.
+/// only over the VPN). One lock covers both attempts; a bad link or name, a
+/// rejected signature, a disk error or a program error is final.
 Future<File> vpsDownloadRelease(
   Uri url,
   Directory dir, {
@@ -1013,39 +1014,6 @@ Future<File> vpsDownloadRelease(
   void Function(int received, int total)? onProgress,
   int? proxyPort,
   String? proxyAuth,
-}) async {
-  for (final port in [null, ?proxyPort]) {
-    try {
-      return await _downloadReleaseVia(
-        url,
-        dir,
-        port: port,
-        proxyAuth: port == null ? null : proxyAuth,
-        pinnedSha256: pinnedSha256,
-        currentVersion: currentVersion,
-        publicKeyHex: publicKeyHex,
-        onProgress: onProgress,
-      );
-    } on VpsUpdateRejected {
-      rethrow;
-    } on FileSystemException {
-      rethrow;
-    } catch (_) {
-      if (port != null || proxyPort == null) rethrow;
-    }
-  }
-  throw StateError('unreachable');
-}
-
-Future<File> _downloadReleaseVia(
-  Uri url,
-  Directory dir, {
-  required int? port,
-  required String? proxyAuth,
-  required Set<String> pinnedSha256,
-  required String? currentVersion,
-  required String publicKeyHex,
-  void Function(int received, int total)? onProgress,
 }) async {
   if (!url.isScheme('https')) {
     throw const HttpException('Release link is not HTTPS');
@@ -1065,7 +1033,6 @@ Future<File> _downloadReleaseVia(
     }
   }
 
-  final out = File('${dir.path}${Platform.pathSeparator}$name');
   // Symlinked parents and case aliases must map to one logical lock.
   final canonicalDirectory = await dir.resolveSymbolicLinks();
   final targetPath = File(
@@ -1077,7 +1044,45 @@ Future<File> _downloadReleaseVia(
   if (!_activeReleaseDownloads.add(targetKey)) {
     throw const HttpException('Release download already in progress');
   }
+  try {
+    for (final port in [null, ?proxyPort]) {
+      try {
+        return await _downloadReleaseVia(
+          url,
+          dir,
+          name,
+          port: port,
+          proxyAuth: port == null ? null : proxyAuth,
+          pinnedSha256: pinnedSha256,
+          publicKeyHex: publicKeyHex,
+          onProgress: onProgress,
+        );
+      } on VpsUpdateRejected {
+        rethrow;
+      } on FileSystemException {
+        rethrow;
+      } on Exception {
+        if (port != null || proxyPort == null) rethrow;
+      }
+    }
+    throw StateError('unreachable');
+  } finally {
+    _activeReleaseDownloads.remove(targetKey);
+  }
+}
 
+/// One transfer of the already checked [name], direct or through [port].
+Future<File> _downloadReleaseVia(
+  Uri url,
+  Directory dir,
+  String name, {
+  required int? port,
+  required String? proxyAuth,
+  required Set<String> pinnedSha256,
+  required String publicKeyHex,
+  void Function(int received, int total)? onProgress,
+}) async {
+  final out = File('${dir.path}${Platform.pathSeparator}$name');
   HttpClient? client;
   Directory? staging;
   try {
@@ -1155,12 +1160,8 @@ Future<File> _downloadReleaseVia(
     }
   } finally {
     client?.close(force: true);
-    try {
-      if (staging != null) {
-        await staging.delete(recursive: true);
-      }
-    } finally {
-      _activeReleaseDownloads.remove(targetKey);
+    if (staging != null) {
+      await staging.delete(recursive: true);
     }
   }
 }
