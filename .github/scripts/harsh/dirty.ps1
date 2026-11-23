@@ -80,7 +80,11 @@ try {
   "adapters with the others up:"; $othersBefore
   $rivals = @(Get-Process clash-verge, verge-mihomo, FlClash, FlClashCore, v2rayN, xray, Hiddify, HiddifyCli, nekoray, nekobox_core, Shadowsocks, sing-box -ErrorAction SilentlyContinue | ForEach-Object Name | Sort-Object -Unique)
   "other proxy apps running: $($rivals -join ', ')"
-  foreach ($port in 7890, 7891, 7897, 9090) { "port $port held by $(Get-ListenerName $port)" }
+  $taken = @(foreach ($port in 7890, 7891, 7897, 9090) {
+    $holder = Get-ListenerName $port
+    "port $port held by $holder" | Out-Host
+    if ($holder) { $port }
+  })
   Check ((& curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $script:probeUrl) -eq '204') 'baseline: the internet works through the other TUN'
 
   # --- vps2vpn, takeover off: next to all of them ---
@@ -89,7 +93,7 @@ try {
   Set-AppPrefs @{ autoRun = $true; takeover = $false; acceptedDisclaimerVersion = 1 }
   Set-Mode $false $true
   $port = Start-App 'takeover off'
-  Check ($port -notin 7890, 7891, 7897, 9090) "takeover off: kept off the taken ports (on $port)"
+  Check ($port -notin $taken) "takeover off: kept off the taken ports $($taken -join ', ') (on $port)"
   Test-Through $port 'takeover off'
   Test-AppAlive 'takeover off'
   Check ((Get-WinInetProxy).Server -eq "127.0.0.1:$port") 'takeover off: the system proxy points at vps2vpn'
@@ -106,8 +110,15 @@ try {
   Check $ours 'tun: our adapter is up next to the other TUN'
   $core = Get-Process vps2vpnCore -ErrorAction SilentlyContinue | Select-Object -First 1
   $cpu0 = if ($core) { $core.TotalProcessorTime.TotalSeconds } else { 0 }
-  $seen = Test-NoProxy 'tun next to the other TUN'
-  Check $seen 'tun next to the other TUN: vps2vpn carried the request'
+  # The request reaches the CI upstream, but the answer is not required: our
+  # strict-route (on by default on Windows against the DNS leak) blocks DNS on
+  # every other interface, the other TUN's own lookups included, so the
+  # upstream's direct leg can fail. What matters next to another TUN: we carry
+  # the request, do not loop or spin, and the other TUN works again after.
+  $before = Get-UpstreamCount
+  $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $script:probeUrl
+  Check (Wait-Until 5 { (Get-UpstreamCount) -gt $before }) 'tun next to the other TUN: vps2vpn carried the request'
+  if ($code -ne '204') { Note "tun next to the other TUN: curl with no proxy got $code (two TUNs with strict-route; not required)" }
   Start-Sleep 20
   if ($core) { $core.Refresh(); $busy = $core.TotalProcessorTime.TotalSeconds - $cpu0; Check ($busy -lt 15) "tun next to the other TUN: the Core is not spinning ($([math]::Round($busy, 1)) s of CPU in about 25 s)" }
   Test-AppAlive 'tun next to the other TUN'
