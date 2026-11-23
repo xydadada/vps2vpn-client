@@ -118,6 +118,11 @@ void main() {
     expect(m.expireAt!.millisecondsSinceEpoch, 1893456000 * 1000);
     expect(m.ai!.sites, {'claude': 'ok', 'chatgpt': 'blocked'});
     expect(VpsMember.fromJson({'ai': null, 'expire_at': 0}).ai, isNull);
+    expect(m.throttled, isFalse);
+    final slowed = VpsMember.fromJson({'throttled': true, 'limit_mbps': 2.5});
+    expect(slowed.throttled, isTrue);
+    expect(slowed.limitMbps, 2.5);
+    expect(VpsMember.fromJson({'throttled': 1, 'limit_mbps': -1}).limitMbps, 0);
     expect(VpsMember.fromJson({'expire_at': 0}).expireAt, isNull);
   });
 
@@ -434,6 +439,23 @@ proxies:
     },
   );
 
+  test('a failed direct download is tried again through our proxy', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release');
+    addTearDown(() => dir.delete(recursive: true));
+    final transport = _ShortRelease();
+    final url = Uri.parse(
+      'https://panel.invalid/s/$_tok/download/vps2vpn-1.0.3-windows-amd64-setup.exe',
+    );
+    await HttpOverrides.runZoned(() async {
+      await expectLater(
+        vpsDownloadRelease(url, dir, currentVersion: '1.0.2', proxyPort: 7897),
+        throwsA(isA<HttpException>()),
+      );
+    }, createHttpClient: (_) => _ShortReleaseClient(transport));
+    expect(transport.routes, ['DIRECT', 'PROXY 127.0.0.1:7897']);
+    expect(dir.listSync(), isEmpty);
+  });
+
   test(
     'a release is only downloaded over HTTPS with a plain file name',
     () async {
@@ -463,6 +485,7 @@ proxies:
 /// Declares 10 bytes and sends 4, as a connection that drops part way.
 class _ShortRelease {
   final urls = <Uri>[];
+  final routes = <String?>[];
 }
 
 class _ShortReleaseClient implements HttpClient {
@@ -472,8 +495,12 @@ class _ShortReleaseClient implements HttpClient {
   @override
   Future<HttpClientRequest> getUrl(Uri url) async {
     transport.urls.add(url);
+    transport.routes.add(findProxy?.call(url));
     return _ShortReleaseRequest();
   }
+
+  @override
+  String Function(Uri url)? findProxy;
 
   @override
   void close({bool force = false}) {}

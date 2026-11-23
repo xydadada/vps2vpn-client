@@ -88,12 +88,17 @@ Future<File> _fetchUpdate(
     install ? await appPath.updateDirPath : await appPath.downloadDirPath,
   );
   await dir.create(recursive: true);
+  final on = ref.read(isStartProvider) && !ref.read(suspendProvider);
   return vpsDownloadRelease(
     url,
     dir,
     pinnedSha256: pins,
     currentVersion: current,
     onProgress: onProgress,
+    proxyPort: on ? ref.read(patchClashConfigProvider).mixedPort : null,
+    proxyAuth: on
+        ? vpsLocalProxyAuth(ref.read(networkSettingProvider).authentication)
+        : null,
   );
 }
 

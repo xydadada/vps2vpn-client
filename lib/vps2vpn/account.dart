@@ -132,6 +132,21 @@ VpsAccountBlock? vpsAccountBlock(VpsMemberResult? result) {
   };
 }
 
+String _slowedHint(BuildContext context, double mbps) {
+  final speed = mbps.toStringAsFixed(mbps % 1 == 0 ? 0 : 1);
+  return mbps > 0
+      ? tr(
+          context,
+          '流量已用完，当前限速 $speed Mbps，重置或续费后恢复',
+          'Data used up: held to $speed Mbps until it resets or you top up',
+        )
+      : tr(
+          context,
+          '流量已用完，网速受限，重置或续费后恢复',
+          'Data used up: speed is limited until it resets or you top up',
+        );
+}
+
 String vpsAccountBlockReason(BuildContext context, VpsAccountBlock block) =>
     switch (block) {
       VpsAccountBlock.linkChanged => tr(
@@ -245,20 +260,28 @@ class VpsAccountCard extends ConsumerWidget {
         ? null
         : vpsExpiryText(context, m.expireAt!);
     final block = vpsAccountBlock(result);
+    final slowed = block == null && m.throttled;
     final page = vpsMemberPage(
       ref.watch(currentProfileProvider.select((p) => p?.url ?? '')),
     );
     return _frame(
       p,
-      color: block != null ? p.bad : p.good,
+      color: block != null
+          ? p.bad
+          : slowed
+          ? p.warn
+          : p.good,
       title: m.name.isEmpty ? tr(context, '我的账户', 'My account') : m.name,
       status: block != null
           ? vpsAccountBlockReason(context, block)
+          : slowed
+          ? tr(context, '已降速', 'Slowed down')
           : tr(context, '正常', 'Active'),
       lines: [
         usage,
         ?expiry,
         if (block != null) vpsAccountBlockHint(context, block),
+        if (slowed) _slowedHint(context, m.limitMbps),
       ],
       progress: m.unlimited
           ? null

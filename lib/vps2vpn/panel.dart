@@ -282,6 +282,8 @@ class VpsMember {
     this.expireAt,
     this.ai,
     this.client,
+    this.throttled = false,
+    this.limitMbps = 0,
   }) : unlimited = unlimited ?? (quotaGb <= 0);
 
   final String name;
@@ -299,6 +301,9 @@ class VpsMember {
   final DateTime? expireAt;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
+
+  final bool throttled;
+  final double limitMbps;
 
   int get used => usedUp + usedDown;
 
@@ -327,6 +332,11 @@ class VpsMember {
       expireAt: expire,
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
+      throttled: json['throttled'] == true,
+      limitMbps: switch (json['limit_mbps']) {
+        final num v when v.isFinite && v > 0 => v.toDouble(),
+        _ => 0,
+      },
     );
   }
 }
@@ -713,7 +723,7 @@ Future<bool> reportLine(
 
 /// user:pass for our own mixed port, as typed, when it asks for one. The
 /// username cannot hold ':' (the settings page drops it).
-String? _localProxyAuth(AuthenticationProps auth) {
+String? vpsLocalProxyAuth(AuthenticationProps auth) {
   if (!auth.enable || auth.username.isEmpty) return null;
   return '${auth.username}:${auth.password}';
 }
@@ -786,7 +796,7 @@ final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
       ? ref.watch(patchClashConfigProvider.select((p) => p.mixedPort))
       : null;
   final proxyAuth = on
-      ? _localProxyAuth(
+      ? vpsLocalProxyAuth(
           ref.watch(networkSettingProvider.select((s) => s.authentication)),
         )
       : null;
@@ -946,7 +956,7 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
       ok: ok,
       host: line.host,
       proxyPort: ref.read(patchClashConfigProvider).mixedPort,
-      proxyAuth: _localProxyAuth(
+      proxyAuth: vpsLocalProxyAuth(
         ref.read(networkSettingProvider).authentication,
       ),
       scope: scope,
@@ -992,12 +1002,49 @@ final _activeReleaseDownloads = <String>{};
 /// newer version. Otherwise [VpsUpdateRejected] and nothing is kept.
 /// Staging is isolated, and overlapping downloads to the same destination
 /// are rejected even when callers spell that destination differently.
+/// Direct first, then through our own proxy at [proxyPort] (a panel reachable
+/// only over the VPN); a rejected signature is final.
 Future<File> vpsDownloadRelease(
   Uri url,
   Directory dir, {
   Set<String> pinnedSha256 = const {},
   String? currentVersion,
   String publicKeyHex = vpsUpdatePublicKeyHex,
+  void Function(int received, int total)? onProgress,
+  int? proxyPort,
+  String? proxyAuth,
+}) async {
+  for (final port in [null, ?proxyPort]) {
+    try {
+      return await _downloadReleaseVia(
+        url,
+        dir,
+        port: port,
+        proxyAuth: port == null ? null : proxyAuth,
+        pinnedSha256: pinnedSha256,
+        currentVersion: currentVersion,
+        publicKeyHex: publicKeyHex,
+        onProgress: onProgress,
+      );
+    } on VpsUpdateRejected {
+      rethrow;
+    } on FileSystemException {
+      rethrow;
+    } catch (_) {
+      if (port != null || proxyPort == null) rethrow;
+    }
+  }
+  throw StateError('unreachable');
+}
+
+Future<File> _downloadReleaseVia(
+  Uri url,
+  Directory dir, {
+  required int? port,
+  required String? proxyAuth,
+  required Set<String> pinnedSha256,
+  required String? currentVersion,
+  required String publicKeyHex,
   void Function(int received, int total)? onProgress,
 }) async {
   if (!url.isScheme('https')) {
@@ -1034,7 +1081,12 @@ Future<File> vpsDownloadRelease(
   HttpClient? client;
   Directory? staging;
   try {
-    client = _client(base: url, pinnedSha256: pinnedSha256);
+    client = _client(
+      proxyPort: port,
+      proxyAuth: proxyAuth,
+      base: url,
+      pinnedSha256: pinnedSha256,
+    );
     // A private temp directory prevents predictable .part path collisions and
     // prevents following a pre-existing symlink to an unrelated user file.
     staging = await dir.createTemp('.vps2vpn-release-');
