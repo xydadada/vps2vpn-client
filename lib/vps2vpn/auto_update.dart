@@ -21,6 +21,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// How often a running app asks the panel for a newer client.
 const vpsUpdateCheckInterval = Duration(hours: 6);
+const vpsUpdateRetryInterval = Duration(minutes: 30);
 
 /// The version this app runs, or null when it cannot tell.
 String? vpsAppVersion() {
@@ -133,18 +134,31 @@ Future<bool> vpsDownloadPanelUpdate(
   VpsClientRelease release, {
   required String current,
   bool auto = false,
-}) => _downloadUpdate(
+}) => _downloadBest(
   ProviderScope.containerOf(ref.context, listen: false),
-  release,
+  [release],
   current: current,
   auto: auto,
 );
 
-Future<bool> _downloadUpdate(
+Future<bool> vpsDownloadUpdate(
+  WidgetRef ref,
+  List<VpsClientRelease> releases, {
+  required String current,
+}) => _downloadBest(
+  ProviderScope.containerOf(ref.context, listen: false),
+  releases,
+  current: current,
+);
+
+enum _Got { done, refused, failed }
+
+Future<_Got> _downloadUpdate(
   ProviderContainer container,
   VpsClientRelease release, {
   required String current,
   bool auto = false,
+  bool last = true,
 }) async {
   final url = vpsReleaseInstaller(release);
   if (url == null) {
@@ -152,18 +166,20 @@ Future<bool> _downloadUpdate(
     if (!auto && page != null) {
       await launchUrl(page, mode: LaunchMode.externalApplication);
     }
-    return true;
+    return page == null ? _Got.failed : _Got.done;
   }
   final install = vpsSelfInstallable(_fileName(url));
   final download = container.read(updateDownloadStateProvider.notifier);
   final tag = 'v${release.version}';
   // One download at a time; a ready older version gives way to this one.
   final pending = download.value;
-  if (install && pending is UpdateReady && pending.tag == tag) return true;
+  if (install && pending is UpdateReady && pending.tag == tag) {
+    return _Got.done;
+  }
   if (install && pending is UpdateDownloading) {
     // Another download, even one of this version, is no try of this one:
     // it may still fail, and the next check has to be free to try again.
-    return false;
+    return _Got.failed;
   }
   // What a failed download puts back: an update already verified stays
   // installable.
@@ -210,7 +226,7 @@ Future<bool> _downloadUpdate(
           container.read(commonActionProvider.notifier).installUpdate(),
         ),
       );
-      return true;
+      return _Got.done;
     }
     _banner(
       (c) => tr(
@@ -226,9 +242,10 @@ Future<bool> _downloadUpdate(
     } catch (_) {
       // The banner already names the file.
     }
-    return true;
+    return _Got.done;
   } on VpsUpdateRejected catch (e) {
     if (install) download.value = before;
+    if (!last) return _Got.refused;
     _banner(
       (c) => switch (e.reason) {
         'unsigned' => tr(
@@ -251,25 +268,173 @@ Future<bool> _downloadUpdate(
       },
       BannerLevel.warning,
     );
-    return true;
+    return _Got.refused;
   } catch (error) {
     if (install) download.value = before;
     commonPrint.log(
       'Client update download failed: ${compactError(error)}',
       logLevel: LogLevel.warning,
     );
-    if (!auto) {
+    if (!auto && last) {
       _banner(
         (c) => tr(c, '下载失败，请稍后再试', 'The download failed; try again later'),
         BannerLevel.warning,
       );
     }
-    return false;
+    return _Got.failed;
   }
 }
 
-/// Asks the panel for a newer client and, when this build installs by itself,
-/// fetches it in the background. Respects the "check for updates" setting.
+/// Newest first; one out of reach or failing its signature gives way to the
+/// next. False when none could be transferred.
+Future<bool> _downloadBest(
+  ProviderContainer container,
+  List<VpsClientRelease> releases, {
+  required String current,
+  bool auto = false,
+}) async {
+  var refused = false;
+  for (final (i, release) in releases.indexed) {
+    final got = await _downloadUpdate(
+      container,
+      release,
+      current: current,
+      auto: auto,
+      last: i == releases.length - 1,
+    );
+    if (got == _Got.done) return true;
+    refused = refused || got == _Got.refused;
+  }
+  return refused;
+}
+
+@visibleForTesting
+Future<VpsClientRelease?> Function({
+  required bool installed,
+  int? proxyPort,
+  String? proxyAuth,
+})
+vpsGitHubLookup = vpsLatestGitHubRelease;
+
+enum VpsUpdateStatus { never, checking, latest, available, failed }
+
+class VpsUpdateCheck {
+  const VpsUpdateCheck({
+    this.status = VpsUpdateStatus.never,
+    this.at,
+    this.releases = const [],
+    this.error,
+  });
+
+  final VpsUpdateStatus status;
+  final DateTime? at;
+
+  /// Newer releases this device can use, newest first.
+  final List<VpsClientRelease> releases;
+  final String? error;
+}
+
+class VpsUpdateCheckNotifier extends Notifier<VpsUpdateCheck> {
+  @override
+  VpsUpdateCheck build() => const VpsUpdateCheck();
+
+  void set(VpsUpdateCheck value) => state = value;
+}
+
+final vpsUpdateCheckProvider =
+    NotifierProvider<VpsUpdateCheckNotifier, VpsUpdateCheck>(
+      VpsUpdateCheckNotifier.new,
+    );
+
+/// GitHub first, where every release is published; a vps2vpn panel is only a
+/// mirror. Any subscription, or none, gets updates.
+Future<VpsUpdateCheck> _check(
+  ProviderContainer container,
+  String current,
+) async {
+  final notifier = container.read(vpsUpdateCheckProvider.notifier);
+  final before = container.read(vpsUpdateCheckProvider);
+  notifier.set(
+    VpsUpdateCheck(
+      status: VpsUpdateStatus.checking,
+      at: before.at,
+      releases: before.releases,
+    ),
+  );
+  final on =
+      container.read(isStartProvider) && !container.read(suspendProvider);
+  final port = on ? container.read(patchClashConfigProvider).mixedPort : null;
+  final auth = on
+      ? vpsLocalProxyAuth(container.read(networkSettingProvider).authentication)
+      : null;
+  final found = <VpsClientRelease>[];
+  var answered = false;
+  String? error;
+  for (final via in [?port, null]) {
+    try {
+      final release = await vpsGitHubLookup(
+        installed: selfUpdateAsset != null,
+        proxyPort: via,
+        proxyAuth: via == null ? null : auth,
+      );
+      if (release != null) found.add(release);
+      answered = true;
+      break;
+    } catch (e) {
+      error = compactError(e);
+      commonPrint.log(
+        'GitHub release check failed: $error',
+        logLevel: LogLevel.warning,
+      );
+    }
+  }
+  final keep = container.listen(vpsMemberProvider, (_, _) {});
+  try {
+    final result = await container
+        .read(vpsMemberProvider.future)
+        .timeout(const Duration(seconds: 30));
+    if (result?.member?.client case final client?) found.add(client);
+  } catch (_) {
+  } finally {
+    keep.close();
+  }
+  final usable = [
+    for (final (i, r) in found.indexed)
+      if (r.newerThan(current) &&
+          (vpsReleaseInstaller(r) != null || vpsReleasePage(r) != null))
+        (i, r),
+  ];
+  usable.sort((a, b) {
+    if (vpsVersionNewer(a.$2.version, b.$2.version)) return -1;
+    if (vpsVersionNewer(b.$2.version, a.$2.version)) return 1;
+    return a.$1 - b.$1;
+  });
+  final check = VpsUpdateCheck(
+    status: usable.isNotEmpty
+        ? VpsUpdateStatus.available
+        : answered
+        ? VpsUpdateStatus.latest
+        : VpsUpdateStatus.failed,
+    at: DateTime.now(),
+    releases: [for (final (_, r) in usable) r],
+    error: usable.isEmpty && !answered ? error ?? 'no answer' : null,
+  );
+  notifier.set(check);
+  return check;
+}
+
+Future<VpsUpdateCheck> vpsCheckForUpdateNow(
+  WidgetRef ref, {
+  String? currentVersion,
+}) async {
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+  final current = currentVersion ?? vpsAppVersion();
+  if (current == null) return container.read(vpsUpdateCheckProvider);
+  return _check(container, current);
+}
+
+/// An installed build fetches a newer client and offers to install it; a
+/// portable copy is told, and fetches it on a tap.
 Future<void> vpsAutoUpdateCheck(
   WidgetRef ref, {
   @visibleForTesting String? currentVersion,
@@ -278,30 +443,42 @@ Future<void> vpsAutoUpdateCheck(
   final current = currentVersion ?? vpsAppVersion();
   if (current == null) return;
   final container = ProviderScope.containerOf(ref.context, listen: false);
-  // The member provider disposes itself without a listener.
-  final keep = container.listen(vpsMemberProvider, (_, _) {});
   try {
-    final result = await container
-        .read(vpsMemberProvider.future)
-        .timeout(const Duration(minutes: 1));
-    final release = result?.member?.client;
-    if (release == null || !release.newerThan(current)) return;
-    if (!vpsReleaseSelfInstalls(release)) return;
-    if (!_autoTried.add(release.version)) return;
-    final settled = await _downloadUpdate(
+    final check = await _check(container, current);
+    if (check.status != VpsUpdateStatus.available) return;
+    final newest = check.releases.first;
+    if (!_autoTried.add(newest.version)) return;
+    final installable = [
+      for (final r in check.releases)
+        if (vpsReleaseSelfInstalls(r)) r,
+    ];
+    if (installable.isEmpty) {
+      _banner(
+        (c) => tr(
+          c,
+          '有新版本 ${newest.version}，点这里下载（会先校验签名）',
+          'Version ${newest.version} is out. Tap to download it '
+              '(its signature is checked first)',
+        ),
+        BannerLevel.info,
+        onTap: () => unawaited(
+          _downloadBest(container, check.releases, current: current),
+        ),
+      );
+      return;
+    }
+    final settled = await _downloadBest(
       container,
-      release,
+      installable,
       current: current,
       auto: true,
     );
-    if (!settled) _autoTried.remove(release.version);
+    if (!settled) _autoTried.remove(newest.version);
   } catch (error) {
     commonPrint.log(
       'Client update check failed: ${compactError(error)}',
       logLevel: LogLevel.warning,
     );
-  } finally {
-    keep.close();
   }
 }
 

@@ -385,10 +385,23 @@ class VpsAccountCard extends ConsumerWidget {
   }
 }
 
-/// Settings page: the owner published a newer client on the panel. A build
-/// that installs by itself downloads it (the app also does so in the
-/// background, see auto_update.dart) and installs it with one tap; any other
-/// gets the signature-checked installer in its downloads folder.
+String _clock(BuildContext context, DateTime at) {
+  final now = DateTime.now();
+  String two(int n) => n.toString().padLeft(2, '0');
+  final time = '${two(at.hour)}:${two(at.minute)}';
+  if (at.year == now.year && at.month == now.month && at.day == now.day) {
+    return time;
+  }
+  return tr(
+    context,
+    '${at.month}月${at.day}日 $time',
+    '${at.month}/${at.day} $time',
+  );
+}
+
+/// Settings page, always shown: this version, the last check and what it
+/// found, and the way to the newer client when there is one, from GitHub or
+/// from the panel's mirror.
 class VpsUpdateCard extends ConsumerWidget {
   const VpsUpdateCard({super.key, this.currentVersion});
 
@@ -397,93 +410,195 @@ class VpsUpdateCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final release = ref.watch(vpsMemberProvider).value?.member?.client;
     final current = currentVersion ?? vpsAppVersion();
+    final check = ref.watch(vpsUpdateCheckProvider);
+    final mirror = ref.watch(vpsMemberProvider).value?.member?.client;
     final download = ref.watch(updateDownloadStateProvider);
-    if (release == null || current == null || !release.newerThan(current)) {
-      return const SizedBox.shrink();
-    }
-    final installer = vpsReleaseInstaller(release);
-    // Nothing this device can use: another platform's installer only.
-    if (installer == null && vpsReleasePage(release) == null) {
-      return const SizedBox.shrink();
-    }
-    final installs = vpsReleaseSelfInstalls(release);
-    final tag = 'v${release.version}';
-    final ready = download is UpdateReady && download.tag == tag;
-    final busy = download is UpdateDownloading;
-    final percent = download is UpdateDownloading && download.total > 0
-        ? ' ${(download.received * 100 ~/ download.total).clamp(0, 100)}%'
-        : '';
+    final auto = ref.watch(appSettingProvider.select((s) => s.autoCheckUpdate));
+    final offers = [
+      ...check.releases,
+      if (mirror != null &&
+          current != null &&
+          mirror.newerThan(current) &&
+          (vpsReleaseInstaller(mirror) != null ||
+              vpsReleasePage(mirror) != null) &&
+          !check.releases.any((r) => r.version == mirror.version))
+        mirror,
+    ];
+    final release = offers.fold<VpsClientRelease?>(
+      null,
+      (best, r) =>
+          best == null || vpsVersionNewer(r.version, best.version) ? r : best,
+    );
     final p = VpsPalette.of(context);
+    final version = current ?? tr(context, '未知', 'unknown');
+    final at = check.at == null ? null : _clock(context, check.at!);
+    final Widget action;
+    final String title;
+    final String detail;
+    if (release != null) {
+      final ordered = [
+        release,
+        for (final r in offers)
+          if (!identical(r, release)) r,
+      ];
+      final installer = vpsReleaseInstaller(release);
+      final installs = vpsReleaseSelfInstalls(release);
+      final tag = 'v${release.version}';
+      final ready = download is UpdateReady && download.tag == tag;
+      final busy = download is UpdateDownloading;
+      final percent = download is UpdateDownloading && download.total > 0
+          ? ' ${(download.received * 100 ~/ download.total).clamp(0, 100)}%'
+          : '';
+      title = tr(
+        context,
+        '有新版本 ${release.version}',
+        'Version ${release.version} is available',
+      );
+      detail =
+          release.notes ??
+          (installs
+              ? tr(
+                  context,
+                  '当前 $version，更新会自动安装并重启 vps2vpn',
+                  'You have $version; the update installs itself and '
+                      'restarts vps2vpn',
+                )
+              : installer == null
+              ? tr(
+                  context,
+                  '当前 $version，在下载页获取新版本',
+                  'You have $version; get it from the download page',
+                )
+              : tr(
+                  context,
+                  '当前 $version，下载并校验签名后会打开所在文件夹',
+                  'You have $version; it is downloaded, its signature '
+                      'checked, and its folder opened',
+                ));
+      action = VpsButton(
+        label: ready
+            ? tr(context, '安装并重启', 'Install & restart')
+            : busy
+            ? tr(context, '下载中$percent', 'Downloading$percent')
+            : installs
+            ? tr(context, '更新', 'Update')
+            : installer == null
+            ? tr(context, '打开下载页', 'Open download page')
+            : tr(context, '下载', 'Download'),
+        filled: true,
+        onTap: ready
+            ? () => unawaited(
+                ref.read(commonActionProvider.notifier).installUpdate(),
+              )
+            : busy || current == null
+            ? null
+            : () =>
+                  unawaited(vpsDownloadUpdate(ref, ordered, current: current)),
+      );
+    } else {
+      title = tr(context, '版本与更新', 'Version and updates');
+      final status = switch (check.status) {
+        VpsUpdateStatus.checking => tr(context, '正在检查…', 'Checking…'),
+        VpsUpdateStatus.latest => tr(
+          context,
+          '已是最新（$at 检查）',
+          'Up to date (checked $at)',
+        ),
+        VpsUpdateStatus.failed => tr(
+          context,
+          '检查失败（$at）：连不上 GitHub，稍后会再试',
+          'Check failed ($at): GitHub could not be reached; it is tried '
+              'again later',
+        ),
+        _ =>
+          auto
+              ? tr(
+                  context,
+                  '还没检查过，启动后会自动检查',
+                  'Not checked yet; it checks shortly after start',
+                )
+              : tr(context, '自动检查已关闭', 'Automatic checks are off'),
+      };
+      detail = tr(
+        context,
+        '当前 $version · $status',
+        'You have $version · $status',
+      );
+      final checking = check.status == VpsUpdateStatus.checking;
+      action = VpsButton(
+        label: checking
+            ? tr(context, '检查中…', 'Checking…')
+            : tr(context, '检查更新', 'Check now'),
+        onTap: checking || current == null
+            ? null
+            : () =>
+                  unawaited(vpsCheckForUpdateNow(ref, currentVersion: current)),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: VpsCard(
-        highlight: true,
-        padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-        child: Row(
+        highlight: release != null,
+        padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            VpsIconView(VpsIcon.sparkle, size: 19, color: p.accent),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tr(
-                      context,
-                      '有新版本 ${release.version}',
-                      'Version ${release.version} is available',
-                    ),
-                    style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+            Row(
+              children: [
+                VpsIconView(
+                  release != null ? VpsIcon.sparkle : VpsIcon.refresh,
+                  size: 19,
+                  color: release != null ? p.accent : p.soft,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        detail,
+                        style: vpsText(
+                          p,
+                          size: 13,
+                          color:
+                              check.status == VpsUpdateStatus.failed &&
+                                  release == null
+                              ? p.warn
+                              : p.soft,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    release.notes ??
-                        (installs
-                            ? tr(
-                                context,
-                                '当前 $current，更新会自动安装并重启 vps2vpn',
-                                'You have $current; the update installs '
-                                    'itself and restarts vps2vpn',
-                              )
-                            : installer == null
-                            ? tr(
-                                context,
-                                '当前 $current，在下载页获取新版本',
-                                'You have $current; get it from the download page',
-                              )
-                            : tr(
-                                context,
-                                '当前 $current，下载后运行安装包即可升级',
-                                'You have $current; run the downloaded installer',
-                              )),
-                    style: vpsText(p, size: 13, color: p.soft, height: 1.45),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                action,
+              ],
             ),
-            const SizedBox(width: 12),
-            VpsButton(
-              label: ready
-                  ? tr(context, '安装并重启', 'Install & restart')
-                  : busy
-                  ? tr(context, '下载中$percent', 'Downloading$percent')
-                  : installs
-                  ? tr(context, '更新', 'Update')
-                  : installer == null
-                  ? tr(context, '打开下载页', 'Open download page')
-                  : tr(context, '下载', 'Download'),
-              filled: true,
-              onTap: ready
-                  ? () => unawaited(
-                      ref.read(commonActionProvider.notifier).installUpdate(),
-                    )
-                  : busy
-                  ? null
-                  : () => unawaited(
-                      vpsDownloadPanelUpdate(ref, release, current: current),
-                    ),
+            const SizedBox(height: 10),
+            Container(height: 1, color: p.line),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    tr(context, '自动检查更新', 'Check for updates automatically'),
+                    style: vpsText(p, size: 13, color: p.soft),
+                  ),
+                ),
+                VpsSwitch(
+                  value: auto,
+                  onChanged: (v) => ref
+                      .read(appSettingProvider.notifier)
+                      .update((s) => s.copyWith(autoCheckUpdate: v)),
+                ),
+              ],
             ),
           ],
         ),

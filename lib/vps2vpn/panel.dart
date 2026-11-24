@@ -1019,6 +1019,97 @@ const _maxReleaseBytes = 512 * 1024 * 1024;
 const _releaseTransferTimeout = Duration(minutes: 8);
 final _activeReleaseDownloads = <String>{};
 
+const vpsReleaseRepository = 'xydadada/vps2vpn-client';
+
+/// Null when nothing is published. When the API's hourly quota is spent the
+/// tag comes from the release page's redirect.
+Future<VpsClientRelease?> vpsLatestGitHubRelease({
+  required bool installed,
+  int? proxyPort,
+  String? proxyAuth,
+}) async {
+  final client = _client(proxyPort: proxyPort, proxyAuth: proxyAuth);
+  try {
+    final api = await client
+        .getUrl(
+          Uri.https(
+            'api.github.com',
+            '/repos/$vpsReleaseRepository/releases/latest',
+          ),
+        )
+        .timeout(const Duration(seconds: 15));
+    api.headers
+      ..set(HttpHeaders.acceptHeader, 'application/vnd.github+json')
+      ..set(HttpHeaders.userAgentHeader, 'vps2vpn');
+    final res = await api.close().timeout(const Duration(seconds: 15));
+    final text = await _readBoundedUtf8(
+      res,
+      maxBytes: 2 << 20,
+    ).timeout(const Duration(seconds: 20));
+    if (res.statusCode == HttpStatus.notFound) return null;
+    if (res.statusCode == HttpStatus.ok) {
+      return vpsReleaseFromGitHub(jsonDecode(text), installed: installed);
+    }
+    final page = await client
+        .getUrl(
+          Uri.https('github.com', '/$vpsReleaseRepository/releases/latest'),
+        )
+        .timeout(const Duration(seconds: 15));
+    page.followRedirects = false;
+    final moved = await page.close().timeout(const Duration(seconds: 15));
+    unawaited(moved.drain<void>().catchError((_) {}));
+    final location = moved.headers.value(HttpHeaders.locationHeader) ?? '';
+    final segments = Uri.tryParse(location)?.pathSegments ?? const [];
+    final at = segments.indexOf('tag') + 1;
+    if (!moved.isRedirect || at == 0 || at >= segments.length) {
+      throw HttpException('GitHub answered HTTP ${res.statusCode}');
+    }
+    return vpsReleaseFromGitHub({
+      'tag_name': segments[at],
+    }, installed: installed);
+  } finally {
+    client.close(force: true);
+  }
+}
+
+VpsClientRelease? vpsReleaseFromGitHub(
+  Object? json, {
+  required bool installed,
+}) {
+  if (json is! Map || json['draft'] == true || json['prerelease'] == true) {
+    return null;
+  }
+  final tag = '${json['tag_name'] ?? ''}'.trim();
+  final version = tag.replaceFirst(RegExp(r'^[vV]+'), '');
+  if (!RegExp(r'^\d+(\.\d+){1,3}$').hasMatch(version)) return null;
+  final listed = <String, Uri>{};
+  final assets = json['assets'];
+  if (assets is List) {
+    for (final a in assets) {
+      if (a is! Map) continue;
+      final url = Uri.tryParse('${a['browser_download_url'] ?? ''}');
+      if (url != null && url.isScheme('https')) listed['${a['name']}'] = url;
+    }
+  }
+  Uri file(String name) =>
+      listed[name] ??
+      Uri.https(
+        'github.com',
+        '/$vpsReleaseRepository/releases/download/$tag/$name',
+      );
+  final windows = installed
+      ? 'vps2vpn-$version-windows-amd64-setup.exe'
+      : 'vps2vpn-$version-windows-amd64-portable.zip';
+  final page = Uri.tryParse('${json['html_url'] ?? ''}');
+  return VpsClientRelease(
+    version: version,
+    url: page != null && page.isScheme('https')
+        ? page
+        : Uri.https('github.com', '/$vpsReleaseRepository/releases/tag/$tag'),
+    files: {'windows': file(windows)},
+  );
+}
+
 /// Download a release only over verified or explicitly pinned HTTPS, and keep
 /// it only when `<url>.sig` is the release key's signature for it (see
 /// update_signing.dart) and, given [currentVersion], its file name carries a
@@ -1119,9 +1210,7 @@ Future<File> _downloadReleaseVia(
     // prevents following a pre-existing symlink to an unrelated user file.
     staging = await dir.createTemp('.vps2vpn-release-');
     final part = File('${staging.path}${Platform.pathSeparator}$name.part');
-    final req = await client.getUrl(url).timeout(const Duration(seconds: 15));
-    req.followRedirects = false;
-    final res = await req.close().timeout(const Duration(seconds: 15));
+    final res = await _getFollowing(client, url);
     if (res.statusCode != HttpStatus.ok) {
       // Do not drain an unbounded 4xx/5xx response: close the client below.
       throw HttpException('Download failed (HTTP ${res.statusCode})');
@@ -1189,6 +1278,25 @@ Future<File> _downloadReleaseVia(
   }
 }
 
+/// GETs [url] through up to five HTTPS redirects: GitHub serves release files
+/// from another host. The signature, not the host, vouches for the file.
+Future<HttpClientResponse> _getFollowing(HttpClient client, Uri url) async {
+  var at = url;
+  for (var hop = 0; ; hop++) {
+    final req = await client.getUrl(at).timeout(const Duration(seconds: 15));
+    req.followRedirects = false;
+    final res = await req.close().timeout(const Duration(seconds: 15));
+    if (!res.isRedirect) return res;
+    final location = res.headers.value(HttpHeaders.locationHeader);
+    unawaited(res.drain<void>().catchError((_) {}));
+    final next = location == null ? null : at.resolve(location);
+    if (hop >= 5 || next == null || !next.isScheme('https')) {
+      throw HttpException('Unexpected redirect to $location');
+    }
+    at = next;
+  }
+}
+
 /// `<installer>.sig` next to the download, or null when there is none.
 Future<String?> _fetchSignature(HttpClient client, Uri url, String name) async {
   final sigUrl = url.replace(
@@ -1197,9 +1305,7 @@ Future<String?> _fetchSignature(HttpClient client, Uri url, String name) async {
       '$name.sig',
     ],
   );
-  final req = await client.getUrl(sigUrl).timeout(const Duration(seconds: 15));
-  req.followRedirects = false;
-  final res = await req.close().timeout(const Duration(seconds: 15));
+  final res = await _getFollowing(client, sigUrl);
   if (res.statusCode != HttpStatus.ok) {
     if (res.statusCode == HttpStatus.notFound) return null;
     throw HttpException('Signature download failed (HTTP ${res.statusCode})');

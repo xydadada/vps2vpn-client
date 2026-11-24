@@ -144,7 +144,11 @@ class ApplicationState extends ConsumerState<Application> {
     _clientUpdateTimer = Timer(delay, () async {
       if (!safeModeBuild) await vpsAutoUpdateCheck(ref);
       if (!mounted) return;
-      _clientUpdateTask(vpsUpdateCheckInterval);
+      final failed =
+          ref.read(vpsUpdateCheckProvider).status == VpsUpdateStatus.failed;
+      _clientUpdateTask(
+        failed ? vpsUpdateRetryInterval : vpsUpdateCheckInterval,
+      );
     });
   }
 

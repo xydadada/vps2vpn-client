@@ -51,10 +51,34 @@ SelfUpdateAsset? _asset(ReleaseOs? os) => os == null
     ? null
     : (os: os, arch: ReleaseArch.amd64, form: null, extension: '');
 
+Future<VpsClientRelease?> Function({
+  required bool installed,
+  int? proxyPort,
+  String? proxyAuth,
+})
+_gitHub(Object? answer) =>
+    ({required installed, proxyPort, proxyAuth}) async => switch (answer) {
+      final VpsClientRelease r => r,
+      final Exception e => throw e,
+      _ => null,
+    };
+
+VpsClientRelease _onGitHub(String v) => vpsReleaseFromGitHub({
+  'tag_name': 'v$v',
+  'html_url': 'https://github.com/$vpsReleaseRepository/releases/tag/v$v',
+}, installed: false)!;
+
 void main() {
   final realAsset = resolveSelfUpdateAsset;
-  setUp(() => resolveSelfUpdateAsset = () => null);
-  tearDown(() => resolveSelfUpdateAsset = realAsset);
+  final realGitHub = vpsGitHubLookup;
+  setUp(() {
+    resolveSelfUpdateAsset = () => null;
+    vpsGitHubLookup = _gitHub(null);
+  });
+  tearDown(() {
+    resolveSelfUpdateAsset = realAsset;
+    vpsGitHubLookup = realGitHub;
+  });
 
   testWidgets('hidden for subscriptions that are not vps2vpn links', (
     tester,
@@ -254,7 +278,8 @@ void main() {
       const VpsUpdateCard(currentVersion: '1.2.0'),
       withClient('1.1.0'),
     );
-    expect(_texts(), findsNothing);
+    expect(find.text('Version 1.1.0 is available'), findsNothing);
+    expect(find.text('Version and updates'), findsOneWidget);
   });
 
   testWidgets('a release page opens in the browser; another platform is hidden', (
@@ -287,7 +312,127 @@ void main() {
         VpsClientRelease(version: '1.1.0', url: file, files: {other: file}),
       ),
     );
-    expect(_texts(), findsNothing);
+    expect(find.text('Version 1.1.0 is available'), findsNothing);
+    expect(find.text('Version and updates'), findsOneWidget);
+  });
+
+  group('updates are no server needed for updates', () {
+    Future<void> check(WidgetTester tester) async {
+      await tester.tap(find.text('Check now'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a subscription that is not a vps2vpn server still gets them', (
+      tester,
+    ) async {
+      vpsGitHubLookup = _gitHub(_onGitHub('1.2.0'));
+      await _pump(
+        tester,
+        const VpsUpdateCard(currentVersion: '1.0.0'),
+        null,
+        subscription: 'https://provider.example.com/clash.yaml',
+      );
+      expect(find.text('Version and updates'), findsOneWidget);
+      expect(find.textContaining('Not checked yet'), findsOneWidget);
+      await check(tester);
+      expect(find.text('Version 1.2.0 is available'), findsOneWidget);
+    });
+
+    testWidgets('a panel without a client field leaves the answer to GitHub', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const VpsUpdateCard(currentVersion: '1.0.0'),
+        const VpsMemberResult(member: VpsMember(name: 'Ann', enabled: true)),
+      );
+      await check(tester);
+      expect(find.textContaining('Up to date'), findsOneWidget);
+      vpsGitHubLookup = _gitHub(_onGitHub('1.3.0'));
+      await check(tester);
+      expect(find.text('Version 1.3.0 is available'), findsOneWidget);
+    });
+
+    testWidgets('GitHub out of reach says so, and the panel mirror stands in', (
+      tester,
+    ) async {
+      vpsGitHubLookup = _gitHub(const SocketException('unreachable'));
+      await _pump(tester, const VpsUpdateCard(currentVersion: '1.0.0'), null);
+      await check(tester);
+      expect(find.textContaining('Check failed'), findsOneWidget);
+      expect(find.text('Check now'), findsOneWidget);
+
+      await _pump(
+        tester,
+        const VpsUpdateCard(currentVersion: '1.0.0'),
+        VpsMemberResult(
+          member: VpsMember(
+            name: 'Ann',
+            enabled: true,
+            client: VpsClientRelease(
+              version: '1.1.0',
+              url: Uri.parse('https://example.com/releases/latest'),
+            ),
+          ),
+        ),
+      );
+      await check(tester);
+      expect(find.text('Version 1.1.0 is available'), findsOneWidget);
+    });
+
+    testWidgets('the newer of GitHub and the mirror wins', (tester) async {
+      vpsGitHubLookup = _gitHub(_onGitHub('1.4.0'));
+      await _pump(
+        tester,
+        const VpsUpdateCard(currentVersion: '1.0.0'),
+        VpsMemberResult(
+          member: VpsMember(
+            name: 'Ann',
+            enabled: true,
+            client: VpsClientRelease(
+              version: '1.1.0',
+              url: Uri.parse('https://example.com/releases/latest'),
+            ),
+          ),
+        ),
+      );
+      await check(tester);
+      expect(find.text('Version 1.4.0 is available'), findsOneWidget);
+    });
+
+    test('reads the latest GitHub release for this build', () {
+      final json = {
+        'tag_name': 'v1.2.0',
+        'html_url':
+            'https://github.com/$vpsReleaseRepository/releases/tag/v1.2.0',
+        'assets': [
+          {
+            'name': 'vps2vpn-1.2.0-windows-amd64-setup.exe',
+            'browser_download_url': 'https://example.com/a/setup.exe',
+          },
+        ],
+      };
+      final installed = vpsReleaseFromGitHub(json, installed: true)!;
+      expect(installed.version, '1.2.0');
+      expect(
+        installed.files['windows'].toString(),
+        'https://example.com/a/setup.exe',
+      );
+      final portable = vpsReleaseFromGitHub(json, installed: false)!;
+      expect(
+        portable.files['windows']!.path,
+        '/$vpsReleaseRepository/releases/download/v1.2.0/'
+        'vps2vpn-1.2.0-windows-amd64-portable.zip',
+      );
+      expect(
+        vpsReleaseFromGitHub({...json, 'prerelease': true}, installed: true),
+        isNull,
+      );
+      expect(
+        vpsReleaseFromGitHub({'tag_name': 'test-1.2.0'}, installed: true),
+        isNull,
+      );
+    });
   });
 
   test('a platform map key cannot spoof the signed installer OS', () {
@@ -347,11 +492,13 @@ void main() {
       resetVpsAutoUpdate();
     });
 
-    // Run [body] with a WidgetRef of an app whose panel offers 1.1.0.
+    // Run [body] with a WidgetRef of an app whose panel offers 1.1.0, or
+    // with no vps2vpn panel at all.
     Future<void> withRef(
       WidgetTester tester,
-      Future<void> Function(WidgetRef ref, ProviderContainer c) body,
-    ) async {
+      Future<void> Function(WidgetRef ref, ProviderContainer c) body, {
+      bool panel = true,
+    }) async {
       late WidgetRef captured;
       final release = VpsClientRelease(
         version: '1.1.0',
@@ -366,9 +513,15 @@ void main() {
           locale: const Locale('en'),
           overrides: [
             vpsMemberProvider.overrideWith(
-              (ref) async => VpsMemberResult(
-                member: VpsMember(name: 'Ann', enabled: true, client: release),
-              ),
+              (ref) async => panel
+                  ? VpsMemberResult(
+                      member: VpsMember(
+                        name: 'Ann',
+                        enabled: true,
+                        client: release,
+                      ),
+                    )
+                  : null,
             ),
           ],
           child: Consumer(
@@ -577,6 +730,54 @@ void main() {
       await withRef(tester, (ref, c) async {
         await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
         expect(calls, 0);
+        final check = c.read(vpsUpdateCheckProvider);
+        expect(check.status, VpsUpdateStatus.available);
+        expect(check.releases.first.version, '1.1.0');
+      });
+    });
+
+    testWidgets('without a vps2vpn panel the update comes from GitHub', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      final setup = Uri.https(
+        'github.com',
+        '/$vpsReleaseRepository/releases/download/v1.2.0/'
+            'vps2vpn-1.2.0-${Platform.operatingSystem}-amd64-setup.exe',
+      );
+      vpsGitHubLookup = _gitHub(VpsClientRelease(version: '1.2.0', url: setup));
+      final fetched = <Uri>[];
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            fetched.add(url);
+            return File('setup.exe');
+          };
+      await withRef(tester, panel: false, (ref, c) async {
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(fetched.single.host, 'github.com');
+        expect(
+          (c.read(updateDownloadStateProvider) as UpdateReady).tag,
+          'v1.2.0',
+        );
+        c.read(updateDownloadStateProvider.notifier).value = null;
+      });
+    });
+
+    testWidgets('automatic checks off: no check in the background', (
+      tester,
+    ) async {
+      var asked = 0;
+      vpsGitHubLookup = ({required installed, proxyPort, proxyAuth}) async {
+        asked++;
+        return null;
+      };
+      await withRef(tester, panel: false, (ref, c) async {
+        c
+            .read(appSettingProvider.notifier)
+            .update((s) => s.copyWith(autoCheckUpdate: false));
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(asked, 0);
+        expect(c.read(vpsUpdateCheckProvider).status, VpsUpdateStatus.never);
       });
     });
   });
