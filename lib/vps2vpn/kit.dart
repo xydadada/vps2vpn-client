@@ -540,17 +540,25 @@ class _VpsBreatheState extends State<VpsBreathe>
     duration: const Duration(milliseconds: 1400),
   );
 
+  bool _still = false;
+
   @override
-  void initState() {
-    super.initState();
-    if (widget.active) _c.repeat(reverse: true);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _still = MediaQuery.disableAnimationsOf(context);
+    _sync();
   }
 
   @override
   void didUpdateWidget(VpsBreathe old) {
     super.didUpdateWidget(old);
-    if (widget.active && !_c.isAnimating) _c.repeat(reverse: true);
-    if (!widget.active && _c.isAnimating) {
+    _sync();
+  }
+
+  void _sync() {
+    if (widget.active && !_still) {
+      if (!_c.isAnimating) _c.repeat(reverse: true);
+    } else if (_c.isAnimating) {
       _c.stop();
       _c.value = 1;
     }
@@ -564,7 +572,7 @@ class _VpsBreatheState extends State<VpsBreathe>
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.active) return widget.child;
+    if (!widget.active || _still) return widget.child;
     return FadeTransition(
       opacity: Tween(
         begin: 0.38,
