@@ -656,6 +656,14 @@ class _VpsBreatheState extends State<VpsBreathe>
     vsync: this,
     duration: const Duration(milliseconds: 1400),
   );
+  late final CurvedAnimation _curve = CurvedAnimation(
+    parent: _c,
+    curve: Curves.easeInOutSine,
+  );
+  late final Animation<double> _opacity = Tween(
+    begin: 0.38,
+    end: 1.0,
+  ).animate(_curve);
 
   bool _still = false;
 
@@ -683,6 +691,7 @@ class _VpsBreatheState extends State<VpsBreathe>
 
   @override
   void dispose() {
+    _curve.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -690,13 +699,7 @@ class _VpsBreatheState extends State<VpsBreathe>
   @override
   Widget build(BuildContext context) {
     if (!widget.active || _still) return widget.child;
-    return FadeTransition(
-      opacity: Tween(
-        begin: 0.38,
-        end: 1.0,
-      ).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOutSine)),
-      child: widget.child,
-    );
+    return FadeTransition(opacity: _opacity, child: widget.child);
   }
 }
 

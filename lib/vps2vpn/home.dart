@@ -731,15 +731,21 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
   // Busy, the ring turns fast while the line is tried; connected, the glow
   // breathes once every four seconds.
   void _sync() {
-    _spin.duration = Duration(milliseconds: widget.busy ? 1200 : 6000);
+    final period = Duration(milliseconds: widget.busy ? 1200 : 6000);
+    final retimed = _spin.duration != period;
+    _spin.duration = period;
     if (widget.on && !_still) {
-      _spin.repeat();
+      // repeat() carries on from the current angle; only a new speed needs it.
+      if (retimed || !_spin.isAnimating) _spin.repeat();
       if (!_breath.isAnimating) _breath.repeat(reverse: true);
     } else {
       _spin.stop();
       _breath
         ..stop()
         ..value = 1;
+      _ripple
+        ..stop()
+        ..value = 0;
     }
   }
 
@@ -970,7 +976,8 @@ class _Stats extends ConsumerWidget {
     final traffics = ref.watch(trafficsProvider);
     final now = traffics.list.safeLast(const Traffic());
     final recent = traffics.list;
-    final on = ref.watch(isStartProvider);
+    final started = ref.watch(isStartProvider);
+    final on = started && !ref.watch(suspendProvider);
     final total = ref.watch(totalTrafficProvider);
     final profile = ref.watch(currentProfileProvider);
     final sub = profile?.subscriptionInfo;
