@@ -439,10 +439,10 @@ class _ProxyCard extends ConsumerWidget {
     final (delayText, delayColor) = switch (delay) {
       null => ('—', p.muted),
       0 => ('…', p.soft),
-      < 0 => (tr(context, '超时', 'Timeout'), p.bad),
+      < 0 => (tr(context, '超时', 'Timeout'), p.muted),
       < 200 => ('$delay ms', p.good),
       < 500 => ('$delay ms', p.warn),
-      _ => ('$delay ms', p.bad),
+      _ => ('$delay ms', p.soft),
     };
     return VpsCard(
       onTap: onTap,

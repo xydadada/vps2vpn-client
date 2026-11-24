@@ -409,10 +409,10 @@ class _HeroState extends ConsumerState<_Hero> {
               label: tr(context, '测速中…', 'Testing…'),
               color: p.muted,
             ),
-            < 0 => VpsChip(label: tr(context, '超时', 'Timed out'), color: p.bad),
+            < 0 => VpsChip(label: tr(context, '延迟 —', '— ms'), color: p.muted),
             final d => VpsChip(
               label: tr(context, '延迟 $d ms', '$d ms'),
-              color: d < 200 ? p.good : (d < 500 ? p.warn : p.bad),
+              color: d < 200 ? p.good : (d < 500 ? p.warn : p.soft),
             ),
           };
     final sub = !hasProfile
@@ -490,7 +490,12 @@ class _HeroState extends ConsumerState<_Hero> {
               : CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            VpsChip(label: status, color: statusColor, tinted: true),
+            VpsChip(
+              label: status,
+              color: statusColor,
+              tinted: true,
+              beat: on && (delay ?? 0) > 0 ? delay : null,
+            ),
             const SizedBox(height: 14),
             AnimatedSwitcher(
               duration: VpsMotion.medium,
@@ -679,38 +684,62 @@ class _PowerRing extends StatefulWidget {
   State<_PowerRing> createState() => _PowerRingState();
 }
 
-class _PowerRingState extends State<_PowerRing>
-    with SingleTickerProviderStateMixin {
+class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
   late final AnimationController _spin = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 6),
   );
+  late final AnimationController _breath = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 2),
+    value: 1,
+  );
+  late final AnimationController _ripple = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  late final Animation<double> _glow = _breath.drive(
+    Tween<double>(
+      begin: 0.72,
+      end: 1,
+    ).chain(CurveTween(curve: Curves.easeInOutSine)),
+  );
+  bool _still = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _still = MediaQuery.disableAnimationsOf(context);
     _sync();
   }
 
   @override
   void didUpdateWidget(_PowerRing old) {
     super.didUpdateWidget(old);
+    if (!old.on && widget.on && !_still) _ripple.forward(from: 0);
     if (old.busy != widget.busy || old.on != widget.on) _sync();
   }
 
-  // Busy, the ring turns fast while the line is tried.
+  // Busy, the ring turns fast while the line is tried; connected, the glow
+  // breathes once every four seconds.
   void _sync() {
     _spin.duration = Duration(milliseconds: widget.busy ? 1200 : 6000);
-    if (widget.on) {
+    if (widget.on && !_still) {
       _spin.repeat();
+      if (!_breath.isAnimating) _breath.repeat(reverse: true);
     } else {
       _spin.stop();
+      _breath
+        ..stop()
+        ..value = 1;
     }
   }
 
   @override
   void dispose() {
     _spin.dispose();
+    _breath.dispose();
+    _ripple.dispose();
     super.dispose();
   }
 
@@ -725,25 +754,52 @@ class _PowerRingState extends State<_PowerRing>
         height: s,
         child: Stack(
           alignment: Alignment.center,
+          clipBehavior: Clip.none,
           children: [
             // Outer glow in the state's colour (connected) or the brand's
             // (an invitation to connect).
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 600),
-              curve: VpsMotion.settle,
-              width: s,
-              height: s,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: (widget.on ? widget.tone : vpsCoral).withValues(
-                      alpha: widget.on ? 0.32 : 0.22,
+            FadeTransition(
+              opacity: _glow,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 600),
+                curve: VpsMotion.settle,
+                width: s,
+                height: s,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (widget.on ? widget.tone : vpsCoral).withValues(
+                        alpha: widget.on ? 0.32 : 0.22,
+                      ),
+                      blurRadius: widget.on ? 56 : 36,
                     ),
-                    blurRadius: widget.on ? 56 : 36,
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ),
+            // One wave out from the button the moment it connects.
+            AnimatedBuilder(
+              animation: _ripple,
+              builder: (_, _) {
+                final t = Curves.easeOutCubic.transform(_ripple.value);
+                if (_ripple.value == 0 || _ripple.isCompleted) {
+                  return const SizedBox.shrink();
+                }
+                return IgnorePointer(
+                  child: Container(
+                    width: s * (0.7 + 0.55 * t),
+                    height: s * (0.7 + 0.55 * t),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: widget.tone.withValues(alpha: 0.4 * (1 - t)),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             // Rotating ring, in the state's colour while connected.
             AnimatedBuilder(

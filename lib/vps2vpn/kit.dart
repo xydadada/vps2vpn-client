@@ -859,16 +859,82 @@ class VpsSegmented<T> extends StatelessWidget {
   }
 }
 
+class _BeatDot extends StatefulWidget {
+  const _BeatDot({required this.color, required this.beat});
+
+  final Color color;
+  final Object? beat;
+
+  @override
+  State<_BeatDot> createState() => _BeatDotState();
+}
+
+class _BeatDotState extends State<_BeatDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 520),
+  );
+  late final Animation<double> _scale = _c.drive(
+    TweenSequence([
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 1,
+          end: 1.7,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 1.7,
+          end: 1,
+        ).chain(CurveTween(curve: VpsMotion.settle)),
+        weight: 65,
+      ),
+    ]),
+  );
+
+  @override
+  void didUpdateWidget(_BeatDot old) {
+    super.didUpdateWidget(old);
+    if (widget.beat != null &&
+        old.beat != widget.beat &&
+        !MediaQuery.disableAnimationsOf(context)) {
+      _c.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ScaleTransition(
+    scale: _scale,
+    child: Container(
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+    ),
+  );
+}
+
 class VpsChip extends StatelessWidget {
   const VpsChip({
     super.key,
     required this.label,
     this.color,
     this.tinted = false,
+    this.beat,
   });
 
   final String label;
   final Color? color;
+
+  /// The dot hops each time this changes: a sign of life.
+  final Object? beat;
 
   /// A capsule washed in [color] with text in it: for the one state that
   /// matters on a card, where a dot is too quiet.
@@ -890,11 +956,7 @@ class VpsChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-            ),
+            _BeatDot(color: c, beat: beat),
             const SizedBox(width: 7),
             Text(
               label,
