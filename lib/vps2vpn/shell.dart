@@ -17,6 +17,7 @@ import 'package:fl_clash/vps2vpn/mine.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart' show Theme;
 
@@ -35,6 +36,20 @@ const vpsTabMe = 4;
 class VpsShell extends StatelessWidget {
   const VpsShell({super.key});
 
+  /// Ctrl+1 to Ctrl+5 (⌘ on macOS) open the pages in the sidebar's order.
+  static final _shortcuts = <ShortcutActivator, VoidCallback>{
+    for (final (i, key) in const [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+      LogicalKeyboardKey.digit5,
+    ].indexed) ...{
+      SingleActivator(key, control: true): () => vpsTab.value = i,
+      SingleActivator(key, meta: true): () => vpsTab.value = i,
+    },
+  };
+
   static const _pages = [
     VpsHomePage(),
     VpsServersPage(),
@@ -47,7 +62,7 @@ class VpsShell extends StatelessWidget {
   Widget build(BuildContext context) {
     // Our pages sit outside prism_ui's Scaffold, so give them the app's font
     // (and no debug underline) here.
-    return DefaultTextStyle(
+    final page = DefaultTextStyle(
       style: Theme.of(context).bodyTextStyle.copyWith(
         decoration: TextDecoration.none,
         color: VpsPalette.of(context).text,
@@ -108,6 +123,10 @@ class VpsShell extends StatelessWidget {
           ),
         ),
       ),
+    );
+    return CallbackShortcuts(
+      bindings: _shortcuts,
+      child: Focus(autofocus: true, skipTraversal: true, child: page),
     );
   }
 }
