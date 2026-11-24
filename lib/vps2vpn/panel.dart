@@ -865,6 +865,59 @@ final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
   return result;
 });
 
+bool _always() => true;
+
+/// Under the smart line every server group it lists is scanned: its own
+/// members are groups, not lines. Null when [alive] turned false part way.
+Future<List<VpsWatchedLine>?> vpsCollectWatchedLines(
+  List<Group> groups, {
+  required Future<Map<String, dynamic>?> Function(String name) define,
+  bool Function() alive = _always,
+}) async {
+  if (groups.isEmpty) return const [];
+  final smart = groups.where((g) => g.name == vpsSmartGroupName).firstOrNull;
+  final fallback =
+      groups
+          .where((g) => g.type == GroupType.Selector && g.hidden != true)
+          .firstOrNull ??
+      groups.first;
+  final candidates = smart != null
+      ? [
+          smart,
+          for (final g in groups)
+            if (smart.all.any((p) => p.name == g.name)) g,
+        ]
+      : [
+          fallback,
+          for (final g in groups)
+            if (g.name != fallback.name) g,
+        ];
+  final lines = <VpsWatchedLine>[];
+  final seen = <String>{};
+  for (final group in candidates) {
+    final testUrl = group.testUrl ?? defaultTestUrl;
+    for (final proxy in group.all) {
+      if (!seen.add(proxy.name)) continue;
+      final def = await define(proxy.name);
+      if (!alive()) return null;
+      if (def == null) continue;
+      final kind = vpsLineKind(def);
+      final host = vpsLineReportHost(def);
+      if (kind == null || host == null) continue;
+      lines.add(
+        VpsWatchedLine(
+          name: proxy.name,
+          kind: kind,
+          host: host,
+          testUrl: testUrl,
+        ),
+      );
+    }
+    if (smart == null && lines.isNotEmpty) break;
+  }
+  return lines;
+}
+
 final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
   if (ref.watch(safeModeProvider) ||
       Platform.environment.containsKey('FLUTTER_TEST') ||
@@ -892,57 +945,20 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
       }
       final groups = ref.read(groupsProvider);
       if (groups.isEmpty) return null;
-      final smart = groups
-          .where((g) => g.name == vpsSmartGroupName)
-          .firstOrNull;
-      final fallback =
-          groups
-              .where((g) => g.type == GroupType.Selector && g.hidden != true)
-              .firstOrNull ??
-          groups.first;
-      // The smart line lists one group per server; their lines are what
-      // gets watched.
-      final candidates = smart != null
-          ? [
-              smart,
-              for (final g in groups)
-                if (smart.all.any((p) => p.name == g.name)) g,
-            ]
-          : [
-              fallback,
-              for (final g in groups)
-                if (g.name != fallback.name) g,
-            ];
-      final lines = <VpsWatchedLine>[];
       final pins = <String>{
         ...await _pinnedFromProfileFile(profileId, updatedAt, base.host),
       };
       if (!ref.mounted) return null;
-      final seen = <String>{};
-      for (final group in candidates) {
-        final testUrl = group.testUrl ?? defaultTestUrl;
-        for (final proxy in group.all) {
-          if (!seen.add(proxy.name)) continue;
-          final def = await core.getProxyDefinition(proxy.name);
-          if (!ref.mounted) return null;
-          if (def == null) continue;
-          _collectPin(def, targetHost, pins);
-          final kind = vpsLineKind(def);
-          final host = vpsLineReportHost(def);
-          if (kind == null || host == null) continue;
-          lines.add(
-            VpsWatchedLine(
-              name: proxy.name,
-              kind: kind,
-              host: host,
-              testUrl: testUrl,
-            ),
-          );
-        }
-        // When the smart group or main selector already yielded leaf lines,
-        // stop rather than scanning auxiliary groups.
-        if (smart != null || lines.isNotEmpty) break;
-      }
+      final lines = await vpsCollectWatchedLines(
+        groups,
+        define: (name) async {
+          final def = await core.getProxyDefinition(name);
+          if (def != null) _collectPin(def, targetHost, pins);
+          return def;
+        },
+        alive: () => ref.mounted,
+      );
+      if (lines == null) return null;
       pinnedSha256 = Set<String>.unmodifiable(pins);
       return lines;
     },
