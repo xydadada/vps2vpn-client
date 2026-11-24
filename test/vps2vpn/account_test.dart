@@ -563,6 +563,7 @@ void main() {
           includeNavigatorKey: false,
           locale: const Locale('en'),
           child: ValueListenableBuilder<bool>(
+            key: const ValueKey('page'),
             valueListenable: shown,
             builder: (context, on, _) => on
                 ? Consumer(
@@ -576,7 +577,7 @@ void main() {
         ),
       );
       final container = ProviderScope.containerOf(
-        tester.element(find.byType(ValueListenableBuilder<bool>)),
+        tester.element(find.byKey(const ValueKey('page'))),
       );
       final settled = vpsDownloadPanelUpdate(
         page,
