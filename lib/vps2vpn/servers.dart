@@ -7,6 +7,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -474,6 +475,17 @@ class _ProxyCard extends ConsumerWidget {
     final delay = ref.watch(
       delayProvider(proxyName: proxy.name, testUrl: testUrl),
     );
+    final profileId = ref.watch(currentProfileIdProvider);
+    final fresh = ref.watch(
+      vpsProfileHealthProvider.select(
+        (m) => m[profileId]?.isNew(proxy.name, DateTime.now()) ?? false,
+      ),
+    );
+    final pinned = _isPinned(proxy.name);
+    final shown = pinned
+        ? (name: friendlyLineName(context, proxy.name), rate: null)
+        : vpsNodeName(proxy.name);
+    final rate = shown.rate;
     final (delayText, delayColor) = switch (delay) {
       null => ('—', p.muted),
       0 => ('…', p.soft),
@@ -506,12 +518,23 @@ class _ProxyCard extends ConsumerWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        friendlyLineName(context, proxy.name),
+                        shown.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: vpsText(p, size: 14, weight: FontWeight.w600),
                       ),
                     ),
+                    if (rate != null && rate != 1) ...[
+                      const SizedBox(width: 8),
+                      _Tag(
+                        '${rate == rate.truncateToDouble() ? rate.toInt() : rate}x',
+                        rate >= 2 ? p.warn : p.soft,
+                      ),
+                    ],
+                    if (fresh) ...[
+                      const SizedBox(width: 8),
+                      _Tag(tr(context, '新', 'New'), p.accent),
+                    ],
                     if (fastest) ...[
                       const SizedBox(width: 8),
                       _Tag(tr(context, '最快', 'Fastest'), p.good),

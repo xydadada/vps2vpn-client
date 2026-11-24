@@ -58,7 +58,35 @@ const _countryZh = {
 
 /// The country a node's name points at ("新加坡 Hysteria2", "US-2", "jp
 /// reality"), as a two-letter code, or null.
+final _flagPair = RegExp(r'[\u{1F1E6}-\u{1F1FF}]{2}', unicode: true);
+
+// A billing rate at the end of a node name: "· 5.0x", "[2x]", "x0.5", "2倍".
+final _rateTail = RegExp(
+  r'(?:[\s·|_,，-]+|(?=[\[(（【]))[\[(（【]?\s*'
+  r'(?:[x×]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:[x×]|倍率?))'
+  r'\s*[\])）】]?\s*$',
+  caseSensitive: false,
+);
+
+({String name, double? rate}) vpsNodeName(String raw) {
+  var name = raw;
+  double? rate;
+  final m = _rateTail.firstMatch(name);
+  if (m != null && m.start > 0) {
+    rate = double.tryParse(m[1] ?? m[2]!);
+    name = name.substring(0, m.start);
+  }
+  name = name.replaceAll(_flagPair, '').trim();
+  return (name: name.isEmpty ? raw : name, rate: rate);
+}
+
 String? vpsGuessCountry(String name) {
+  if (_flagPair.firstMatch(name)?.group(0) case final flag?) {
+    final code = String.fromCharCodes([
+      for (final r in flag.runes) r - 0x1F1E6 + 0x41,
+    ]);
+    if (_countryZh.containsKey(code)) return code;
+  }
   for (final e in _countryZh.entries) {
     if (e.key != 'CN' && name.contains(e.value)) return e.key;
   }
