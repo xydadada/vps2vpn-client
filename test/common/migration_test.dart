@@ -407,6 +407,29 @@ void main() {
           }
         });
 
+        test('every install measures delay without the handshake', () async {
+          final store = _FakeMigrationStore(
+            configMap: null,
+            version: 0,
+            upgradeVersion: 0,
+          );
+          final fresh = patchOf(await Migration(store: store).run());
+          expect(fresh.unifiedDelay, isTrue);
+          expect(
+            fresh.generalOverrideKeys,
+            contains(GeneralOverrideKey.unifiedDelay),
+          );
+          final off = withUnifiedDelay(
+            Config.realFromJson(null).copyWith(
+              patchClashConfig: const PatchClashConfig(
+                unifiedDelay: false,
+                generalOverrideKeys: {GeneralOverrideKey.unifiedDelay},
+              ),
+            ),
+          );
+          expect(off.patchClashConfig.unifiedDelay, isFalse);
+        });
+
         test('the generated config carries it into the TUN section', () {
           final config = withWindowsStrictRoute(Config.realFromJson(null));
           final patch = config.patchClashConfig;

@@ -97,7 +97,7 @@ class Migration {
 
   /// One-off setting changes for upgrades, apart from [currentVersion], which
   /// backups carry and an older app refuses when it is newer than its own.
-  static const upgradeVersion = 5;
+  static const upgradeVersion = 6;
 
   Map<int, Config Function(Config config)> get _upgrades => {
     1: _resetThemeColors,
@@ -105,12 +105,13 @@ class Migration {
     3: _followSystemColors,
     4: _turnOffSidebarBlur,
     5: _newDefaults,
+    6: withUnifiedDelay,
   };
 
   /// What a new install starts from beyond the `const` defaults, which cannot
   /// tell the platform; step 5 brings existing installs the same.
   Config _newDefaults(Config config) =>
-      _isWindows ? withWindowsStrictRoute(config) : config;
+      withUnifiedDelay(_isWindows ? withWindowsStrictRoute(config) : config);
 
   Future<Config> run() async {
     final configMap = await _store.getConfigMap();
@@ -274,6 +275,23 @@ Config withWindowsStrictRoute(Config config) {
     patchClashConfig: patch.copyWith(
       tunOverride: patch.tunOverride.copyWith(strictRoute: true),
       tunOverrideKeys: {...patch.tunOverrideKeys, TunOverrideKey.strictRoute},
+    ),
+  );
+}
+
+/// vps2vpn: delay without the handshake, nearer ping; a set key is kept.
+Config withUnifiedDelay(Config config) {
+  final patch = config.patchClashConfig;
+  if (patch.generalOverrideKeys.contains(GeneralOverrideKey.unifiedDelay)) {
+    return config;
+  }
+  return config.copyWith(
+    patchClashConfig: patch.copyWith(
+      unifiedDelay: true,
+      generalOverrideKeys: {
+        ...patch.generalOverrideKeys,
+        GeneralOverrideKey.unifiedDelay,
+      },
     ),
   );
 }

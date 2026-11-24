@@ -306,7 +306,12 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     return VpsPage(
       title: tr(context, '节点', 'Nodes'),
       subtitle: selectable
-          ? tr(context, '点击切换节点，延迟实时更新', 'Tap to switch; latency updates live')
+          ? tr(
+              context,
+              '点击切换节点。延迟是经这条线路打开测试网址的往返时间，会比 ping 略高',
+              'Tap to switch. Latency is the round trip to a test page '
+                  'through the line, a little above ping',
+            )
           : tr(
               context,
               '这条线路会自动挑选节点，不需要手动切换',
