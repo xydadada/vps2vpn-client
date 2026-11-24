@@ -129,21 +129,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get en => '英语';
 
   @override
-  String get es => '西班牙语';
-
-  @override
-  String get fr => '法语';
-
-  @override
-  String get ja => '日语';
-
-  @override
-  String get ko => '韩语';
-
-  @override
-  String get ru => '俄语';
-
-  @override
   String get zhCN => '中文简体';
 
   @override

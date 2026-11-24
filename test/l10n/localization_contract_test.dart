@@ -61,7 +61,7 @@ void main() {
       'to', (tester) async {
     for (final locale in const [
       Locale('zh', 'CN'),
-      Locale('ja'),
+      Locale('zh'),
       Locale('en'),
     ]) {
       await tester.pumpWidget(

@@ -183,7 +183,16 @@ String delayFailureText(int delay, AppLocalizations appLocalizations) {
       : appLocalizations.delayFailed;
 }
 
+/// The saved language, or null (follow the system) for none, a malformed one,
+/// or a language the app no longer ships.
 Locale? getLocaleForString(String? localString) {
+  final locale = _parseLocale(localString);
+  return locale != null && AppLocalizations.delegate.isSupported(locale)
+      ? locale
+      : null;
+}
+
+Locale? _parseLocale(String? localString) {
   if (localString == null) return null;
   final localSplit = localString.split('_');
   if (localSplit.length == 1) {

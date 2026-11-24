@@ -1204,8 +1204,6 @@ void main() {
     for (final locale in [
       const Locale('en'),
       const Locale('zh', 'CN'),
-      const Locale('ja'),
-      const Locale('ru'),
     ]) {
       for (final (width, density) in [
         (288.0, DashboardDensity.mobile),

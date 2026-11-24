@@ -350,6 +350,12 @@ void main() {
     test('returns null for more subtags than it understands', () {
       expect(getLocaleForString('a_b_c_d'), isNull);
     });
+
+    test('a language the app no longer ships follows the system', () {
+      for (final code in ['ru', 'ja', 'es', 'fr', 'ko', 'ja_JP']) {
+        expect(getLocaleForString(code), isNull, reason: code);
+      }
+    });
   });
 
   group('getFileNameForDisposition', () {

@@ -147,7 +147,11 @@ class DAVTransport {
     );
     final data = response.data;
     if (data is! ResponseBody) {
-      throw DAVException(method: 'GET', path: path, reasonPhrase: 'missing body');
+      throw DAVException(
+        method: 'GET',
+        path: path,
+        reasonPhrase: 'missing body',
+      );
     }
     final random = Random.secure();
     final suffix =

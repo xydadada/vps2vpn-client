@@ -345,7 +345,7 @@ void main() {
   testWidgets('the authorize action trails its row, the reason the group', (
     tester,
   ) async {
-    await pumpView(tester, isMacOS: true, locale: const Locale('ru'));
+    await pumpView(tester, isMacOS: true, locale: const Locale('en'));
 
     final appLocalizations = AppLocalizations.of(
       tester.element(find.byType(OnDemandView)),
