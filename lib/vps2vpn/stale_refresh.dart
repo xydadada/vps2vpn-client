@@ -3,13 +3,16 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/home.dart' show mainGroup;
 import 'package:fl_clash/vps2vpn/kit.dart' show tr;
+import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -67,4 +70,38 @@ final vpsStaleRefreshProvider = Provider.autoDispose<void>((ref) {
       ),
     );
   }());
+});
+
+/// A top-up or renewal since: the header and its Announce line are stale.
+bool vpsHeaderBehindPanel(SubscriptionInfo sub, VpsMember m) {
+  final total = m.unlimited ? 0 : math.max(1, (m.quotaGb * (1 << 30)).floor());
+  final expire = (m.expireAt?.millisecondsSinceEpoch ?? 0) ~/ 1000;
+  return (sub.total - total).abs() > (1 << 20) ||
+      (sub.expire - expire).abs() > 60;
+}
+
+final _syncedAt = <int, DateTime>{};
+
+final vpsPanelSyncProvider = Provider.autoDispose<void>((ref) {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+  final member = ref.watch(vpsMemberProvider).value?.member;
+  final profile = ref.watch(currentProfileProvider);
+  final sub = profile?.subscriptionInfo;
+  if (member == null ||
+      profile == null ||
+      sub == null ||
+      profile.type != ProfileType.url ||
+      !vpsHeaderBehindPanel(sub, member)) {
+    return;
+  }
+  final now = DateTime.now();
+  final last = _syncedAt[profile.id];
+  if (last != null && now.difference(last) < const Duration(hours: 1)) return;
+  _syncedAt[profile.id] = now;
+  unawaited(
+    ref
+        .read(profilesActionProvider.notifier)
+        .updateProfile(profile)
+        .catchError((Object _) {}),
+  );
 });

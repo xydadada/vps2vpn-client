@@ -1,3 +1,5 @@
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/stale_refresh.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -41,5 +43,33 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('a top-up or renewal the subscription has not caught up with', () {
+    final expire = DateTime(2026, 12, 31);
+    final member = VpsMember(
+      name: 'Ann',
+      enabled: true,
+      quotaGb: 100,
+      expireAt: expire,
+    );
+    final same = SubscriptionInfo(
+      total: 100 * (1 << 30),
+      expire: expire.millisecondsSinceEpoch ~/ 1000,
+    );
+    expect(vpsHeaderBehindPanel(same, member), isFalse);
+    expect(
+      vpsHeaderBehindPanel(same.copyWith(total: 50 * (1 << 30)), member),
+      isTrue,
+    );
+    expect(
+      vpsHeaderBehindPanel(
+        same.copyWith(expire: same.expire - 30 * 86400),
+        member,
+      ),
+      isTrue,
+    );
+    const unlimited = VpsMember(name: 'Bo', enabled: true);
+    expect(vpsHeaderBehindPanel(const SubscriptionInfo(), unlimited), isFalse);
   });
 }

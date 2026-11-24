@@ -48,6 +48,7 @@ class _CoreContainerState extends ConsumerState<CoreManager>
   Widget build(BuildContext context) {
     ref.watch(vpsLineWatchProvider);
     ref.watch(vpsStaleRefreshProvider);
+    ref.watch(vpsPanelSyncProvider);
     return widget.child;
   }
 
