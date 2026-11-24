@@ -17,6 +17,7 @@ import 'package:fl_clash/vps2vpn/exit_check.dart';
 import 'package:fl_clash/vps2vpn/home.dart' show countryName;
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/takeover.dart' show vpsSystemTool;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -29,6 +30,7 @@ const _unsupported = {'CN', 'HK', 'MO', 'RU', 'BY', 'IR', 'KP', 'SY', 'CU'};
 
 final vpsClaudeTraceProvider = FutureProvider.autoDispose<Map<String, IpInfo?>>(
   (ref) async {
+    if (!vpsWatchRoute(ref)) return const {};
     final link = ref.keepAlive();
     final timer = Timer(const Duration(minutes: 5), link.close);
     ref.onDispose(timer.cancel);
@@ -52,21 +54,55 @@ IpInfo? _trace(OutboundIpResult? result) {
   }
 }
 
-/// The proxy a terminal started now would use, from the user's environment.
-String? _terminalProxy() {
-  final env = Platform.environment;
-  for (final key in [
-    'HTTPS_PROXY',
-    'https_proxy',
-    'HTTP_PROXY',
-    'http_proxy',
-    'ALL_PROXY',
-    'all_proxy',
-  ]) {
-    final value = env[key];
+/// The address both Claude hosts saw (an AI line's), else the general exit.
+IpInfo? vpsClaudeExit(IpInfo? exit, Map<String, IpInfo?>? traces) {
+  final seen = [for (final t in traces?.values ?? const <IpInfo?>[]) ?t];
+  if (seen.isEmpty || seen.any((t) => !vpsSameIp(t.ip, seen.first.ip))) {
+    return exit;
+  }
+  return seen.first;
+}
+
+const _proxyKeys = ['HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY'];
+
+String? vpsProxyFromRegistry(String output) {
+  for (final key in _proxyKeys) {
+    final m = RegExp(
+      '^\\s*$key\\s+REG_\\w+\\s+(.*)\$',
+      multiLine: true,
+      caseSensitive: false,
+    ).firstMatch(output);
+    final value = m?[1]?.trim();
     if (value != null && value.isNotEmpty) return value;
   }
   return null;
+}
+
+/// Read afresh on Windows: this process kept the variables it started with.
+Future<String?> _terminalProxy() async {
+  if (Platform.isWindows) {
+    try {
+      final r = await Process.run(vpsSystemTool('reg'), [
+        'query',
+        r'HKCU\Environment',
+      ]);
+      if (r.exitCode == 0) return vpsProxyFromRegistry('${r.stdout}');
+    } catch (_) {}
+  }
+  final env = Platform.environment;
+  for (final key in _proxyKeys) {
+    final value = env[key] ?? env[key.toLowerCase()];
+    if (value != null && value.isNotEmpty) return value;
+  }
+  return null;
+}
+
+bool vpsPointsHere(String proxy, int port) {
+  final uri = Uri.tryParse(proxy.contains('://') ? proxy : 'http://$proxy');
+  return uri != null &&
+      uri.hasPort &&
+      uri.port == port &&
+      const ['127.0.0.1', 'localhost', '::1'].contains(uri.host.toLowerCase());
 }
 
 /// The rows only this page has: Claude itself, where it is reached from,
@@ -75,6 +111,7 @@ List<VpsFinding> vpsClaudeFindings(
   BuildContext context, {
   required ProbeEntry<ServiceCheck> claude,
   required IpInfo? exit,
+  required IpInfo? general,
   required Map<String, IpInfo?>? traces,
   required String? terminalProxy,
   required int port,
@@ -114,14 +151,17 @@ List<VpsFinding> vpsClaudeFindings(
     );
   }
   if (traces != null) {
-    final seen = {
+    final seen = [
       for (final t in traces.values)
         if (t != null) t.ip,
-    };
-    final split = seen.length > 1;
+    ];
+    final split = seen.any((ip) => !vpsSameIp(ip, seen.first));
     final missing = traces.values.any((t) => t == null);
-    final elsewhere =
-        !split && exit != null && seen.isNotEmpty && !seen.contains(exit.ip);
+    final apart =
+        !split &&
+        general != null &&
+        seen.isNotEmpty &&
+        !vpsSameIp(seen.first, general.ip);
     rows.add(
       VpsFinding(
         tr(context, 'Claude 各域名的出口', 'Exit for Claude\'s hosts'),
@@ -129,12 +169,12 @@ List<VpsFinding> vpsClaudeFindings(
             ? tr(context, '网页和 API 出口不同', 'web and API leave apart')
             : missing
             ? tr(context, '有域名查不到', 'some hosts did not answer')
-            : elsewhere
-            ? tr(context, '和其他网站出口不同', 'differs from other sites')
+            : apart
+            ? tr(context, '同一专用出口', 'one exit of its own')
             : tr(context, '同一出口', 'one exit'),
         split
             ? VpsFindingLevel.bad
-            : missing || elsewhere
+            : missing
             ? VpsFindingLevel.warn
             : VpsFindingLevel.good,
         problem: split
@@ -149,9 +189,7 @@ List<VpsFinding> vpsClaudeFindings(
   }
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
     final proxy = terminalProxy;
-    final ours =
-        proxy != null &&
-        RegExp('(127\\.0\\.0\\.1|localhost):$port\\b').hasMatch(proxy);
+    final ours = proxy != null && vpsPointsHere(proxy, port);
     rows.add(
       VpsFinding(
         tr(context, '终端代理（Claude Code）', 'Terminal proxy (Claude Code)'),
@@ -184,6 +222,7 @@ class VpsClaudePage extends ConsumerStatefulWidget {
 class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
   late final ServiceStatus _services;
   late final OutboundIpProbe _ip;
+  String? _terminal;
 
   @override
   void initState() {
@@ -191,6 +230,7 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
     _services = ref.read(serviceStatusProvider.notifier)
       ..watch(ServiceTarget.claude);
     _ip = ref.read(outboundIpProbeProvider.notifier)..watch(routedOutbound);
+    _readTerminal();
   }
 
   @override
@@ -200,18 +240,52 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
     super.dispose();
   }
 
+  Future<void> _readTerminal() async {
+    final proxy = await _terminalProxy();
+    if (mounted) setState(() => _terminal = proxy);
+  }
+
   void _recheck() {
     _ip.refresh([routedOutbound]);
     _services.refresh([ServiceTarget.claude]);
     ref.invalidate(vpsExitFactsProvider);
     ref.invalidate(vpsClaudeTraceProvider);
+    _readTerminal();
   }
 
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final isStart = ref.watch(isStartProvider);
-    final exit = ref
+    return VpsPage(
+      title: tr(context, 'Claude 环境检查', 'Claude environment'),
+      subtitle: tr(
+        context,
+        '只看环境是否一致；Anthropic 没有公开它的判断规则',
+        'Checks only that things agree; Anthropic does not publish its rules',
+      ),
+      action: VpsButton(
+        label: tr(context, '重新检测', 'Check again'),
+        icon: VpsIcon.refresh,
+        onTap: isStart ? _recheck : null,
+      ),
+      children: [
+        if (!isStart)
+          VpsCard(
+            onTap: () => vpsTab.value = vpsTabHome,
+            child: Text(
+              tr(context, '先连接，再来这里检查', 'Connect first, then check here'),
+              style: vpsText(p, size: 14, color: p.warn),
+            ),
+          )
+        else
+          _report(context),
+      ],
+    );
+  }
+
+  Widget _report(BuildContext context) {
+    final general = ref
         .watch(outboundIpProbeProvider.select((s) => s.entryOf(routedOutbound)))
         .value;
     final claude = ref.watch(
@@ -219,6 +293,7 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
     );
     final traces = ref.watch(vpsClaudeTraceProvider);
     final facts = ref.watch(vpsExitFactsProvider);
+    final exit = vpsClaudeExit(general, traces.value);
     final ip = exit?.ip;
     final quality = ip == null ? null : ref.watch(ipQualityProvider(ip)).value;
     final port = ref.watch(patchClashConfigProvider.select((s) => s.mixedPort));
@@ -227,8 +302,9 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
         context,
         claude: claude,
         exit: exit,
+        general: general,
         traces: traces.value,
-        terminalProxy: _terminalProxy(),
+        terminalProxy: _terminal,
         port: port,
       ),
       ...vpsExitFindings(
@@ -245,39 +321,15 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
         !traces.isLoading &&
         !facts.isLoading &&
         claude.value != null;
-    return VpsPage(
-      title: tr(context, 'Claude 环境检查', 'Claude environment'),
-      subtitle: tr(
-        context,
-        '只看环境是否一致；Anthropic 没有公开它的判断规则',
-        'Checks only that things agree; Anthropic does not publish its rules',
-      ),
-      action: VpsButton(
-        label: tr(context, '重新检测', 'Check again'),
-        icon: VpsIcon.refresh,
-        onTap: _recheck,
-      ),
-      children: [
-        if (!isStart)
-          VpsCard(
-            onTap: () => vpsTab.value = vpsTabHome,
-            child: Text(
-              tr(context, '先连接，再来这里检查', 'Connect first, then check here'),
-              style: vpsText(p, size: 14, color: p.warn),
-            ),
-          )
-        else
-          VpsFindingCard(
-            rows: rows,
-            settled: settled,
-            copyText: () => [
-              vpsExitVerdict(context, rows),
-              if (exit != null)
-                '${tr(context, '出口', 'Exit')}: ${countryName(context, exit.countryCode)} ${vpsMaskLast(exit.ip)}',
-              for (final r in rows) '${r.title}: ${r.value}',
-            ].join('\n'),
-          ),
-      ],
+    return VpsFindingCard(
+      rows: rows,
+      settled: settled,
+      copyText: () => [
+        vpsExitVerdict(context, rows),
+        if (exit != null)
+          '${tr(context, '出口', 'Exit')}: ${countryName(context, exit.countryCode)} ${vpsMaskLast(exit.ip)}',
+        for (final r in rows) '${r.title}: ${r.value}',
+      ].join('\n'),
     );
   }
 }

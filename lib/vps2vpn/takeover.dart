@@ -166,7 +166,6 @@ Future<ProcessResult> _run(String executable, List<String> args) =>
 /// Windows tools by their System32 path, so a tasklist.exe or reg.exe in the
 /// working directory or earlier on PATH is never run instead. A path, such as
 /// this app's own executable, is run as given.
-@visibleForTesting
 String vpsSystemTool(String tool, {bool windows = true}) {
   if (!windows || tool.contains(RegExp(r'[\\/:]'))) return tool;
   final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';

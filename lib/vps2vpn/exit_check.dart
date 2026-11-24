@@ -76,10 +76,26 @@ Future<OutboundIpResult?> vpsAskCore(
   }
 }
 
+/// Whether connected; a change of subscription or node drops cached answers.
+bool vpsWatchRoute(Ref ref) {
+  ref.watch(currentProfileProvider.select((p) => p?.id));
+  ref.watch(selectedMapProvider);
+  return ref.watch(isStartProvider);
+}
+
+bool vpsSameIp(String a, String b) {
+  final x = InternetAddress.tryParse(a)?.rawAddress;
+  final y = InternetAddress.tryParse(b)?.rawAddress;
+  if (x == null || y == null) return a == b;
+  return x.length == y.length &&
+      Iterable<int>.generate(x.length).every((i) => x[i] == y[i]);
+}
+
 /// Asked when Check opens or is asked again, kept five minutes after.
 final vpsExitFactsProvider = FutureProvider.autoDispose<VpsExitFacts>((
   ref,
 ) async {
+  if (!vpsWatchRoute(ref)) return const VpsExitFacts();
   final link = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 5), link.close);
   ref.onDispose(timer.cancel);
@@ -271,7 +287,7 @@ List<VpsFinding> vpsExitFindings(
   if (facts != null) {
     final v6 = facts.ipv6Exit;
     final local = facts.ipv6Local;
-    final leaks = v6 != null && local != null && v6.ip == local.ip;
+    final leaks = v6 != null && local != null && vpsSameIp(v6.ip, local.ip);
     final elsewhere =
         !leaks &&
         v6 != null &&
