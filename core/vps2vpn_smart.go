@@ -450,6 +450,7 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	}
 	type line struct {
 		name   string
+		addr   string
 		server int
 		rank   int
 	}
@@ -477,7 +478,7 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 			order = len(servers)
 			servers[server] = order
 		}
-		lines = append(lines, line{name: name, server: order, rank: rank})
+		lines = append(lines, line{name: name, addr: server, server: order, rank: rank})
 	}
 	// One line has nothing to fall back to; a second protocol is what makes this useful.
 	if len(lines) < 2 || vpsNameTaken(raw, vpsSmartGroup) {
@@ -485,16 +486,24 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	}
 	// A server's IPv6 lines have their own address; the same name with the
 	// protocol taken off puts them with the server's other lines.
-	merged := map[string]int{}
+	type stemGroup struct {
+		server int
+		addrs  []string
+	}
+	merged := map[string]*stemGroup{}
 	for i := range lines {
 		stem := vpsLineStem(lines[i].name)
 		if stem == lines[i].name {
 			continue
 		}
-		if order, ok := merged[stem]; ok {
-			lines[i].server = order
-		} else {
-			merged[stem] = lines[i].server
+		g, ok := merged[stem]
+		if !ok {
+			merged[stem] = &stemGroup{server: lines[i].server, addrs: []string{lines[i].addr}}
+			continue
+		}
+		if !slices.ContainsFunc(g.addrs, func(a string) bool { return !vpsMayShareServer(a, lines[i].addr) }) {
+			lines[i].server = g.server
+			g.addrs = append(g.addrs, lines[i].addr)
 		}
 	}
 	sort.SliceStable(lines, func(i, j int) bool {
@@ -614,6 +623,20 @@ var vpsStemSplit = regexp.MustCompile(`^(.*?\S)(?:\s*[·|｜]\s*|\s+[-–—/]\s
 var vpsProtocolWords = []string{
 	"reality", "vless", "vmess", "trojan", "anytls", "hysteria", "hy2", "tuic",
 	"shadowsocks", "wireguard", "ipv4", "ipv6",
+}
+
+// vpsMayShareServer is false only for two different addresses of one family.
+func vpsMayShareServer(a, b string) bool {
+	if a == b {
+		return true
+	}
+	x, errA := netip.ParseAddr(strings.Trim(a, "[]"))
+	y, errB := netip.ParseAddr(strings.Trim(b, "[]"))
+	if errA != nil || errB != nil {
+		return true
+	}
+	x, y = x.Unmap(), y.Unmap()
+	return x == y || x.Is4() != y.Is4()
 }
 
 // vpsLineStem is a line's name without the protocol parts at its end:

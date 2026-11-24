@@ -299,6 +299,52 @@ func TestVps2vpnSmartPicksTheFastestServer(t *testing.T) {
 	}
 }
 
+// Names that differ only in protocol are one server only when the addresses
+// allow it: two IPv4 machines stay two.
+func TestVps2vpnSmartKeepsTwoMachinesApart(t *testing.T) {
+	vpsOn(t)
+	raw := config.DefaultRawConfig()
+	raw.Proxy = []map[string]any{
+		vpsReality("US · Reality", "192.0.2.1"),
+		vpsHy2("US · Hysteria2", "192.0.2.2"),
+		vpsHy2("US · HY2-IPv6", "2001:db8::1"),
+		vpsHy2("US · TUIC-IPv6", "2001:db8::2"),
+	}
+	raw.ProxyGroup = []map[string]any{
+		{"name": "Proxy", "type": "select", "proxies": []any{"US · Reality"}},
+	}
+	raw.Rule = []string{"MATCH,Proxy"}
+	vps2vpnEnhance(raw, 0)
+
+	got := vpsGroup(raw, vpsSmartGroup)["proxies"].([]string)
+	if len(got) != 3 {
+		t.Fatalf("smart members = %v, want three servers", got)
+	}
+	if us := vpsGroup(raw, got[0])["proxies"].([]string); !slices.Equal(us, []string{"US · HY2-IPv6", "US · Reality"}) {
+		t.Fatalf("first server = %v, want the IPv4 line and its IPv6 line", us)
+	}
+}
+
+func TestVpsMayShareServer(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{
+		{"192.0.2.1", "192.0.2.1", true},
+		{"192.0.2.1", "2001:db8::1", true},
+		{"192.0.2.1", "[2001:db8::1]", true},
+		{"us.example.com", "192.0.2.1", true},
+		{"us.example.com", "us6.example.com", true},
+		{"192.0.2.1", "192.0.2.2", false},
+		{"2001:db8::1", "2001:DB8::2", false},
+		{"::ffff:192.0.2.1", "192.0.2.1", true},
+	} {
+		if got := vpsMayShareServer(c.a, c.b); got != c.want {
+			t.Errorf("vpsMayShareServer(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 // A subscription that already has a fallback group per server lends it to
 // the smart line instead of a copy, and a name it uses is never taken over.
 func TestVps2vpnSmartReusesTheSubscriptionsServerGroups(t *testing.T) {
