@@ -115,8 +115,10 @@ Start-Sleep 40
 # Connect on the next start, as a user who set it to.
 `$prefs = Join-Path `$home_ 'shared_preferences.json'
 if (Test-Path `$prefs) {
-  # Only this account's copies: the admin's are closed to a standard account.
-  Get-Process vps2vpn, vps2vpnCore -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  # Only this account's copies. Start-Process -Credential adds the runner's
+  # logon SID to this token, so the admin's would die too.
+  Get-Process vps2vpn, vps2vpnCore -ErrorAction SilentlyContinue | Where-Object Id -notin @($adminApp, $adminCore) |
+    Stop-Process -Force -ErrorAction SilentlyContinue
   Start-Sleep 3
   `$d = Get-Content `$prefs -Raw | ConvertFrom-Json
   `$c = `$d.'flutter.config' | ConvertFrom-Json
