@@ -39,6 +39,17 @@ void main() {
     expect(lines!.map((l) => l.name), ['sg-hy2']);
   });
 
+  test('every server group the main selector lists is watched', () async {
+    final lines = await vpsCollectWatchedLines([
+      _group('Proxy', ['SG', 'US']),
+      _group('SG', ['sg-hy2']),
+      _group('US', ['us-hy2']),
+      _group('Spare', ['sg-tuic']),
+    ], define: (name) async => _define(name));
+
+    expect(lines!.map((l) => l.name), ['sg-hy2', 'us-hy2']);
+  });
+
   test('a main selector with no lines falls through to the next', () async {
     final lines = await vpsCollectWatchedLines([
       _group('Proxy', ['Auto']),

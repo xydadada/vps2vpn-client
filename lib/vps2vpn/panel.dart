@@ -881,20 +881,21 @@ Future<List<VpsWatchedLine>?> vpsCollectWatchedLines(
           .where((g) => g.type == GroupType.Selector && g.hidden != true)
           .firstOrNull ??
       groups.first;
-  final candidates = smart != null
-      ? [
-          smart,
-          for (final g in groups)
-            if (smart.all.any((p) => p.name == g.name)) g,
-        ]
-      : [
-          fallback,
-          for (final g in groups)
-            if (g.name != fallback.name) g,
-        ];
+  final head = smart ?? fallback;
+  final listed = [
+    for (final g in groups)
+      if (g.name != head.name && head.all.any((p) => p.name == g.name)) g,
+  ];
+  final candidates = [
+    head,
+    ...listed,
+    if (smart == null)
+      for (final g in groups)
+        if (g.name != head.name && !listed.contains(g)) g,
+  ];
   final lines = <VpsWatchedLine>[];
   final seen = <String>{};
-  for (final group in candidates) {
+  for (final (i, group) in candidates.indexed) {
     final testUrl = group.testUrl ?? defaultTestUrl;
     for (final proxy in group.all) {
       if (!seen.add(proxy.name)) continue;
@@ -913,7 +914,7 @@ Future<List<VpsWatchedLine>?> vpsCollectWatchedLines(
         ),
       );
     }
-    if (smart == null && lines.isNotEmpty) break;
+    if (smart == null && i >= listed.length && lines.isNotEmpty) break;
   }
   return lines;
 }
