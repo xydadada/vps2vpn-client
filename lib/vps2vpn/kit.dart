@@ -5,7 +5,7 @@
 import 'dart:math' as math;
 
 import 'package:prism_ui/prism_ui.dart'
-    show AppRadius, AppShape, BuildContextExtension;
+    show AppRadius, AppShape, BuildContextExtension, SpringCurve;
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -161,7 +161,7 @@ TextStyle vpsText(
   Color? color,
   double? height,
   double? spacing,
-  bool tabular = false,
+  bool tabular = true,
 }) => TextStyle(
   fontFamily: vpsFont,
   fontFamilyFallback: vpsFontFallback,
@@ -179,7 +179,7 @@ class VpsCard extends StatefulWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(20),
-    this.radius = 16,
+    this.radius = VpsRadius.large,
     this.onTap,
     this.highlight = false,
     this.selected,
@@ -215,8 +215,8 @@ class _VpsCardState extends State<VpsCard> {
           )
         : p.line;
     final box = AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+      duration: VpsMotion.fast,
+      curve: VpsMotion.settle,
       padding: widget.padding,
       decoration: ShapeDecoration(
         color: widget.highlight ? p.cardHi : p.card,
@@ -377,6 +377,30 @@ class _VpsPressableState extends State<VpsPressable> {
   }
 }
 
+/// Corner radii, four steps; every corner is a superellipse.
+abstract final class VpsRadius {
+  static const double small = 8;
+  static const double medium = 12;
+  static const double large = 20;
+  static const double pill = 999;
+}
+
+/// Durations, three steps, and the curve state changes settle on.
+abstract final class VpsMotion {
+  static const fast = Duration(milliseconds: 150);
+  static const medium = Duration(milliseconds: 250);
+  static const slow = Duration(milliseconds: 450);
+
+  /// A critically damped spring: quick out of the gate, no wobble.
+  static final Curve settle = SpringCurve(
+    SpringDescription.withDampingRatio(mass: 1, stiffness: 180, ratio: 1),
+    seconds: 0.5,
+  );
+
+  /// Leaving: gathers speed, so what goes does not linger.
+  static const Curve leave = Curves.easeInCubic;
+}
+
 /// The spring every press and state change rides on: a little under-damped,
 /// so it settles with one soft overshoot, the way iOS controls do.
 final vpsSpring = SpringDescription.withDampingRatio(
@@ -443,7 +467,7 @@ class VpsEnter extends StatelessWidget {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 520 + 50 * index.clamp(0, 8)),
-      curve: Interval(delay.clamp(0.0, 0.5), 1, curve: Curves.easeOutQuart),
+      curve: Interval(delay.clamp(0.0, 0.5), 1, curve: VpsMotion.settle),
       builder: (_, v, child) => Opacity(
         opacity: v,
         child: Transform.translate(
@@ -527,9 +551,9 @@ class VpsRollingText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 320),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      duration: VpsMotion.medium,
+      switchInCurve: VpsMotion.settle,
+      switchOutCurve: VpsMotion.leave,
       layoutBuilder: (current, previous) => Stack(
         alignment: Alignment.centerLeft,
         children: [...previous, ?current],
@@ -593,7 +617,7 @@ class VpsButton extends StatelessWidget {
         decoration: ShapeDecoration(
           color: bg,
           shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(VpsRadius.medium),
             side: filled ? BorderSide.none : BorderSide(color: p.line),
           ),
           shadows: filled ? const [] : p.raise,
@@ -630,8 +654,8 @@ class VpsSwitch extends StatelessWidget {
       onTap: () => onChanged(!value),
       toggled: value,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
+        duration: VpsMotion.medium,
+        curve: VpsMotion.settle,
         width: 40,
         height: 24,
         padding: const EdgeInsets.all(2.5),
@@ -640,12 +664,12 @@ class VpsSwitch extends StatelessWidget {
               ? p.accent
               : (p.dark ? const Color(0xFF2A2D35) : const Color(0xFFDCDFE4)),
           shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(99),
+            borderRadius: BorderRadius.circular(VpsRadius.pill),
           ),
         ),
         child: AnimatedAlign(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
+          duration: VpsMotion.medium,
+          curve: VpsMotion.settle,
           alignment: value ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
             width: 19,
@@ -696,15 +720,15 @@ class VpsSegmented<T> extends StatelessWidget {
           decoration: ShapeDecoration(
             color: p.track,
             shape: RoundedSuperellipseBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(VpsRadius.medium),
               side: BorderSide(color: p.line),
             ),
           ),
           child: Stack(
             children: [
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
+                duration: VpsMotion.medium,
+                curve: VpsMotion.settle,
                 left: w * index,
                 top: 0,
                 bottom: 0,
@@ -713,7 +737,7 @@ class VpsSegmented<T> extends StatelessWidget {
                   decoration: ShapeDecoration(
                     color: p.thumb,
                     shape: RoundedSuperellipseBorder(
-                      borderRadius: BorderRadius.circular(7),
+                      borderRadius: BorderRadius.circular(VpsRadius.small),
                       side: p.dark
                           ? const BorderSide(color: Color(0x0FFFFFFF))
                           : BorderSide.none,
@@ -794,8 +818,8 @@ class VpsChip extends StatelessWidget {
     final c = color ?? p.accent;
     if (tinted) {
       return AnimatedContainer(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOutCubic,
+        duration: VpsMotion.slow,
+        curve: VpsMotion.settle,
         padding: const EdgeInsets.fromLTRB(10, 5, 12, 5),
         decoration: ShapeDecoration(
           color: c.withValues(alpha: p.dark ? 0.16 : 0.12),
@@ -823,7 +847,7 @@ class VpsChip extends StatelessWidget {
       decoration: ShapeDecoration(
         color: p.track,
         shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(99),
+          borderRadius: BorderRadius.circular(VpsRadius.pill),
           side: BorderSide(color: p.line),
         ),
       ),
@@ -1201,7 +1225,7 @@ class VpsBackdrop extends StatelessWidget {
         builder: (context, tone, child) => TweenAnimationBuilder<Color?>(
           tween: ColorTween(end: tone ?? p.accent),
           duration: const Duration(milliseconds: 900),
-          curve: Curves.easeInOutCubic,
+          curve: VpsMotion.settle,
           builder: (context, c, child) {
             final color = c ?? p.accent;
             return Stack(
@@ -1317,7 +1341,7 @@ class VpsRow extends StatelessWidget {
             decoration: ShapeDecoration(
               color: p.track,
               shape: RoundedSuperellipseBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(VpsRadius.small),
                 side: BorderSide(color: p.line),
               ),
             ),
@@ -1371,7 +1395,7 @@ class VpsInfoTip extends StatelessWidget {
     return RawTooltip(
       semanticsTooltip: message,
       triggerMode: TooltipTriggerMode.tap,
-      hoverDelay: const Duration(milliseconds: 120),
+      hoverDelay: VpsMotion.fast,
       tooltipBuilder: (context, animation) => FadeTransition(
         opacity: animation,
         child: ConstrainedBox(
@@ -1381,7 +1405,7 @@ class VpsInfoTip extends StatelessWidget {
             decoration: ShapeDecoration(
               color: p.dark ? const Color(0xF2232536) : const Color(0xF7FFFFFF),
               shape: RoundedSuperellipseBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(VpsRadius.medium),
                 side: BorderSide(color: p.line),
               ),
               shadows: [
@@ -1403,7 +1427,7 @@ class VpsInfoTip extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
                       title!,
-                      style: vpsText(p, size: 13, weight: FontWeight.w700),
+                      style: vpsText(p, size: 13, weight: FontWeight.w600),
                     ),
                   ),
                 Text(
@@ -1438,7 +1462,7 @@ class VpsInfoTip extends StatelessWidget {
             style: vpsText(
               p,
               size: 10.5,
-              weight: FontWeight.w700,
+              weight: FontWeight.w600,
               color: p.soft,
               height: 1,
             ),

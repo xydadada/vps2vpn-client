@@ -462,7 +462,7 @@ class VpsFindingCard extends StatelessWidget {
                     style: vpsText(
                       p,
                       size: 15,
-                      weight: FontWeight.w700,
+                      weight: FontWeight.w600,
                       color: !settled
                           ? p.soft
                           : bad

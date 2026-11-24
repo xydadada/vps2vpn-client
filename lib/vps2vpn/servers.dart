@@ -193,7 +193,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                   hasProfile
                       ? tr(context, '暂无可选节点', 'No nodes to choose')
                       : tr(context, '尚未导入订阅', 'No subscription yet'),
-                  style: vpsText(p, size: 17, weight: FontWeight.w700),
+                  style: vpsText(p, size: 17, weight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -383,12 +383,12 @@ class _GroupTab extends StatelessWidget {
       onTap: onTap,
       selected: selected,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: VpsMotion.medium,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: ShapeDecoration(
           color: selected ? p.thumb : const Color(0x00000000),
           shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(VpsRadius.small),
             side: BorderSide(
               color: selected ? p.line : const Color(0x00000000),
             ),
@@ -448,7 +448,7 @@ class _ProxyCard extends ConsumerWidget {
       onTap: onTap,
       highlight: selected,
       selected: selected,
-      radius: 14,
+      radius: VpsRadius.medium,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
         children: [
@@ -569,7 +569,7 @@ class _Tag extends StatelessWidget {
       decoration: ShapeDecoration(
         color: color.withValues(alpha: 0.12),
         shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.circular(VpsRadius.small),
         ),
       ),
       child: Text(
@@ -591,8 +591,8 @@ class _NodeTile extends StatelessWidget {
     final p = VpsPalette.of(context);
     final ink = selected ? p.accentInk : p.soft;
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
+      duration: VpsMotion.medium,
+      curve: VpsMotion.settle,
       width: 38,
       height: 38,
       alignment: Alignment.center,
@@ -600,7 +600,7 @@ class _NodeTile extends StatelessWidget {
         gradient: selected ? p.accentGradient : null,
         color: selected ? null : p.track,
         shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(VpsRadius.medium),
           side: BorderSide(color: selected ? const Color(0x00000000) : p.line),
         ),
       ),
@@ -611,7 +611,7 @@ class _NodeTile extends StatelessWidget {
               style: vpsText(
                 p,
                 size: 12.5,
-                weight: FontWeight.w700,
+                weight: FontWeight.w600,
                 color: ink,
                 spacing: 0.4,
               ),
@@ -644,7 +644,7 @@ class _Bars extends StatelessWidget {
             decoration: ShapeDecoration(
               color: i < level ? color : off,
               shape: const RoundedSuperellipseBorder(
-                borderRadius: BorderRadius.all(Radius.circular(2)),
+                borderRadius: BorderRadius.all(Radius.circular(VpsRadius.pill)),
               ),
             ),
           ),

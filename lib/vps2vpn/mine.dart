@@ -146,7 +146,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                         style: vpsText(
                           p,
                           size: 13,
-                          weight: FontWeight.w700,
+                          weight: FontWeight.w600,
                           color: p.accent,
                         ),
                       ),
@@ -349,7 +349,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                       } catch (_) {
                         return 'vps2vpn';
                       }
-                    }(), style: vpsText(p, size: 15, weight: FontWeight.w700)),
+                    }(), style: vpsText(p, size: 15, weight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
                       tr(context, '你的私有网络客户端', 'Your private network client'),
@@ -392,7 +392,7 @@ class _LegalLineState extends State<_LegalLine> {
             child: Text(tr(context, '许可信息', 'Licences'), style: style),
           ),
           AnimatedSize(
-            duration: const Duration(milliseconds: 200),
+            duration: VpsMotion.medium,
             alignment: Alignment.topCenter,
             child: _open
                 ? Padding(
@@ -577,7 +577,7 @@ class _ChoiceRow extends StatelessWidget {
           decoration: ShapeDecoration(
             color: p.track,
             shape: RoundedSuperellipseBorder(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: BorderRadius.circular(VpsRadius.small),
               side: BorderSide(color: p.line),
             ),
           ),
@@ -659,7 +659,7 @@ class _ProfileCard extends ConsumerWidget {
                 decoration: ShapeDecoration(
                   color: p.track,
                   shape: RoundedSuperellipseBorder(
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(VpsRadius.small),
                     side: BorderSide(color: p.line),
                   ),
                 ),
@@ -718,7 +718,7 @@ class _ProfileCard extends ConsumerWidget {
             const SizedBox(height: 14),
             if (total > 0)
               ClipRSuperellipse(
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: BorderRadius.circular(VpsRadius.pill),
                 child: SizedBox(
                   height: 6,
                   child: Stack(

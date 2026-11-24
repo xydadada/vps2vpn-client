@@ -361,7 +361,7 @@ class VpsAccountCard extends ConsumerWidget {
             if (progress != null) ...[
               const SizedBox(height: 10),
               ClipRSuperellipse(
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: BorderRadius.circular(VpsRadius.pill),
                 child: SizedBox(
                   height: 6,
                   child: Stack(

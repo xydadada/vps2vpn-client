@@ -186,7 +186,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                       style: vpsText(
                         p,
                         size: 26,
-                        weight: FontWeight.w700,
+                        weight: FontWeight.w600,
                         spacing: -0.5,
                       ),
                     ),
@@ -215,7 +215,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                             style: vpsText(
                               p,
                               size: 13,
-                              weight: FontWeight.w700,
+                              weight: FontWeight.w600,
                               color: p.accent,
                             ),
                           ),
@@ -259,7 +259,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                           style: vpsText(
                             p,
                             size: 18,
-                            weight: FontWeight.w700,
+                            weight: FontWeight.w600,
                             color: p.soft,
                           ),
                         ),
@@ -268,7 +268,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                   ),
                   const SizedBox(height: 12),
                   ClipRSuperellipse(
-                    borderRadius: BorderRadius.circular(99),
+                    borderRadius: BorderRadius.circular(VpsRadius.pill),
                     child: SizedBox(
                       height: 8,
                       child: Stack(
@@ -378,7 +378,7 @@ class _ServiceLine extends StatelessWidget {
             decoration: ShapeDecoration(
               color: p.track,
               shape: RoundedSuperellipseBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(VpsRadius.small),
                 side: BorderSide(color: p.line),
               ),
             ),

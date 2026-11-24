@@ -168,7 +168,7 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
                   style: vpsText(
                     p,
                     size: 15,
-                    weight: FontWeight.w700,
+                    weight: FontWeight.w600,
                     color: failed != null
                         ? p.bad
                         : done

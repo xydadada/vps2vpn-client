@@ -64,8 +64,8 @@ class VpsShell extends StatelessWidget {
                 valueListenable: vpsTab,
                 builder: (context, tab, _) {
                   final body = AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 260),
-                    switchInCurve: Curves.easeOutCubic,
+                    duration: VpsMotion.medium,
+                    switchInCurve: VpsMotion.settle,
                     // Pages fill the area and start at the top, short or long.
                     layoutBuilder: (current, previous) => Stack(
                       fit: StackFit.expand,
@@ -168,7 +168,7 @@ class _SideNav extends ConsumerWidget {
                       style: vpsText(
                         p,
                         size: 16,
-                        weight: FontWeight.w700,
+                        weight: FontWeight.w600,
                         spacing: 0.2,
                       ),
                     ),
@@ -250,7 +250,7 @@ class _SideStatus extends ConsumerWidget {
         decoration: ShapeDecoration(
           color: p.card,
           shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(VpsRadius.medium),
             side: BorderSide(color: p.line),
           ),
           shadows: p.raise,
@@ -261,7 +261,7 @@ class _SideStatus extends ConsumerWidget {
             Row(
               children: [
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
+                  duration: VpsMotion.medium,
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
@@ -298,8 +298,8 @@ class _SideStatus extends ConsumerWidget {
               ),
             ],
             AnimatedSize(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutCubic,
+              duration: VpsMotion.medium,
+              curve: VpsMotion.settle,
               alignment: Alignment.topLeft,
               child: on
                   ? Padding(
@@ -360,14 +360,14 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       selected: selected,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
+        duration: VpsMotion.medium,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: ShapeDecoration(
           color: selected
               ? (p.dark ? const Color(0x0DFFFFFF) : const Color(0xFFEEF0F3))
               : const Color(0x00000000),
           shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(VpsRadius.small),
           ),
         ),
         child: Row(
@@ -403,7 +403,7 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final shape = RoundedSuperellipseBorder(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(VpsRadius.large),
       side: BorderSide(color: p.line),
     );
     // Acrylic, as Fluent and iOS do for a bar floating over content: the
@@ -420,7 +420,7 @@ class _BottomNav extends StatelessWidget {
         ],
       ),
       child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(VpsRadius.large),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
@@ -446,7 +446,7 @@ class _BottomNav extends StatelessWidget {
               onTap: () => vpsTab.value = i,
               selected: i == tab,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
+                duration: VpsMotion.medium,
                 decoration: ShapeDecoration(
                   color: i == tab
                       ? (p.dark
@@ -454,7 +454,7 @@ class _BottomNav extends StatelessWidget {
                             : const Color(0xFFEEF0F3))
                       : const Color(0x00000000),
                   shape: RoundedSuperellipseBorder(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(VpsRadius.large),
                   ),
                 ),
                 child: Column(
@@ -534,7 +534,7 @@ class VpsPage extends StatelessWidget {
                               style: vpsText(
                                 p,
                                 size: wide ? 28 : 23,
-                                weight: FontWeight.w700,
+                                weight: FontWeight.w600,
                                 spacing: -0.7,
                               ),
                             ),

@@ -493,9 +493,9 @@ class _HeroState extends ConsumerState<_Hero> {
             VpsChip(label: status, color: statusColor, tinted: true),
             const SizedBox(height: 14),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 350),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
+              duration: VpsMotion.medium,
+              switchInCurve: VpsMotion.settle,
+              switchOutCurve: VpsMotion.leave,
               transitionBuilder: (child, a) => FadeTransition(
                 opacity: a,
                 child: ScaleTransition(
@@ -523,7 +523,7 @@ class _HeroState extends ConsumerState<_Hero> {
                       style: vpsText(
                         p,
                         size: wide ? 36 : 28,
-                        weight: FontWeight.w700,
+                        weight: FontWeight.w600,
                         spacing: -0.8,
                         height: 1.15,
                       ),
@@ -578,7 +578,7 @@ class _HeroState extends ConsumerState<_Hero> {
           decoration: ShapeDecoration(
             color: p.card,
             shape: RoundedSuperellipseBorder(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(VpsRadius.large),
               side: BorderSide(color: p.line),
             ),
             shadows: p.raise,
@@ -593,7 +593,7 @@ class _HeroState extends ConsumerState<_Hero> {
                 child: TweenAnimationBuilder<Color?>(
                   tween: ColorTween(end: tone ?? p.accent),
                   duration: const Duration(milliseconds: 700),
-                  curve: Curves.easeInOutCubic,
+                  curve: VpsMotion.settle,
                   builder: (_, c, _) => Container(
                     width: 460,
                     height: 460,
@@ -730,7 +730,7 @@ class _PowerRingState extends State<_PowerRing>
             // (an invitation to connect).
             AnimatedContainer(
               duration: const Duration(milliseconds: 600),
-              curve: Curves.easeOutCubic,
+              curve: VpsMotion.settle,
               width: s,
               height: s,
               decoration: BoxDecoration(
@@ -763,8 +763,8 @@ class _PowerRingState extends State<_PowerRing>
             // Face: the filled brand button invites "connect"; once
             // connected it goes quiet and the colour moves to the ring.
             AnimatedContainer(
-              duration: const Duration(milliseconds: 450),
-              curve: Curves.easeOutCubic,
+              duration: VpsMotion.slow,
+              curve: VpsMotion.settle,
               width: s * 0.7,
               height: s * 0.7,
               decoration: BoxDecoration(
@@ -831,7 +831,7 @@ class _CountryBadge extends StatelessWidget {
       decoration: ShapeDecoration(
         color: color.withValues(alpha: p.dark ? 0.16 : 0.12),
         shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(VpsRadius.small),
           side: BorderSide(color: color.withValues(alpha: 0.35)),
         ),
       ),
@@ -840,7 +840,7 @@ class _CountryBadge extends StatelessWidget {
         style: vpsText(
           p,
           size: 14,
-          weight: FontWeight.w700,
+          weight: FontWeight.w600,
           color: color,
           spacing: 0.5,
         ),
@@ -1096,7 +1096,7 @@ class _Stat extends StatelessWidget {
             TweenAnimationBuilder<double>(
               tween: Tween(end: ring),
               duration: const Duration(milliseconds: 1100),
-              curve: Curves.easeOutCubic,
+              curve: VpsMotion.settle,
               builder: (_, v, _) => CustomPaint(
                 size: const Size.square(46),
                 painter: _RingGauge(
@@ -1111,7 +1111,7 @@ class _Stat extends StatelessWidget {
       ),
     );
     return ClipRSuperellipse(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(VpsRadius.large),
       child: Stack(
         children: [
           if (spark != null && spark.length > 1)
@@ -1161,7 +1161,7 @@ class _Stat extends StatelessWidget {
           style: vpsText(
             p,
             size: 22,
-            weight: FontWeight.w700,
+            weight: FontWeight.w600,
             spacing: -0.5,
             tabular: true,
           ),
@@ -1339,7 +1339,7 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                 decoration: ShapeDecoration(
                   color: p.track,
                   shape: RoundedSuperellipseBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(VpsRadius.medium),
                     side: BorderSide(color: p.line),
                   ),
                 ),
