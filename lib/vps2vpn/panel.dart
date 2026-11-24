@@ -512,6 +512,28 @@ Future<Set<String>> _pinnedFromProfileFile(
   return result;
 }
 
+@visibleForTesting
+Future<bool?> Function(int? profileId) vpsProfileFromPanel = (id) async {
+  if (id == null) return null;
+  try {
+    final file = File(await appPath.getProfilePath(id.toString()));
+    if (!await file.exists()) return null;
+    final head = await file
+        .openRead(0, 64)
+        .fold<List<int>>([], (all, chunk) => all..addAll(chunk));
+    return vpsPanelProfileHead(utf8.decode(head, allowMalformed: true));
+  } catch (_) {
+    return null;
+  }
+};
+
+bool vpsPanelProfileHead(String head) =>
+    head.replaceFirst('\uFEFF', '').startsWith('# vps2vpn ');
+
+/// Another provider's link shaped like ours: its 404 is not "link replaced".
+VpsMemberResult? vpsPanelAnswer(VpsMemberResult? result, {bool? ours}) =>
+    ours == false && result?.member == null ? null : result;
+
 Future<Set<String>> _pinnedFromCore(Ref ref, String host) async {
   if (ref.read(coreStatusProvider) != CoreStatus.connected) return const {};
   final targetHost = _normHost(host);
@@ -849,14 +871,20 @@ final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
     base.host,
   );
   if (!ref.mounted || scope.closed) return null;
-  final result = await fetchMember(
-    base,
-    proxyPort: port,
-    proxyAuth: proxyAuth,
-    scope: scope,
-    pinnedSha256: pins,
+  final ours = await vpsProfileFromPanel(profileId);
+  if (!ref.mounted || scope.closed) return null;
+  final result = vpsPanelAnswer(
+    await fetchMember(
+      base,
+      proxyPort: port,
+      proxyAuth: proxyAuth,
+      scope: scope,
+      pinnedSha256: pins,
+    ),
+    ours: ours,
   );
-  if (result?.problem == VpsPanelProblem.unreachable) {
+  if (result == null) return null;
+  if (result.problem == VpsPanelProblem.unreachable) {
     interval = const Duration(seconds: 30);
   }
   fetchedAt = DateTime.now();
@@ -941,6 +969,7 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
   final watch = VpsLineWatch(
     lines: () async {
       if (!await ref.read(setupActionProvider.notifier).inputsApplied() ||
+          await vpsProfileFromPanel(profileId) == false ||
           !ref.mounted) {
         return null;
       }

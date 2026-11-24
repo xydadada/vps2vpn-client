@@ -8,6 +8,31 @@ import 'package:flutter_test/flutter_test.dart';
 const _tok = 'AbCdEf0123456789xyzQ';
 
 void main() {
+  group('another provider with a link shaped like ours', () {
+    test('only our own profile marks the panel as ours', () {
+      expect(
+        vpsPanelProfileHead('# vps2vpn Ann - 2026-11-24 10:00\n{'),
+        isTrue,
+      );
+      expect(vpsPanelProfileHead('﻿# vps2vpn Ann - 2026'), isTrue);
+      expect(vpsPanelProfileHead('proxies:\n'), isFalse);
+      expect(vpsPanelProfileHead('# vps2vpnish'), isFalse);
+    });
+
+    test('its 404 is no "link replaced" and its silence no warning', () {
+      const replaced = VpsMemberResult(linkChanged: true);
+      const down = VpsMemberResult(problem: VpsPanelProblem.unreachable);
+      expect(vpsPanelAnswer(replaced, ours: false), isNull);
+      expect(vpsPanelAnswer(down, ours: false), isNull);
+      expect(vpsPanelAnswer(replaced, ours: true), same(replaced));
+      expect(vpsPanelAnswer(down, ours: null), same(down));
+      const member = VpsMemberResult(
+        member: VpsMember(name: 'Ann', enabled: true),
+      );
+      expect(vpsPanelAnswer(member, ours: false), same(member));
+    });
+  });
+
   group('api base', () {
     test('drops the query and adds /api/', () {
       expect(
