@@ -36,6 +36,10 @@ class VpsPalette {
     required this.glowB,
     required this.track,
     required this.thumb,
+    required this.selected,
+    required this.lineHover,
+    required this.toggleOff,
+    required this.popover,
   });
 
   final bool dark;
@@ -61,6 +65,10 @@ class VpsPalette {
 
   /// Raised surface on a track: the chosen segment.
   final Color thumb;
+  final Color selected;
+  final Color lineHover;
+  final Color toggleOff;
+  final Color popover;
 
   // Neutral greys in clear steps (page < sidebar < card < raised), the way
   // macOS and iOS group content: colour is kept for state and the one main
@@ -85,6 +93,10 @@ class VpsPalette {
     glowB: Color(0x00000000),
     track: Color(0xFF131316),
     thumb: Color(0xFF2C2C31),
+    selected: Color(0x12FFFFFF),
+    lineHover: Color(0x29FFFFFF),
+    toggleOff: Color(0xFF2E2E33),
+    popover: Color(0xF2222227),
   );
 
   // Apple's grouped-content greys: cards float on a cool grey page.
@@ -108,6 +120,10 @@ class VpsPalette {
     glowB: Color(0x00000000),
     track: Color(0xFFEBEBF0),
     thumb: Color(0xFFFFFFFF),
+    selected: Color(0xFFEEF0F3),
+    lineHover: Color(0xFFD5D5DA),
+    toggleOff: Color(0xFFDCDCE1),
+    popover: Color(0xF7FFFFFF),
   );
 
   static VpsPalette of(BuildContext context) =>
@@ -202,17 +218,12 @@ class _VpsCardState extends State<VpsCard> {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final dark = context.colorScheme.brightness == Brightness.dark;
     // Under the pointer the edge catches a little more light, like a lifted
     // pane; the change is slight on purpose.
     final edge = widget.highlight
         ? p.accent.withValues(alpha: _hover ? 0.7 : 0.5)
         : _hover
-        ? Color.alphaBlend(
-            (dark ? const Color(0xFFFFFFFF) : const Color(0xFF000000))
-                .withValues(alpha: dark ? 0.08 : 0.06),
-            p.line,
-          )
+        ? p.lineHover
         : p.line;
     final box = AnimatedContainer(
       duration: VpsMotion.fast,
@@ -660,9 +671,7 @@ class VpsSwitch extends StatelessWidget {
         height: 24,
         padding: const EdgeInsets.all(2.5),
         decoration: ShapeDecoration(
-          color: value
-              ? p.accent
-              : (p.dark ? const Color(0xFF2A2D35) : const Color(0xFFDCDFE4)),
+          color: value ? p.accent : p.toggleOff,
           shape: RoundedSuperellipseBorder(
             borderRadius: BorderRadius.circular(VpsRadius.pill),
           ),
@@ -1403,7 +1412,7 @@ class VpsInfoTip extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
             decoration: ShapeDecoration(
-              color: p.dark ? const Color(0xF2232536) : const Color(0xF7FFFFFF),
+              color: p.popover,
               shape: RoundedSuperellipseBorder(
                 borderRadius: BorderRadius.circular(VpsRadius.medium),
                 side: BorderSide(color: p.line),

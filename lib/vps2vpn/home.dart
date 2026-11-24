@@ -785,13 +785,13 @@ class _PowerRingState extends State<_PowerRing>
                     VpsIconView(
                       VpsIcon.plus,
                       size: s * 0.24,
-                      color: const Color(0xFFFFFFFF),
+                      color: p.accentInk,
                     )
                   else
                     CustomPaint(
                       size: Size.square(s * 0.2),
                       painter: _PowerGlyph(
-                        widget.on ? widget.tone : const Color(0xFFFFFFFF),
+                        widget.on ? widget.tone : p.accentInk,
                       ),
                     ),
                   SizedBox(height: s * 0.03),
@@ -801,7 +801,7 @@ class _PowerRingState extends State<_PowerRing>
                       p,
                       size: 13,
                       weight: FontWeight.w600,
-                      color: widget.on ? p.text : const Color(0xFFFFFFFF),
+                      color: widget.on ? p.text : p.accentInk,
                     ),
                   ),
                 ],

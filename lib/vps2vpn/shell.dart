@@ -363,9 +363,7 @@ class _NavItem extends StatelessWidget {
         duration: VpsMotion.medium,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: ShapeDecoration(
-          color: selected
-              ? (p.dark ? const Color(0x0DFFFFFF) : const Color(0xFFEEF0F3))
-              : const Color(0x00000000),
+          color: selected ? p.selected : const Color(0x00000000),
           shape: RoundedSuperellipseBorder(
             borderRadius: BorderRadius.circular(VpsRadius.small),
           ),
@@ -448,11 +446,7 @@ class _BottomNav extends StatelessWidget {
               child: AnimatedContainer(
                 duration: VpsMotion.medium,
                 decoration: ShapeDecoration(
-                  color: i == tab
-                      ? (p.dark
-                            ? const Color(0x14FFFFFF)
-                            : const Color(0xFFEEF0F3))
-                      : const Color(0x00000000),
+                  color: i == tab ? p.selected : const Color(0x00000000),
                   shape: RoundedSuperellipseBorder(
                     borderRadius: BorderRadius.circular(VpsRadius.large),
                   ),
