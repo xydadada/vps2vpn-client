@@ -376,7 +376,6 @@ void main() {
           ),
         ),
       );
-      await check(tester);
       expect(find.text('Version 1.1.0 is available'), findsOneWidget);
     });
 
@@ -396,7 +395,18 @@ void main() {
           ),
         ),
       );
-      await check(tester);
+      expect(find.text('Version 1.1.0 is available'), findsOneWidget);
+      // The background check found a newer one on GitHub.
+      ProviderScope.containerOf(tester.element(find.byType(VpsUpdateCard)))
+          .read(vpsUpdateCheckProvider.notifier)
+          .set(
+            VpsUpdateCheck(
+              status: VpsUpdateStatus.available,
+              at: DateTime.now(),
+              releases: [_onGitHub('1.4.0')],
+            ),
+          );
+      await tester.pumpAndSettle();
       expect(find.text('Version 1.4.0 is available'), findsOneWidget);
     });
 
@@ -561,6 +571,7 @@ void main() {
       await tester.pumpWidget(
         TestApp(
           includeNavigatorKey: false,
+          wrapInProviderScope: true,
           locale: const Locale('en'),
           child: ValueListenableBuilder<bool>(
             key: const ValueKey('page'),

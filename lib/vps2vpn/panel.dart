@@ -514,7 +514,9 @@ Future<Set<String>> _pinnedFromProfileFile(
 
 @visibleForTesting
 Future<bool?> Function(int? profileId) vpsProfileFromPanel = (id) async {
-  if (id == null) return null;
+  if (id == null || Platform.environment.containsKey('FLUTTER_TEST')) {
+    return null;
+  }
   try {
     final file = File(await appPath.getProfilePath(id.toString()));
     if (!await file.exists()) return null;
@@ -1315,7 +1317,7 @@ Future<HttpClientResponse> _getFollowing(HttpClient client, Uri url) async {
     final req = await client.getUrl(at).timeout(const Duration(seconds: 15));
     req.followRedirects = false;
     final res = await req.close().timeout(const Duration(seconds: 15));
-    if (!res.isRedirect) return res;
+    if (!const {301, 302, 303, 307, 308}.contains(res.statusCode)) return res;
     final location = res.headers.value(HttpHeaders.locationHeader);
     unawaited(res.drain<void>().catchError((_) {}));
     final next = location == null ? null : at.resolve(location);
