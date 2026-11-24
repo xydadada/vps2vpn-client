@@ -1,5 +1,6 @@
 // vps2vpn "Servers": pick the line you use, see how fast each one answers.
 
+import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -69,6 +70,10 @@ void vpsAutoTestOnce(WidgetRef ref, Group group) {
 /// Remembered for the whole app session, like the selected tab.
 final _byLatency = ValueNotifier<bool>(true);
 
+/// Per node: whether Claude and ChatGPT both open through it, from the last
+/// "Test AI" this session.
+final _aiOk = ValueNotifier<Map<String, bool>>(const {});
+
 /// Sort key: answered lines by latency, then untested, then timeouts.
 int _rank(int? d) => switch (d) {
   null || 0 => 1 << 20,
@@ -82,6 +87,60 @@ bool _isPinned(String name) =>
 class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   String? _groupName;
   bool _testing = false;
+  bool _testingAi = false;
+
+  void _aiChanged() => setState(() {});
+
+  @override
+  void initState() {
+    super.initState();
+    _aiOk.addListener(_aiChanged);
+  }
+
+  @override
+  void dispose() {
+    _aiOk.removeListener(_aiChanged);
+    super.dispose();
+  }
+
+  Future<void> _testAi(Group group) async {
+    if (_testingAi) return;
+    setState(() => _testingAi = true);
+    final core = ref.read(coreHandlerProvider);
+    final names = [
+      for (final proxy in group.all)
+        if (!_isPinned(proxy.name)) proxy.name,
+    ];
+    _aiOk.value = {
+      for (final e in _aiOk.value.entries)
+        if (!names.contains(e.key)) e.key: e.value,
+    };
+    try {
+      for (var i = 0; i < names.length; i += 3) {
+        await Future.wait([
+          for (final name in names.skip(i).take(3))
+            checkServices(
+              core,
+              proxyName: name,
+              targets: const [ServiceTarget.claude, ServiceTarget.chatgpt],
+            ).then(
+              (checks) => _aiOk.value = {
+                ..._aiOk.value,
+                name:
+                    checks.values.length == 2 &&
+                    checks.values.every(
+                      (c) => c.status == ServiceProbeStatus.available,
+                    ),
+              },
+              onError: (_) => _aiOk.value = {..._aiOk.value, name: false},
+            ),
+        ]);
+        if (!mounted) return;
+      }
+    } finally {
+      if (mounted) setState(() => _testingAi = false);
+    }
+  }
 
   void _autoTest(Group group) {
     if (group.name.isEmpty || group.all.isEmpty || _testing) return;
@@ -166,6 +225,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     final selectable = group.type == GroupType.Selector;
     _autoTest(group);
     final byLatency = _byLatency.value;
+    final aiOk = _aiOk.value;
     final delays = {
       for (final proxy in group.all)
         proxy.name: ref.watch(
@@ -181,6 +241,16 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
       if (d < best) {
         best = d;
         fastest = proxy.name;
+      }
+    }
+    String? bestForAi;
+    var bestAi = 1 << 30;
+    for (final proxy in group.all) {
+      final d = delays[proxy.name];
+      if (aiOk[proxy.name] != true || d == null || d <= 0) continue;
+      if (d < bestAi) {
+        bestAi = d;
+        bestForAi = proxy.name;
       }
     }
     final proxies = [...group.all];
@@ -205,12 +275,25 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
               '这条线路会自动挑选节点，不需要手动切换',
               'This line picks a node by itself; nothing to switch',
             ),
-      action: VpsButton(
-        label: _testing
-            ? tr(context, '测速中…', 'Testing…')
-            : tr(context, '测速', 'Test speed'),
-        icon: VpsIcon.bolt,
-        onTap: _testing ? null : () => _test(group),
+      action: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          VpsButton(
+            label: _testingAi
+                ? tr(context, '测 AI 中…', 'Testing AI…')
+                : tr(context, '测 AI', 'Test AI'),
+            icon: VpsIcon.sparkle,
+            onTap: _testingAi ? null : () => _testAi(group),
+          ),
+          VpsButton(
+            label: _testing
+                ? tr(context, '测速中…', 'Testing…')
+                : tr(context, '测速', 'Test speed'),
+            icon: VpsIcon.bolt,
+            onTap: _testing ? null : () => _test(group),
+          ),
+        ],
       ),
       children: [
         Row(
@@ -260,6 +343,8 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                       proxy: proxy,
                       testUrl: group.testUrl,
                       fastest: proxy.name == fastest,
+                      ai: aiOk[proxy.name],
+                      bestForAi: proxy.name == bestForAi,
                       selected: proxy.name == selected,
                       onTap: selectable
                           ? () => ref
@@ -330,6 +415,8 @@ class _ProxyCard extends ConsumerWidget {
     required this.testUrl,
     required this.selected,
     this.fastest = false,
+    this.ai,
+    this.bestForAi = false,
     this.onTap,
   });
 
@@ -337,6 +424,10 @@ class _ProxyCard extends ConsumerWidget {
   final String? testUrl;
   final bool selected;
   final bool fastest;
+
+  /// Whether Claude and ChatGPT open through this node; null until tested.
+  final bool? ai;
+  final bool bestForAi;
   final VoidCallback? onTap;
 
   @override
@@ -385,26 +476,18 @@ class _ProxyCard extends ConsumerWidget {
                     ),
                     if (fastest) ...[
                       const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1.5,
-                        ),
-                        decoration: ShapeDecoration(
-                          color: p.good.withValues(alpha: 0.12),
-                          shape: RoundedSuperellipseBorder(
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ),
-                        child: Text(
-                          tr(context, '最快', 'Fastest'),
-                          style: vpsText(
-                            p,
-                            size: 10.5,
-                            weight: FontWeight.w600,
-                            color: p.good,
-                          ),
-                        ),
+                      _Tag(tr(context, '最快', 'Fastest'), p.good),
+                    ],
+                    if (bestForAi) ...[
+                      const SizedBox(width: 8),
+                      _Tag(tr(context, '适合 AI', 'Best for AI'), p.accent),
+                    ] else if (ai != null) ...[
+                      const SizedBox(width: 8),
+                      _Tag(
+                        ai!
+                            ? tr(context, 'AI 可用', 'AI works')
+                            : tr(context, 'AI 不可用', 'No AI'),
+                        ai! ? p.accent : p.muted,
                       ),
                     ],
                   ],
@@ -472,6 +555,31 @@ class _ProxyCard extends ConsumerWidget {
 
 /// A node's leading tile: its country code, or a spark for the smart and
 /// AI lines. Fills with the accent when chosen.
+class _Tag extends StatelessWidget {
+  const _Tag(this.label, this.color);
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+      decoration: ShapeDecoration(
+        color: color.withValues(alpha: 0.12),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(5),
+        ),
+      ),
+      child: Text(
+        label,
+        style: vpsText(p, size: 10.5, weight: FontWeight.w600, color: color),
+      ),
+    );
+  }
+}
+
 class _NodeTile extends StatelessWidget {
   const _NodeTile({required this.label, required this.selected});
 
