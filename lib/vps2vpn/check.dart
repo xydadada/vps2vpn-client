@@ -6,6 +6,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
+import 'package:fl_clash/vps2vpn/diagnose.dart';
 import 'package:fl_clash/vps2vpn/exit_check.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
@@ -325,6 +326,9 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
           ),
           if (name == 'AI') const VpsServerAiCard(),
         ],
+        const SizedBox(height: 22),
+        VpsSectionTitle(tr(context, '网络诊断', 'Diagnosis')),
+        const VpsDiagnoseCard(),
       ],
     );
   }
