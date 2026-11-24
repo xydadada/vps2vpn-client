@@ -10,6 +10,7 @@ import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/mine.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
+import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -105,6 +106,15 @@ class PanelResponse extends Stream<List<int>> implements HttpClientResponse {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Health extends VpsProfileHealthNotifier {
+  _Health(this.value);
+
+  final Map<int, VpsProfileHealth> value;
+
+  @override
+  Map<int, VpsProfileHealth> build() => value;
 }
 
 class FailingFirstProfileAction extends ProfilesAction {
@@ -217,6 +227,48 @@ void main() {
       expect(action.calls, [1, 2]);
       // The failure is shown in the app banner (outside this test tree).
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'a subscription out of reach for days says so and offers a new link',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          profilesProvider.overrideWith(() => TestProfiles([profile])),
+          vpsMemberProvider.overrideWith((ref) async => null),
+          localIpProvider.overrideWithValue(null),
+          vpsProfileHealthProvider.overrideWith(
+            () => _Health({
+              1: VpsProfileHealth(
+                at: DateTime.now(),
+                ok: false,
+                error: 'Connection refused',
+                unreachable: true,
+                failingSince: DateTime.now().subtract(const Duration(days: 4)),
+                failures: 5,
+              ),
+            }),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      globalState.container = container;
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TestApp(locale: Locale('en'), child: VpsMePage()),
+        ),
+      );
+      await tester.pump();
+      expect(find.textContaining('may be gone'), findsOneWidget);
+      expect(find.textContaining('Your lines still work'), findsOneWidget);
+      await tester.tap(find.text('Replace link'));
+      await tester.pump();
+      expect(find.text('Replace'), findsOneWidget);
     },
   );
 
