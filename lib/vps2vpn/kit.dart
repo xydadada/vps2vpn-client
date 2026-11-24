@@ -545,6 +545,31 @@ class _VpsBreatheState extends State<VpsBreathe>
   }
 }
 
+/// A breathing placeholder the size of what is still on its way.
+class VpsSkeleton extends StatelessWidget {
+  const VpsSkeleton({super.key, required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: VpsBreathe(
+      active: true,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: ShapeDecoration(
+          color: VpsPalette.of(context).track,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(VpsRadius.pill),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// [text] that rolls up into place when it changes, like a flip counter:
 /// live numbers move instead of blinking.
 class VpsRollingText extends StatelessWidget {

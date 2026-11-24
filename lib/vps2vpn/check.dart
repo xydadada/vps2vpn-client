@@ -175,21 +175,25 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  VpsBreathe(
-                    active: info == null && ipEntry.isLoading,
-                    child: Text(
-                      info == null
-                          ? (ipEntry.isLoading
-                                ? tr(context, '查询中…', 'Looking up…')
-                                : '—')
-                          : countryName(context, info.countryCode),
-                      style: vpsText(
-                        p,
-                        size: 26,
-                        weight: FontWeight.w600,
-                        spacing: -0.5,
-                      ),
-                    ),
+                  AnimatedSwitcher(
+                    duration: VpsMotion.medium,
+                    child: info == null && ipEntry.isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 3),
+                            child: VpsSkeleton(width: 120, height: 26),
+                          )
+                        : Text(
+                            info == null
+                                ? '—'
+                                : countryName(context, info.countryCode),
+                            key: ValueKey(info?.countryCode),
+                            style: vpsText(
+                              p,
+                              size: 26,
+                              weight: FontWeight.w600,
+                              spacing: -0.5,
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 10),
                   if (info != null)
@@ -399,9 +403,15 @@ class _ServiceLine extends StatelessWidget {
                 style: vpsText(p, size: 12.5, color: p.soft),
               ),
             ),
-          VpsBreathe(
-            active: entry.value == null && entry.isLoading,
-            child: VpsChip(label: statusText(context, entry), color: color),
+          AnimatedSwitcher(
+            duration: VpsMotion.medium,
+            child: entry.value == null && entry.isLoading
+                ? const VpsSkeleton(width: 64, height: 26)
+                : VpsChip(
+                    key: ValueKey(entry.value?.status),
+                    label: statusText(context, entry),
+                    color: color,
+                  ),
           ),
         ],
       ),
