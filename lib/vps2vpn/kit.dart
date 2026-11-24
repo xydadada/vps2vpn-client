@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:fl_clash/ui/fonts.dart';
 import 'package:prism_ui/prism_ui.dart'
     show AppRadius, AppShape, BuildContextExtension, SpringCurve;
 import 'package:flutter/physics.dart';
@@ -606,6 +607,48 @@ class VpsSkeleton extends StatelessWidget {
       ),
     ),
   );
+}
+
+String? vpsFlagEmoji(String code) {
+  final c = code.trim().toUpperCase();
+  if (!RegExp(r'^[A-Z]{2}$').hasMatch(c)) return null;
+  return String.fromCharCodes([
+    for (final unit in c.codeUnits) 0x1F1E6 + unit - 0x41,
+  ]);
+}
+
+/// Drawn by the bundled Twemoji font: Windows has no flag emoji of its own.
+class VpsFlag extends StatelessWidget {
+  const VpsFlag(this.code, {super.key, this.size = 22});
+
+  final String code;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = vpsFlagEmoji(code);
+    final p = VpsPalette.of(context);
+    if (flag == null) {
+      return Text(
+        code.toUpperCase(),
+        style: vpsText(p, size: size * 0.55, weight: FontWeight.w600),
+      );
+    }
+    return Semantics(
+      label: code.toUpperCase(),
+      child: ExcludeSemantics(
+        child: Text(
+          flag,
+          textScaler: TextScaler.noScaling,
+          style: TextStyle(
+            fontFamily: FontFamily.twEmoji.value,
+            fontSize: size,
+            height: 1,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// [text] that rolls up into place when it changes, like a flip counter:

@@ -567,8 +567,6 @@ class _ProxyCard extends ConsumerWidget {
   }
 }
 
-/// A node's leading tile: its country code, or a spark for the smart and
-/// AI lines. Fills with the accent when chosen.
 class _Tag extends StatelessWidget {
   const _Tag(this.label, this.color);
 
@@ -594,6 +592,8 @@ class _Tag extends StatelessWidget {
   }
 }
 
+/// A node's leading tile: its country's flag, or a spark for the smart and
+/// AI lines that fills with the accent when chosen.
 class _NodeTile extends StatelessWidget {
   const _NodeTile({required this.label, required this.selected});
 
@@ -604,6 +604,7 @@ class _NodeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final ink = selected ? p.accentInk : p.soft;
+    final filled = selected && label == null;
     return AnimatedContainer(
       duration: VpsMotion.medium,
       curve: VpsMotion.settle,
@@ -611,25 +612,23 @@ class _NodeTile extends StatelessWidget {
       height: 38,
       alignment: Alignment.center,
       decoration: ShapeDecoration(
-        gradient: selected ? p.accentGradient : null,
-        color: selected ? null : p.track,
+        gradient: filled ? p.accentGradient : null,
+        color: filled ? null : p.track,
         shape: RoundedSuperellipseBorder(
           borderRadius: BorderRadius.circular(VpsRadius.medium),
-          side: BorderSide(color: selected ? const Color(0x00000000) : p.line),
+          side: BorderSide(
+            color: filled
+                ? const Color(0x00000000)
+                : selected
+                ? p.accent
+                : p.line,
+            width: selected ? 1.5 : 1,
+          ),
         ),
       ),
       child: label == null
           ? VpsIconView(VpsIcon.sparkle, size: 17, color: ink)
-          : Text(
-              label!,
-              style: vpsText(
-                p,
-                size: 12.5,
-                weight: FontWeight.w600,
-                color: ink,
-                spacing: 0.4,
-              ),
-            ),
+          : VpsFlag(label!),
     );
   }
 }

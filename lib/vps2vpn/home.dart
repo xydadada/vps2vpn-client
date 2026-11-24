@@ -531,10 +531,7 @@ class _HeroState extends ConsumerState<_Hero> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (on && info != null) ...[
-                    _CountryBadge(
-                      code: info.countryCode,
-                      color: tone ?? p.good,
-                    ),
+                    VpsFlag(info.countryCode, size: 30),
                     const SizedBox(width: 12),
                   ],
                   Flexible(
@@ -875,41 +872,6 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The exit country as a two-letter tile (Windows has no flag emoji).
-class _CountryBadge extends StatelessWidget {
-  const _CountryBadge({required this.code, required this.color});
-
-  final String code;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = VpsPalette.of(context);
-    return Container(
-      width: 42,
-      height: 32,
-      alignment: Alignment.center,
-      decoration: ShapeDecoration(
-        color: color.withValues(alpha: p.dark ? 0.16 : 0.12),
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(VpsRadius.small),
-          side: BorderSide(color: color.withValues(alpha: 0.35)),
-        ),
-      ),
-      child: Text(
-        code.toUpperCase(),
-        style: vpsText(
-          p,
-          size: 14,
-          weight: FontWeight.w600,
-          color: color,
-          spacing: 0.5,
         ),
       ),
     );
