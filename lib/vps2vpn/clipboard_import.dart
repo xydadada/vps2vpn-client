@@ -311,7 +311,6 @@ class VpsImportFieldState extends ConsumerState<VpsImportField> {
           maxLines: 4,
           keyboardType: TextInputType.url,
           autocorrect: false,
-          enableSuggestions: false,
           textInputAction: TextInputAction.go,
           onSubmitted: (_) => _import(),
           onChanged: (_) {

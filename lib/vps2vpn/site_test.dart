@@ -187,7 +187,6 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
                   controller: _input,
                   keyboardType: TextInputType.url,
                   autocorrect: false,
-                  enableSuggestions: false,
                   onSubmitted: (_) => _add(),
                   decoration: InputDecoration(
                     hintText: tr(
