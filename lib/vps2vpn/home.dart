@@ -365,7 +365,7 @@ class _HeroState extends ConsumerState<_Hero> {
         : suspended
         ? (tr(context, '已暂停', 'Paused'), p.warn)
         : lineDown
-        ? (tr(context, '线路无响应', 'Line not responding'), p.warn)
+        ? (tr(context, '已连接 · 线路无响应', 'Connected · line not answering'), p.warn)
         : on
         ? (tr(context, '已连接', 'Connected'), p.good)
         : (tr(context, '未连接', 'Not connected'), p.muted);
@@ -559,17 +559,11 @@ class _HeroState extends ConsumerState<_Hero> {
                 ?latencyChip,
                 if (on && info != null && line != null)
                   VpsChip(label: line, color: p.soft),
-                VpsChip(
-                  label: mode == Mode.global
-                      ? tr(context, '全局模式', 'Global')
-                      : tr(context, '规则模式', 'Rule mode'),
-                  color: p.soft,
-                ),
                 if (on)
                   VpsChip(
                     label: tr(
                       context,
-                      '已连接 ${getTimeText(runTime)}',
+                      '时长 ${getTimeText(runTime)}',
                       'Up ${getTimeText(runTime)}',
                     ),
                     color: p.soft,
