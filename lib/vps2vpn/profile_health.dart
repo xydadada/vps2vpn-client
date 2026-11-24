@@ -196,6 +196,8 @@ class VpsProfileHealthNotifier extends Notifier<Map<int, VpsProfileHealth>> {
     );
   }
 
+  VpsProfileHealth? of(int id) => state[id];
+
   void forget(int id) {
     if (state.containsKey(id)) _put(id, null);
   }
