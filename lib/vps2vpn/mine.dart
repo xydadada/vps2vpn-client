@@ -75,9 +75,7 @@ class VpsMePage extends ConsumerStatefulWidget {
 }
 
 class _VpsMePageState extends ConsumerState<VpsMePage> {
-  String? _note;
   bool _updating = false;
-  bool _pasting = false;
 
   Future<void> _updateProfiles(List<Profile> profiles) async {
     if (_updating) return;
@@ -100,20 +98,6 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
       );
     } finally {
       if (mounted) setState(() => _updating = false);
-    }
-  }
-
-  Future<void> _paste() async {
-    if (_pasting) return;
-    setState(() => _pasting = true);
-    try {
-      final result = await vpsImportClipboard(ref);
-      if (!mounted) return;
-      setState(() => _note = vpsImportNote(context, result));
-      // Added: the next step is connecting, which lives on Home.
-      if (result == VpsImportResult.added) vpsTab.value = vpsTabHome;
-    } finally {
-      if (mounted) setState(() => _pasting = false);
     }
   }
 
@@ -197,35 +181,17 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               Text(
                 tr(
                   context,
-                  '从剪贴板读取订阅链接，或导入本地配置文件',
-                  'Read a link from the clipboard, or import a local config file',
+                  '粘贴或输入订阅链接后点"导入"，也可以导入本地配置文件',
+                  'Paste or type the link, then tap Import; or import a local config file',
                 ),
                 style: vpsText(p, size: 13, color: p.soft),
               ),
               const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  VpsButton(
-                    label: tr(context, '从剪贴板导入', 'From clipboard'),
-                    icon: VpsIcon.paste,
-                    filled: true,
-                    onTap: _pasting ? null : _paste,
-                  ),
-                  VpsButton(
-                    label: tr(context, '本地文件', 'Local file'),
-                    icon: VpsIcon.file,
-                    onTap: () => ref
-                        .read(profilesActionProvider.notifier)
-                        .addProfileFormFile(),
-                  ),
-                ],
+              // Added: the next step is connecting, which lives on Home.
+              VpsImportField(
+                withFile: true,
+                onAdded: () => vpsTab.value = vpsTabHome,
               ),
-              if (_note != null) ...[
-                const SizedBox(height: 10),
-                Text(_note!, style: vpsText(p, size: 12.5, color: p.warn)),
-              ],
             ],
           ),
         ),

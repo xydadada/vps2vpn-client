@@ -7,8 +7,9 @@ import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/prism_ui.dart' show InputDecoration, TextField;
 
-enum VpsImportResult { added, noLink, failed }
+enum VpsImportResult { added, failed }
 
 /// The subscription link on the clipboard. A plain URL, a share link, or a
 /// clash://install-config?url=… wrapper all come down to one link; [strict]
@@ -34,22 +35,11 @@ Future<VpsImportResult> vpsImportLink(WidgetRef ref, String link) async {
       : VpsImportResult.failed;
 }
 
-Future<VpsImportResult> vpsImportClipboard(WidgetRef ref) async {
-  final link = await vpsClipboardLink();
-  if (link == null) return VpsImportResult.noLink;
-  return vpsImportLink(ref, link);
-}
-
 String? vpsImportNote(
   BuildContext context,
   VpsImportResult result,
 ) => switch (result) {
   VpsImportResult.added => null,
-  VpsImportResult.noLink => tr(
-    context,
-    '剪贴板里没有订阅链接。请先复制管理员发给你的链接，再点导入。',
-    'No subscription link on the clipboard. Copy the link the owner gave you, then tap Import.',
-  ),
   VpsImportResult.failed => tr(
     context,
     '没有导入：请确认链接完整、服务器在线，然后再试一次。',
@@ -193,6 +183,178 @@ class _VpsClipboardOfferState extends ConsumerState<VpsClipboardOffer> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Why [text] cannot be imported, or null when it holds one link.
+String? vpsLinkProblem(BuildContext context, String text) {
+  final value = text.trim();
+  if (value.isEmpty) {
+    return tr(
+      context,
+      '请先粘贴或输入订阅链接。',
+      'Paste or type your subscription link first.',
+    );
+  }
+  if (value.contains(RegExp(r'\s'))) {
+    return tr(
+      context,
+      '一次只能导入一个链接，框里有空格或换行。请只留下一个链接。',
+      'One link at a time: there is a space or a line break. Keep just one link.',
+    );
+  }
+  if (profileUrlFromQrCodes([value]) == null) {
+    return value.contains('://')
+        ? tr(
+            context,
+            '这不是订阅链接。请检查是否复制完整。',
+            'This is not a subscription link. Check it was copied in full.',
+          )
+        : tr(
+            context,
+            '链接要以 http:// 或 https:// 开头。',
+            'A link starts with http:// or https://.',
+          );
+  }
+  return null;
+}
+
+/// A box to paste or type the subscription link into, with Import and
+/// "Paste from clipboard" (which only fills the box). Long links wrap, so
+/// the whole link stays visible.
+class VpsImportField extends ConsumerStatefulWidget {
+  const VpsImportField({super.key, this.onAdded, this.withFile = false});
+
+  final VoidCallback? onAdded;
+  final bool withFile;
+
+  @override
+  ConsumerState<VpsImportField> createState() => VpsImportFieldState();
+}
+
+class VpsImportFieldState extends ConsumerState<VpsImportField> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// Imports what is in the box; an empty box is filled from the clipboard
+  /// first, for the user to check and confirm.
+  Future<void> submitOrFill() async {
+    if (_controller.text.trim().isEmpty) {
+      await _paste();
+      _focus.requestFocus();
+      return;
+    }
+    await _import();
+  }
+
+  Future<void> _paste() async {
+    final link = await vpsClipboardLink();
+    if (!mounted) return;
+    setState(() {
+      if (link == null) {
+        _error = tr(
+          context,
+          '剪贴板里没有订阅链接。也可以直接在框里输入。',
+          'No subscription link on the clipboard. You can also type it in the box.',
+        );
+      } else {
+        _controller.text = link;
+        _error = null;
+      }
+    });
+  }
+
+  Future<void> _import() async {
+    if (_busy) return;
+    final problem = vpsLinkProblem(context, _controller.text);
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    final link = vpsSubscriptionLink(
+      profileUrlFromQrCodes([_controller.text.trim()])!,
+    );
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await vpsImportLink(ref, link);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = vpsImportNote(context, result);
+      if (result == VpsImportResult.added) _controller.clear();
+    });
+    if (result == VpsImportResult.added) widget.onAdded?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          minLines: 1,
+          maxLines: 4,
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          enableSuggestions: false,
+          textInputAction: TextInputAction.go,
+          onSubmitted: (_) => _import(),
+          onChanged: (_) {
+            if (_error != null) setState(() => _error = null);
+          },
+          decoration: InputDecoration(
+            hintText: tr(
+              context,
+              '粘贴或输入订阅链接',
+              'Paste or type your subscription link',
+            ),
+            errorText: _error,
+            errorMaxLines: 3,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            VpsButton(
+              label: _busy
+                  ? tr(context, '导入中…', 'Adding…')
+                  : tr(context, '导入', 'Import'),
+              filled: true,
+              onTap: _busy ? null : _import,
+            ),
+            VpsButton(
+              label: tr(context, '从剪贴板粘贴', 'Paste from clipboard'),
+              icon: VpsIcon.paste,
+              onTap: _busy ? null : _paste,
+            ),
+            if (widget.withFile)
+              VpsButton(
+                label: tr(context, '本地文件', 'Local file'),
+                icon: VpsIcon.file,
+                onTap: () => ref
+                    .read(profilesActionProvider.notifier)
+                    .addProfileFormFile(),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

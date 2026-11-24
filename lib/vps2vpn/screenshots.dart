@@ -16,12 +16,12 @@ import 'package:rust_api/window.dart';
 /// in each theme, language and window size into that folder, before and after
 /// connecting, then quits. VPS2VPN_SHOT_SUB (loopback only) is the
 /// subscription it imports after the empty first screen.
-final String? vpsShotDir = Platform.environment['VPS2VPN_SHOT_DIR'];
+final String? _shotDir = Platform.environment['VPS2VPN_SHOT_DIR'];
 
 final _boundary = GlobalKey();
 
 Widget vpsShotBoundary(Widget child) =>
-    vpsShotDir == null ? child : RepaintBoundary(key: _boundary, child: child);
+    _shotDir == null ? child : RepaintBoundary(key: _boundary, child: child);
 
 const _sizes = {
   'default': ui.Size(680, 580),
@@ -38,7 +38,7 @@ const _tabs = {
 bool _started = false;
 
 void vpsStartShots(ProviderContainer container) {
-  final dir = vpsShotDir;
+  final dir = _shotDir;
   if (dir == null || _started) return;
   _started = true;
   unawaited(_ShotRun(container, Directory(dir)).run());

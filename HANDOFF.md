@@ -145,11 +145,11 @@
 
 1. **"另一个 VPN 开着"提醒（已写好，还没发布）**：`lib/vps2vpn/takeover.dart` 的 `scanOtherVpns` 在 TUN 模式连接前用 `netsh interface ipv4 show route` 和 `show interfaces` 找别的接管全部流量的网卡（0.0.0.0/1 + 128.0.0.0/1 分段默认路由，或没有网关的默认路由），排除我们自己的网卡；`takeover_notice.dart` 显示"另一个 VPN（名字）也开着……请关掉其中一个"。单元测试在 `test/vps2vpn/takeover_test.dart` 的 `another VPN` 组。本机跑不了 Flutter 测试（用户名带中文，Go 构建钩子解析 JSON 出错），以云端 `verify.yaml` 为准。下次正式发布（1.0.28）时一起带上，发布前在 `dirty` 场景里看一眼提示是否出现。
 2. **安卓正式 APK**：模拟器路线已经走到头（第 5 节）。真机测试（第 5 节"Firebase Test Lab"）两台都失败了，但还不知道是哪一步：可能是测试驱动的界面匹配没对上（比如按钮文字），也可能是应用真的连不上。下一步：先按第 5 节说的把 Test Lab 的详细结果拷下来，看清失败在哪一步；是驱动的问题就修驱动重跑，是应用的问题再查 TUN/VpnService（`android/service/.../VpnService.kt`）。真机全部通过之前，APK 不转正，服务端也先别配 `files.android`。testlab 测试账户由管理员会话停用，要再测需重新开账户并更新 secret `TESTLAB_SUB_URL`。
-3. **`users` 场景还没过（测试脚本问题，不是应用问题）**：最后一次运行 45151331679。第二个账户打不开管理员的 Helper 和 Core 管道（安全检查 PASS），USERPROFILE 也对了，但它启动的 vps2vpn 仍用 runneradmin 的 `AppData\Roaming`，所以 4 项 FAIL。原因：`users.ps1` 的 `Invoke-AsUser` 前置代码先用 `GetFolderPath('ApplicationData')` 取 APPDATA，这时 USERPROFILE 还没改，已知文件夹路径按旧的 `%USERPROFILE%` 展开。修法：先设 `USERPROFILE`，再把 `APPDATA`、`LOCALAPPDATA` 设成 `$env:USERPROFILE\AppData\Roaming`、`\AppData\Local`，然后重跑 `-f scenarios='["users"]'`。用户要求收尾，这轮没再改。
+3. **`users` 场景**：APPDATA、单实例（按用户 SID 区分，`plugins/rust_api/rust/src/window/windows/instance.rs`）、第二个账户自动连接都修好了，第二个账户的客户端能常驻。剩下一项"第二个账户有自己的端口"：日志里它的 Core 也在 7890 上，`users.ps1` 已加端口归属诊断（每个监听端口属于哪个进程、哪个账户），看结果再判断是真的抢了管理员的端口还是检查写错了。
 4. **C-12**（= C8-07 前半）：macOS 网络/唤醒监听是桩实现。CI 没有 macOS，也不发 macOS 版，暂缓。
 5. 清理：删掉第 3 节里标"可以删"的分支；清掉没用的 arb 文案（`disclaimerAcknowledgeTitle`、`disclaimerAcknowledgeTip`）。
 
-6. **新功能计划**：见仓库根目录 [`ROADMAP.md`](ROADMAP.md)（2026-11-23 用户定）。顺序：1.0.28 → UI 第一批（截图、剪贴板导入、连接中状态、大白话错误、托盘、用词表）→ ROADMAP 第一节（出口 IP 检测，然后 Claude 专项）→ 第六节。规则测试做之前先问用户；需要服务端配合的（流量排行 `features.traffic_rank`、一键反馈、设备管理、节点状态）等服务端会话把接口字段写进 ROADMAP 再接；WARP 和抗封锁先写评估给用户看。做完一项在 ROADMAP 里标"已完成（版本号）"。
+6. **新功能计划**：见仓库根目录 [`ROADMAP.md`](ROADMAP.md)（2026-11-23 用户定）。顺序：1.0.28 → UI 第一批（截图、订阅导入输入框（见 ROADMAP 第〇节）、连接中状态、大白话错误、托盘、用词表）→ ROADMAP 第一节（出口 IP 检测，然后 Claude 专项）→ 第六节。规则测试做之前先问用户；需要服务端配合的（流量排行 `features.traffic_rank`、一键反馈、设备管理、节点状态）等服务端会话把接口字段写进 ROADMAP 再接；WARP 和抗封锁先写评估给用户看。做完一项在 ROADMAP 里标"已完成（版本号）"。
 
 7. **界面语言只留中英（UI 第二批，排在第一批之后）**：2026-11-23 用户定，原话"可以去掉俄语和日语"。要求：语言选项只剩"跟随系统 / 中文 / English"；系统是其他语言时显示英文；以前选过别的语言的用户升级后自动改成跟随系统、不崩溃；删掉对应的 arb 和生成代码，CI 截图里确认语言菜单。西、法、韩三种也一起删（服务端会话 2026-11-23 确认：问用户时说的是"只保留中文和英文，去掉俄语、日语等"，用户同意）。
 

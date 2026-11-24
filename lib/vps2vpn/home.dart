@@ -225,19 +225,7 @@ class _Hero extends ConsumerStatefulWidget {
 
 class _HeroState extends ConsumerState<_Hero> {
   late final OutboundIpProbe _probe;
-  bool _importing = false;
-  String? _importNote;
-
-  Future<void> _import() async {
-    if (_importing) return;
-    setState(() => _importing = true);
-    final result = await vpsImportClipboard(ref);
-    if (!mounted) return;
-    setState(() {
-      _importing = false;
-      _importNote = vpsImportNote(context, result);
-    });
-  }
+  final _importField = GlobalKey<VpsImportFieldState>();
 
   static const _connectWindow = Duration(seconds: 15);
   DateTime? _onSince;
@@ -428,12 +416,11 @@ class _HeroState extends ConsumerState<_Hero> {
             ),
           };
     final sub = !hasProfile
-        ? _importNote ??
-              tr(
-                context,
-                '复制管理员发给你的订阅链接，再点"导入"',
-                'Copy the subscription link the owner gave you, then tap Import',
-              )
+        ? tr(
+            context,
+            '把管理员发给你的订阅链接粘贴到下面的框里，再点"导入"',
+            'Paste the subscription link the owner gave you into the box below, then tap Import',
+          )
         : block != null
         ? vpsAccountBlockHint(context, block)
         : failure ??
@@ -483,9 +470,7 @@ class _HeroState extends ConsumerState<_Hero> {
           add: !hasProfile,
           size: wide ? 148 : 132,
           label: !hasProfile
-              ? (_importing
-                    ? tr(context, '导入中…', 'Adding…')
-                    : tr(context, '导入', 'Import'))
+              ? tr(context, '导入', 'Import')
               : connecting
               ? tr(context, '连接中…', 'Connecting…')
               : isStart
@@ -494,7 +479,7 @@ class _HeroState extends ConsumerState<_Hero> {
               ? tr(context, '重试', 'Retry')
               : tr(context, '连接', 'Connect'),
           onTap: !hasProfile
-              ? _import
+              ? () => _importField.currentState?.submitOrFill()
               : connecting
               ? null
               : _toggle,
@@ -650,7 +635,13 @@ class _HeroState extends ConsumerState<_Hero> {
                               head,
                             ],
                           ),
-                    if (hasProfile) meta,
+                    if (hasProfile)
+                      meta
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20),
+                        child: VpsImportField(key: _importField),
+                      ),
                   ],
                 ),
               ),
