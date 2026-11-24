@@ -73,6 +73,14 @@ func handleResetNetwork() {
 	handleNetworkChanged()
 }
 
+// handleHostNetworkChanged is a new network on the same adapter, such as a
+// laptop moving from one Wi-Fi to a phone's hotspot: the smart groups check
+// their lines at once, as after a reset, instead of up to two minutes later.
+func handleHostNetworkChanged() {
+	handleNetworkChanged()
+	checkSmartGroups()
+}
+
 // handleNetworkReset is the desktop's handleResetNetwork, which the host sends
 // after a wake or a move of the default network. The smart groups check their
 // lines at once rather than at their next interval, so a line the new network
