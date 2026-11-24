@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:fl_clash/common/link.dart';
+import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
@@ -13,7 +13,7 @@ enum VpsImportResult { added, failed }
 
 /// The subscription link on the clipboard. A plain URL, a share link, or a
 /// clash://install-config?url=… wrapper all come down to one link; [strict]
-/// keeps only a vps2vpn subscription, so an ordinary web address is no offer.
+/// keeps any provider's subscription, so an ordinary web address is none.
 Future<String?> vpsClipboardLink({bool strict = false}) async {
   final String? text;
   try {
@@ -24,7 +24,35 @@ Future<String?> vpsClipboardLink({bool strict = false}) async {
   final raw = profileUrlFromQrCodes([text]);
   if (raw == null) return null;
   final link = vpsSubscriptionLink(raw);
-  return !strict || vpsApiBase(link) != null ? link : null;
+  return !strict || vpsLooksLikeSubscription(text!.trim(), link) ? link : null;
+}
+
+final _subscriptionPath = RegExp(
+  r'(^|/)(s|sub|subs|subscribe|subscription|link|clash|getsub|api/v\d+/client)(/|$)'
+  r'|\.ya?ml$|\.conf$',
+  caseSensitive: false,
+);
+const _subscriptionQuery = {
+  'token',
+  'sub',
+  'subscribe',
+  'clash',
+  'target',
+  'flag',
+  'mu',
+};
+
+bool vpsLooksLikeSubscription(String copied, String link) {
+  if (vpsApiBase(link) != null || copied.isShareLink) return true;
+  if (linkSchemes.contains(Uri.tryParse(copied)?.scheme)) return true;
+  final uri = Uri.tryParse(link);
+  if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+    return false;
+  }
+  return _subscriptionPath.hasMatch(uri.path) ||
+      uri.queryParameters.keys.any(
+        (k) => _subscriptionQuery.contains(k.toLowerCase()),
+      );
 }
 
 Future<VpsImportResult> vpsImportLink(WidgetRef ref, String link) async {
