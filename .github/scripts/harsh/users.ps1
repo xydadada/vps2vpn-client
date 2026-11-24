@@ -51,6 +51,7 @@ try {
   Check (Wait-Until 120 { (Get-Service vps2vpnHelperService -ErrorAction SilentlyContinue).Status -eq 'Running' }) 'admin: the Helper service runs'
   $adminPort = Get-AppPort
   Check (Wait-Until 60 { Get-ListenerName $adminPort }) "admin: the Core listens on $adminPort"
+  $adminCore = (Get-Listener $adminPort).OwningProcess
   $pipes = @([IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { $_ -match 'FlClashCore_' })
   "admin Core pipes: $($pipes.Count)"
 
@@ -144,6 +145,9 @@ if (Test-Path `$prefs) {
     Check ($app.home -match [regex]::Escape($userName)) 'second account: its data lives under the path with Chinese and a space'
     Check ($app.profiles -gt 0) 'second account: the subscription imported'
   }
+  # Who holds which port: the admin's Core must keep its own, the second one gets another.
+  Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 7890..7899 -or $_.LocalPort -in 17890..17990 } |
+    ForEach-Object { $o = Get-Process -Id $_.OwningProcess -IncludeUserName -ErrorAction SilentlyContinue; "listen $($_.LocalAddress):$($_.LocalPort) pid $($_.OwningProcess) $($o.Name) $($o.UserName)" }
   $theirs = @(Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match ([regex]::Escape($userName)))
   Check ($theirs.Count -gt 0) 'second account: its own Core runs under its own account'
   if ($theirs) {
@@ -153,7 +157,7 @@ if (Test-Path `$prefs) {
     Check ($mixed -and $mixed -ne $adminPort) "second account: a port of its own ($mixed, admin on $adminPort)"
     if ($mixed) { Test-Through $mixed 'second account' }
   }
-  Check (Get-ListenerName $adminPort) "admin: still listening on $adminPort with the second account running"
+  Check (@(Get-NetTCPConnection -State Listen -LocalPort $adminPort -OwningProcess $adminCore -ErrorAction SilentlyContinue).Count -gt 0) "admin: its own Core (pid $adminCore) still listens on $adminPort with the second account running"
   Test-AppAlive 'admin'
 
   Get-Process vps2vpn, vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue

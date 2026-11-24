@@ -43,6 +43,14 @@ function Wait-Until($seconds, [scriptblock]$condition) {
   [bool](& $condition)
 }
 
+# The network card the machine uses: physical, up, and with IPv4 (a runner
+# can have a second card that is up but carries no IPv4 at all).
+function Get-LanAdapter {
+  Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object Status -eq 'Up' |
+    Where-Object { Get-DnsClientServerAddress -InterfaceIndex $_.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue } |
+    Select-Object -First 1
+}
+
 function Get-Listener($port) {
   Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 }

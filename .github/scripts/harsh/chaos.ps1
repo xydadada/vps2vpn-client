@@ -8,9 +8,6 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $Out = (Resolve-Path $Out).Path
 $PROXY = 2
 
-function Get-PhysicalAdapter {
-  Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object Status -eq 'Up' | Select-Object -First 1
-}
 function Reset-AppData {
   Stop-App
   Remove-Item $script:appHome -Recurse -Force -ErrorAction SilentlyContinue
@@ -118,14 +115,14 @@ try {
   Set-Mode $false $true
 
   # The network itself misbehaving.
-  $nic = Get-PhysicalAdapter
+  $nic = Get-LanAdapter
   $dns = (Get-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4).ServerAddresses
   Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses 192.0.2.53
   Clear-DnsClientCache
   $port = Start-App 'no DNS' 90
   Test-AppAlive 'no DNS'
   Stop-App
-  Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $dns
+  if ($dns) { Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $dns } else { Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ResetServerAddresses }
   Clear-DnsClientCache
 
   $mtu = (Get-NetIPInterface -InterfaceIndex $nic.ifIndex -AddressFamily IPv4).NlMtu

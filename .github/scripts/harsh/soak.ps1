@@ -59,7 +59,7 @@ try {
   Start-Process $script:exe | Out-Null
   $tun = Wait-Until 120 { Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -match 'Wintun|Meta|vps2vpn' } }
   Check $tun 'tun: the adapter is up'
-  $nic = Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | Select-Object -First 1
+  $nic = Get-LanAdapter
   $lanDns = @((Get-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4).ServerAddresses)
   "network DNS servers: $($lanDns -join ', ')"
   & pktmon filter remove | Out-Null
