@@ -10,9 +10,11 @@
 // The safe-mode build only detects; it never closes or changes anything.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/preferences.dart';
 import 'package:fl_clash/common/proxy.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:flutter/foundation.dart';
@@ -57,6 +59,20 @@ const vpsRivalImages = <String, String>{
   'v2rayn.desktop.exe': 'v2rayN',
 };
 
+/// Bare proxy cores: a developer's test, a local service or another app's
+/// engine as often as a rival app.
+const vpsBareCores = {
+  'clash.exe',
+  'clash-meta.exe',
+  'mihomo.exe',
+  'mihomo-windows-amd64.exe',
+  'mihomo-windows-amd64-compatible.exe',
+  'mihomo-windows-amd64-v3.exe',
+  'xray.exe',
+  'v2ray.exe',
+  'sing-box.exe',
+};
+
 /// A running process another proxy app owns.
 class VpsRival {
   const VpsRival(this.image, this.pid, this.name);
@@ -86,6 +102,118 @@ List<VpsRival> parseRivals(String tasklistCsv) {
 /// The distinct product names, in a stable order.
 List<String> rivalNames(Iterable<VpsRival> rivals) =>
     {for (final r in rivals) r.name}.toList()..sort();
+
+/// The rivals to close: every proxy app, and a bare core only when it holds
+/// one of [guardedPorts] (the system proxy's, ours) or an app being closed
+/// started it. The rest are left running and only named.
+({List<VpsRival> close, List<VpsRival> spare}) vpsSortRivals(
+  List<VpsRival> rivals, {
+  required Map<int, Set<int>> listening,
+  required Map<int, int> parents,
+  required Set<int> guardedPorts,
+}) {
+  final apps = {
+    for (final r in rivals)
+      if (!vpsBareCores.contains(r.image)) r.pid,
+  };
+  final close = <VpsRival>[];
+  final spare = <VpsRival>[];
+  for (final r in rivals) {
+    final holds = (listening[r.pid] ?? const {}).any(guardedPorts.contains);
+    if (!vpsBareCores.contains(r.image) ||
+        holds ||
+        apps.contains(parents[r.pid])) {
+      close.add(r);
+    } else {
+      spare.add(r);
+    }
+  }
+  return (close: close, spare: spare);
+}
+
+/// pid → the TCP ports it listens on, from `netstat -ano -p TCP`.
+Map<int, Set<int>> parseListeningPorts(String netstat) {
+  final pattern = RegExp(
+    r'^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$',
+    multiLine: true,
+  );
+  final ports = <int, Set<int>>{};
+  for (final m in pattern.allMatches(netstat)) {
+    (ports[int.parse(m[2]!)] ??= {}).add(int.parse(m[1]!));
+  }
+  return ports;
+}
+
+Map<int, int> parseParents(String lines) => {
+  for (final m in RegExp(
+    r'^\s*(\d+),(\d+)\s*$',
+    multiLine: true,
+  ).allMatches(lines))
+    int.parse(m[1]!): int.parse(m[2]!),
+};
+
+Future<({List<VpsRival> close, List<VpsRival> spare})> _sortRivals(
+  List<VpsRival> rivals, {
+  required int ourPort,
+  VpsRun run = _run,
+}) async {
+  final bare = [
+    for (final r in rivals)
+      if (vpsBareCores.contains(r.image)) r,
+  ];
+  var listening = const <int, Set<int>>{};
+  var parents = const <int, int>{};
+  final guarded = {ourPort, ?loopbackProxyPort(await readSystemProxy())};
+  if (bare.isNotEmpty) {
+    try {
+      final netstat = await run('netstat', ['-ano', '-p', 'TCP']);
+      listening = parseListeningPorts('${netstat.stdout}');
+      final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+      final ids = bare.map((r) => 'ProcessId=${r.pid}').join(' or ');
+      final script =
+          'Get-CimInstance Win32_Process -Filter "$ids" | ForEach-Object '
+          '{ "\$(\$_.ProcessId),\$(\$_.ParentProcessId)" }';
+      final utf16 = [
+        for (final unit in script.codeUnits) ...[unit & 0xff, unit >> 8],
+      ];
+      final ps = await run(
+        '$root\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-EncodedCommand',
+          base64Encode(utf16),
+        ],
+      ).timeout(const Duration(seconds: 8));
+      parents = parseParents('${ps.stdout}');
+    } catch (_) {}
+  }
+  return vpsSortRivals(
+    rivals,
+    listening: listening,
+    parents: parents,
+    guardedPorts: guarded,
+  );
+}
+
+typedef VpsTakeoverAnswer = ({bool close, bool remember});
+
+/// Shown by the app (takeover_notice.dart); null leaves the apps running.
+Future<VpsTakeoverAnswer?> Function(List<String> names)? vpsAskTakeover;
+
+/// Whether to close [names] now: asks once, until an answer is remembered.
+Future<bool> vpsDecideTakeover(
+  List<String> names, {
+  required Future<bool> Function() asked,
+  required Future<VpsTakeoverAnswer?> Function(List<String>)? ask,
+  required Future<void> Function(bool close) remember,
+}) async {
+  if (names.isEmpty || await asked()) return true;
+  final answer = ask == null ? null : await ask(names);
+  if (answer == null) return false;
+  if (answer.remember) await remember(answer.close);
+  return answer.close;
+}
 
 /// What the WinINet settings say about the system proxy.
 class VpsSystemProxy {
@@ -345,10 +473,13 @@ class VpsTakeoverReport {
     this.respawned = const [],
     this.contender,
     this.otherVpns = const [],
+    this.spared = const [],
   });
 
   /// Other proxy apps seen and left alone (takeover off, or safe mode).
   final List<String> running;
+
+  final List<String> spared;
 
   /// Apps closed for this connection.
   final List<String> closed;
@@ -380,7 +511,8 @@ class VpsTakeoverReport {
       !clearedProxy &&
       respawned.isEmpty &&
       contender == null &&
-      otherVpns.isEmpty;
+      otherVpns.isEmpty &&
+      spared.isEmpty;
 
   VpsTakeoverReport withGuardFindings({
     List<String>? respawned,
@@ -397,6 +529,7 @@ class VpsTakeoverReport {
     respawned: respawned ?? this.respawned,
     contender: contender ?? this.contender,
     otherVpns: otherVpns,
+    spared: spared,
   );
 }
 
@@ -406,6 +539,7 @@ final vpsTakeoverReport = ValueNotifier<VpsTakeoverReport>(
 
 Timer? _guard;
 int _takeoverRevision = 0;
+bool _declined = false;
 
 /// Apps closed a second time during this connection; a third start is a
 /// watchdog's, and fighting it would only flap the network.
@@ -439,20 +573,47 @@ void vpsEnsureGuard(Ref ref) {
 Future<void> vpsBeforeConnect(Ref ref) async {
   if (!Platform.isWindows || _underTest) return;
   final revision = ++_takeoverRevision;
+  _declined = false;
   bool canAct() =>
       ref.mounted &&
       revision == _takeoverRevision &&
       !safeModeBuild &&
+      !_declined &&
       ref.read(isStartProvider) &&
       ref.read(appSettingProvider).takeover;
-  final rivals = await scanRivals();
+  final sorted = await _sortRivals(
+    await scanRivals(),
+    ourPort: ref.read(patchClashConfigProvider).mixedPort,
+  );
+  if (!ref.mounted ||
+      revision != _takeoverRevision ||
+      !ref.read(isStartProvider)) {
+    return;
+  }
+  final rivals = sorted.close;
+  final names = rivalNames(rivals);
+  if (canAct() &&
+      !await vpsDecideTakeover(
+        names,
+        asked: preferences.getVpsTakeoverAsked,
+        ask: vpsAskTakeover,
+        remember: (close) async {
+          await preferences.setVpsTakeoverAsked(true);
+          if (ref.mounted && !close) {
+            ref
+                .read(appSettingProvider.notifier)
+                .update((s) => s.copyWith(takeover: false));
+          }
+        },
+      )) {
+    _declined = true;
+  }
   if (!ref.mounted ||
       revision != _takeoverRevision ||
       !ref.read(isStartProvider)) {
     return;
   }
   final act = canAct();
-  final names = rivalNames(rivals);
   var still = const <String>[];
   if (act && rivals.isNotEmpty) {
     still = await quitRivals(rivals, isCurrent: canAct);
@@ -503,6 +664,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
     clearedProxy: cleared,
     dryRun: safeModeBuild,
     otherVpns: otherVpns,
+    spared: rivalNames(sorted.spare),
   );
   _startGuard(ref);
 }
@@ -521,9 +683,10 @@ Future<bool> clearStaleSystemProxy({VpsRun run = _run}) async {
 }
 
 /// Only detects (for the overview notice); never closes anything.
-Future<void> vpsScanOnly() async {
+Future<void> vpsScanOnly({required int ourPort}) async {
   if (!Platform.isWindows || _underTest) return;
-  final names = rivalNames(await scanRivals());
+  final sorted = await _sortRivals(await scanRivals(), ourPort: ourPort);
+  final names = rivalNames(sorted.close);
   final last = vpsTakeoverReport.value;
   final stillRunning = last.stillRunning.where(names.contains).toList();
   vpsTakeoverReport.value = VpsTakeoverReport(
@@ -535,7 +698,13 @@ Future<void> vpsScanOnly() async {
     clearedProxy: last.clearedProxy,
     dryRun: safeModeBuild,
     otherVpns: last.otherVpns,
+    spared: rivalNames(sorted.spare),
   );
+}
+
+Future<List<String>> vpsQuitSorted({required int ourPort}) async {
+  final sorted = await _sortRivals(await scanRivals(), ourPort: ourPort);
+  return quitRivals(sorted.close);
 }
 
 /// While connected: puts our proxy back if another app takes it, closes once
@@ -547,6 +716,7 @@ void _startGuard(Ref ref) {
       ref.mounted &&
       revision == _takeoverRevision &&
       !safeModeBuild &&
+      !_declined &&
       ref.read(appSettingProvider).takeover &&
       ref.read(proxyStateProvider).isStart;
   bool isCurrent() => canAct() && ref.read(proxyStateProvider).systemProxy;
@@ -567,7 +737,10 @@ void _startGuard(Ref ref) {
     if (reading) return;
     reading = true;
     try {
-      await _recheckRivals(canAct);
+      await _recheckRivals(
+        canAct,
+        ourPort: ref.read(patchClashConfigProvider).mixedPort,
+      );
       if (!state.systemProxy || !isCurrent()) return;
       final proxy = await readSystemProxy();
       if (!isCurrent()) return;
@@ -584,8 +757,14 @@ void _startGuard(Ref ref) {
   });
 }
 
-Future<void> _recheckRivals(bool Function() canAct) async {
-  final rivals = await scanRivals();
+Future<void> _recheckRivals(
+  bool Function() canAct, {
+  required int ourPort,
+}) async {
+  final rivals = (await _sortRivals(
+    await scanRivals(),
+    ourPort: ourPort,
+  )).close;
   if (rivals.isEmpty || !canAct()) return;
   final fresh = [
     for (final r in rivals)

@@ -94,6 +94,8 @@ function Set-AppPrefs([hashtable]$settings) {
   $c = $d.'flutter.config' | ConvertFrom-Json
   foreach ($k in $settings.Keys) { $c.appSettingProps | Add-Member -Force $k $settings[$k] }
   $d.'flutter.config' = ($c | ConvertTo-Json -Depth 50 -Compress)
+  # Connect asks once before closing other apps; nobody answers in CI.
+  $d | Add-Member -Force 'flutter.vpsTakeoverAsked' $true
   $d | ConvertTo-Json -Depth 50 -Compress | Set-Content $prefs -Encoding utf8
 }
 function Edit-AppConfig([scriptblock]$edit) {

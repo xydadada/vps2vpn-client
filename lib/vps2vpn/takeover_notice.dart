@@ -1,11 +1,81 @@
 // The overview line that says what Connect took over, or what is in its way.
 
-import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/common/window.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/takeover.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/checkbox.dart';
+import 'package:prism_ui/prism_ui.dart' show AlertDialog, TextButton;
+
+/// The first time Connect would close other apps: ask, and offer to remember.
+Future<VpsTakeoverAnswer?> vpsShowTakeoverAsk(List<String> names) async {
+  await window?.show();
+  var remember = true;
+  final close = await dialogs.showCommonDialog<bool>(
+    dismissible: false,
+    child: StatefulBuilder(
+      builder: (context, setState) {
+        final p = VpsPalette.of(context);
+        final list = names.join(tr(context, '、', ', '));
+        return AlertDialog(
+          title: tr(context, '先关闭其他代理软件？', 'Close the other proxy apps?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(tr(context, '不关闭，直接连接', 'Connect without')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(tr(context, '关闭并连接', 'Close and connect')),
+            ),
+          ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tr(
+                  context,
+                  '$list 正在运行，它们会和 vps2vpn 抢系统代理和端口。关闭前请先保存它们里面没保存的设置。'
+                      '选"不关闭"也能连接，只是可能互相冲突。',
+                  '$list is running and will fight vps2vpn over the system '
+                      'proxy and ports. Save anything unsaved in it first. '
+                      'Connecting without closing works too, but they may '
+                      'get in each other\'s way.',
+                ),
+                style: vpsText(p, size: 13.5, height: 1.5),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Checkbox(
+                    value: remember,
+                    onChanged: (v) => setState(() => remember = v ?? false),
+                  ),
+                  Expanded(
+                    child: Text(
+                      tr(
+                        context,
+                        '记住我的选择（可在"设置"里的"连接时自动接管"改）',
+                        'Remember my choice (change it under Take over on '
+                            'Connect in Settings)',
+                      ),
+                      style: vpsText(p, size: 12.5, color: p.soft),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+  return close == null ? null : (close: close, remember: remember);
+}
 
 class VpsTakeoverNotice extends ConsumerStatefulWidget {
   const VpsTakeoverNotice({super.key});
@@ -22,16 +92,17 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
   void initState() {
     super.initState();
     // Before the first Connect, show what would be in the way.
-    vpsScanOnly();
+    vpsScanOnly(ourPort: ref.read(patchClashConfigProvider).mixedPort);
   }
 
   Future<void> _quit() async {
     if (_busy || safeModeBuild) return;
     setState(() => _busy = true);
     try {
-      final rivals = await scanRivals();
-      final still = await quitRivals(rivals);
-      final names = rivalNames(rivals);
+      final names = vpsTakeoverReport.value.running;
+      final still = await vpsQuitSorted(
+        ourPort: ref.read(patchClashConfigProvider).mixedPort,
+      );
       final last = vpsTakeoverReport.value;
       final closed = {
         ...last.closed.where((n) => !still.contains(n)),
@@ -45,6 +116,7 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
         clearedProxy: last.clearedProxy,
         dryRun: safeModeBuild,
         otherVpns: last.otherVpns,
+        spared: last.spared,
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -118,6 +190,18 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                 : takeover
                 ? '; Connect will close it'
                 : ' and will fight over your network settings'}',
+          );
+        }
+        if (r.spared.isNotEmpty) {
+          warn = true;
+          zh.add(
+            '${r.spared.join('、')} 也在运行，可能和 vps2vpn 冲突。它没有占用系统代理或我们的端口，'
+            '可能是别的程序或你自己在用，所以没有关闭',
+          );
+          en.add(
+            '${r.spared.join(', ')} is running too and may clash with '
+            'vps2vpn. It holds neither the system proxy nor our port and may '
+            'belong to something else, so it was left running',
           );
         }
         if (r.otherVpns.isNotEmpty) {

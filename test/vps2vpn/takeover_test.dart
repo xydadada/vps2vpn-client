@@ -319,4 +319,119 @@ void main() {
     await quitRivals(rivals, run: run, isCurrent: () => false);
     expect(kills, isEmpty);
   });
+
+  group('bare cores', () {
+    final rivals = parseRivals(
+      '"v2rayN.exe","100","Console","1","90,000 K"\r\n'
+      '"xray.exe","101","Console","1","40,000 K"\r\n'
+      '"mihomo.exe","200","Console","1","40,000 K"\r\n'
+      '"sing-box.exe","300","Console","1","40,000 K"\r\n',
+    );
+    const netstat =
+        '  TCP    127.0.0.1:10808    0.0.0.0:0    LISTENING    101\r\n'
+        '  TCP    127.0.0.1:17891    0.0.0.0:0    LISTENING    200\r\n'
+        '  TCP    [::]:7890          [::]:0       LISTENING    300\r\n'
+        '  TCP    127.0.0.1:7890     127.0.0.1:50000  ESTABLISHED  300\r\n';
+
+    test('netstat and the parent list parse', () {
+      expect(parseListeningPorts(netstat), {
+        101: {10808},
+        200: {17891},
+        300: {7890},
+      });
+      expect(parseParents('101,100\r\n200,4\r\n'), {101: 100, 200: 4});
+    });
+
+    test('a mihomo on an unrelated port is left running', () {
+      final sorted = vpsSortRivals(
+        rivals,
+        listening: parseListeningPorts(netstat),
+        parents: {101: 100, 200: 4, 300: 4},
+        guardedPorts: {7890},
+      );
+      expect(sorted.close.map((r) => r.image), [
+        'v2rayn.exe',
+        'xray.exe',
+        'sing-box.exe',
+      ]);
+      expect(sorted.spare.map((r) => r.image), ['mihomo.exe']);
+    });
+
+    test('a core is closed when the system proxy points at it', () {
+      final sorted = vpsSortRivals(
+        parseRivals('"mihomo.exe","200","Console","1","40,000 K"\r\n'),
+        listening: parseListeningPorts(netstat),
+        parents: const {},
+        guardedPorts: {7890, 17891},
+      );
+      expect(sorted.close.single.pid, 200);
+    });
+  });
+
+  group('asking before closing', () {
+    test('a remembered answer is not asked again', () async {
+      var asked = false;
+      var asks = 0;
+      Future<VpsTakeoverAnswer?> ask(List<String> _) async {
+        asks++;
+        return (close: true, remember: true);
+      }
+
+      Future<bool> decide() => vpsDecideTakeover(
+        ['FlClash'],
+        asked: () async => asked,
+        ask: ask,
+        remember: (_) async => asked = true,
+      );
+      expect(await decide(), isTrue);
+      expect(await decide(), isTrue);
+      expect(asks, 1);
+    });
+
+    test('"connect without" closes nothing, and is asked again unless '
+        'remembered', () async {
+      var asks = 0;
+      Future<VpsTakeoverAnswer?> ask(List<String> _) async {
+        asks++;
+        return (close: false, remember: false);
+      }
+
+      for (var i = 0; i < 2; i++) {
+        expect(
+          await vpsDecideTakeover(
+            ['Clash Verge'],
+            asked: () async => false,
+            ask: ask,
+            remember: (_) async => fail('not remembered'),
+          ),
+          isFalse,
+        );
+      }
+      expect(asks, 2);
+    });
+
+    test(
+      'nothing to close asks nothing; no way to ask closes nothing',
+      () async {
+        expect(
+          await vpsDecideTakeover(
+            const [],
+            asked: () async => false,
+            ask: null,
+            remember: (_) async {},
+          ),
+          isTrue,
+        );
+        expect(
+          await vpsDecideTakeover(
+            ['FlClash'],
+            asked: () async => false,
+            ask: null,
+            remember: (_) async {},
+          ),
+          isFalse,
+        );
+      },
+    );
+  });
 }

@@ -325,9 +325,12 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                     value: ref.watch(
                       appSettingProvider.select((s) => s.takeover),
                     ),
-                    onChanged: (v) => ref
-                        .read(appSettingProvider.notifier)
-                        .update((s) => s.copyWith(takeover: v)),
+                    onChanged: (v) {
+                      unawaited(preferences.setVpsTakeoverAsked(true));
+                      ref
+                          .read(appSettingProvider.notifier)
+                          .update((s) => s.copyWith(takeover: v));
+                    },
                   ),
                 ),
                 if (system.isWindows) ...[

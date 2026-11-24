@@ -18,6 +18,8 @@ import 'package:fl_clash/vps2vpn/panel.dart'
     show vpsLinkSource, vpsSubscriptionLink;
 import 'package:fl_clash/vps2vpn/screenshots.dart';
 import 'package:fl_clash/vps2vpn/simple_mode.dart' show vpsDressAlert;
+import 'package:fl_clash/vps2vpn/takeover.dart' show vpsAskTakeover;
+import 'package:fl_clash/vps2vpn/takeover_notice.dart' show vpsShowTakeoverAsk;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
@@ -82,6 +84,7 @@ class ApplicationState extends ConsumerState<Application> {
     super.initState();
     SystemNavigator.setFrameworkHandlesBack(true);
     dialogs.dress = vpsDressAlert;
+    vpsAskTakeover = vpsShowTakeoverAsk;
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       if (globalState.navigatorKey.currentContext != null) {
         await bootstrap.attach();

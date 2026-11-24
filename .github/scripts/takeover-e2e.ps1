@@ -84,6 +84,8 @@ try {
   $port = 7890
   if ($c.patchClashConfig -and $c.patchClashConfig.'mixed-port') { $port = [int]$c.patchClashConfig.'mixed-port' }
   $d.'flutter.config' = ($c | ConvertTo-Json -Depth 50 -Compress)
+  # Connect asks once before closing other apps; nobody answers in CI.
+  $d | Add-Member -Force 'flutter.vpsTakeoverAsked' $true
   $d | ConvertTo-Json -Depth 50 -Compress | Set-Content $prefs -Encoding utf8
   "mixed port before: $port"
 

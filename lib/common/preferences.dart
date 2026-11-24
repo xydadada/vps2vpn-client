@@ -78,6 +78,16 @@ class Preferences {
     await preferences?.setString('vpsProfileHealth', json);
   }
 
+  Future<bool> getVpsTakeoverAsked() async {
+    final preferences = await _store.value;
+    return preferences?.getBool('vpsTakeoverAsked') ?? false;
+  }
+
+  Future<void> setVpsTakeoverAsked(bool value) async {
+    final preferences = await _store.value;
+    await preferences?.setBool('vpsTakeoverAsked', value);
+  }
+
   Future<void> saveShareState(SharedState shareState) async {
     final preferences = await _store.value;
     await preferences?.setString('sharedState', json.encode(shareState));
