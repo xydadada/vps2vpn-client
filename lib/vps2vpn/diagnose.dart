@@ -58,6 +58,25 @@ String vpsLegAdvice(
   ),
 };
 
+/// By address, so neither the Core nor DNS stands in the way.
+const _bareHosts = [('223.5.5.5', 53), ('119.29.29.29', 53), ('1.1.1.1', 443)];
+
+Future<bool> vpsReachesInternet({
+  Future<Socket> Function(String host, int port, Duration timeout)? connect,
+}) async {
+  final dial =
+      connect ??
+      (host, port, timeout) => Socket.connect(host, port, timeout: timeout);
+  final answers = await Future.wait([
+    for (final (host, port) in _bareHosts)
+      dial(host, port, const Duration(seconds: 4)).then((socket) {
+        socket.destroy();
+        return true;
+      }, onError: (_) => false),
+  ]);
+  return answers.contains(true);
+}
+
 class VpsDiagnoseCard extends ConsumerStatefulWidget {
   const VpsDiagnoseCard({super.key});
 
@@ -76,12 +95,7 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
     try {
       switch (leg) {
         case VpsLeg.network:
-          final result = await lookupOutboundIp(
-            core,
-            directOutbound,
-            timeout: const Duration(seconds: 8),
-          );
-          return parseOutboundIp(result) != null;
+          return await vpsReachesInternet();
         case VpsLeg.dns:
           final found = await InternetAddress.lookup(
             'www.microsoft.com',
