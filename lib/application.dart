@@ -66,6 +66,7 @@ class Application extends ConsumerStatefulWidget {
 class ApplicationState extends ConsumerState<Application> {
   Timer? _autoUpdateProfilesTaskTimer;
   Timer? _clientUpdateTimer;
+  bool _clientUpdateRunning = false;
   bool _preHasVpn = false;
   // Android's NetworkObserver resets the Core on a new network itself.
   late final _networkReset = NetworkResetTrigger(
@@ -89,6 +90,16 @@ class ApplicationState extends ConsumerState<Application> {
       }
       _autoUpdateProfilesTask();
       _clientUpdateTask(const Duration(seconds: 30));
+      // GitHub out of reach until the proxy is up: ask again through it.
+      ref.listenManual(isStartProvider, (was, on) {
+        if (on && was != true && !_clientUpdateRunning) {
+          final failed =
+              ref.read(vpsUpdateCheckProvider).status == VpsUpdateStatus.failed;
+          if (!failed) return;
+          _clientUpdateTimer?.cancel();
+          _clientUpdateTask(const Duration(seconds: 20));
+        }
+      });
       _initLink();
       if (!safeModeBuild) {
         unawaited(app?.initShortcuts());
@@ -142,7 +153,12 @@ class ApplicationState extends ConsumerState<Application> {
   /// offered for a one-tap install (vps2vpn/auto_update.dart).
   void _clientUpdateTask(Duration delay) {
     _clientUpdateTimer = Timer(delay, () async {
-      if (!safeModeBuild) await vpsAutoUpdateCheck(ref);
+      _clientUpdateRunning = true;
+      try {
+        if (!safeModeBuild) await vpsAutoUpdateCheck(ref);
+      } finally {
+        _clientUpdateRunning = false;
+      }
       if (!mounted) return;
       final failed =
           ref.read(vpsUpdateCheckProvider).status == VpsUpdateStatus.failed;
