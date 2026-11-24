@@ -645,22 +645,24 @@ class _ProfileCard extends ConsumerWidget {
     final updated = profile.lastUpdateDate;
     return VpsCard(
       onTap: onTap,
-      highlight: selected,
       selected: selected,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
+              AnimatedContainer(
+                duration: VpsMotion.medium,
                 width: 34,
                 height: 34,
                 alignment: Alignment.center,
                 decoration: ShapeDecoration(
-                  color: p.track,
+                  color: selected ? p.accentWash : p.track,
                   shape: RoundedSuperellipseBorder(
                     borderRadius: BorderRadius.circular(VpsRadius.small),
-                    side: BorderSide(color: p.line),
+                    side: BorderSide(
+                      color: selected ? const Color(0x00000000) : p.line,
+                    ),
                   ),
                 ),
                 child: VpsIconView(
