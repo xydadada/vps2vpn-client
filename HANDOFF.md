@@ -6,15 +6,16 @@
 
 | 项目 | 值 |
 |---|---|
-| 最新正式版（Latest） | **v1.0.27**，commit `3fe07f6dc4cf9fed2ad97363222e91ccd7458a3a`（服务端已核对 SHA256、`.sig` 和 tag 指向；测试服务器 clientsync 已同步到 1.0.27） |
-| 上一版 | v1.0.26，commit `b8ba4d27f3961f84bb26a27fd1116bf6af497edc`（服务端已核对） |
-| `vps2vpn` 分支头 | `3fe07f6d` 之后：CI 和文档提交（严苛测试脚本修复、Test Lab 工作流、安卓 GPU 模式输入），加上**一个还没发布的应用改动** `feat(windows): tell the user when another VPN is on next to our TUN`（见第 7 节第 1 条），下次正式发布时一起带上 |
+| 最新正式版（Latest） | **v1.0.28**，commit `36606e0e2d0e727d11d4bbca677319312875c0d2`（2026-11-24 发布；SHA256 和 `.sig` 同 1.0.27 的做法；等服务端核对并同步 clientsync） |
+| 上一版 | v1.0.27，commit `3fe07f6dc4cf9fed2ad97363222e91ccd7458a3a`（服务端已核对） |
+| `vps2vpn` 分支头 | `36606e0e` 之后：订阅输入框、只留中英文、出口体检、Claude 页、第六节几项（诊断、AI 节点、网站测试、二维码、托盘断开连接）、DESIGN.md 地基（圆角、动画、颜色角色、骨架），准备做 1.0.29 |
 | 安卓 | 还没有正式 APK，服务端 `files.android` 仍未配置。模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试结果见第 5 节"Firebase Test Lab"。预发布 `test-android-1.0.26` 只当预发布，不转正 |
 
-**English summary.** Latest client is v1.0.27 (upgrade test 66 PASS, coexist 94 PASS, SHA256 and `.sig` re-checked by the server). The harsh Windows checks (`harsh.yaml`, section 6a) pass after four harness fixes; two TUNs at once is only a NOTE. The branch carries one unreleased app change, an "another VPN is on" hint, to ship with the next real release. Android has no release: the emulator freezes about a second after connecting, whatever the stack, MTU, address range or GPU mode. Real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
+**English summary.** Latest client is v1.0.28 (upgrade test from v1.0.27 66 PASS, coexist 94 PASS; the server still has to re-check SHA256 and `.sig`). The harsh Windows checks (`harsh.yaml`, section 6a) pass after four harness fixes; two TUNs at once is only a NOTE. The branch carries the 1.0.29 work: the subscription box, Chinese and English only, the exit report, the Claude page and the DESIGN.md groundwork. Android has no release: the emulator freezes about a second after connecting, whatever the stack, MTU, address range or GPU mode. Real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
 
 | 版本 | 内容 | 构建 | 升级测试 | 共存测试 | 源码检查 |
 |---|---|---|---|---|---|
+| 1.0.28 | "另一个 VPN 开着"提醒 + harsh 脚本修复（chaos、soak 的网卡选择；users 第二账户只停自己的进程） | 45166822301 | 45334152519，66 PASS（含从 v1.0.27 升级） | 45168676856，94 PASS | 45166802653 |
 | 1.0.27 | 系统代理断开时还原原设置（88c8c522）+ 核心崩溃后自动拉起（3 次/5 分钟）+ harsh 脚本修复 | 45142883757 | 45144760127，66 PASS（含从 v1.0.26 升级） | 45144767934，94 PASS | 45142874060 |
 | 1.0.26 | C-32 + 第 9 份审计 C9-01..05 + 安卓脚本修复 | 45116238235 | 45117446837，33 PASS | 45117687563，47 PASS（含 TUN） | 45116444649 |
 | 1.0.25 | 第 7 份审计 C8-01/03/04/05/06/09 | 45090912918 | 45092090703，33 PASS | 45092300279，47 PASS（含 TUN） | 45090911216 |
@@ -143,7 +144,7 @@
 
 ## 7. 待办（按优先级）
 
-1. **"另一个 VPN 开着"提醒（已写好，还没发布）**：`lib/vps2vpn/takeover.dart` 的 `scanOtherVpns` 在 TUN 模式连接前用 `netsh interface ipv4 show route` 和 `show interfaces` 找别的接管全部流量的网卡（0.0.0.0/1 + 128.0.0.0/1 分段默认路由，或没有网关的默认路由），排除我们自己的网卡；`takeover_notice.dart` 显示"另一个 VPN（名字）也开着……请关掉其中一个"。单元测试在 `test/vps2vpn/takeover_test.dart` 的 `another VPN` 组。本机跑不了 Flutter 测试（用户名带中文，Go 构建钩子解析 JSON 出错），以云端 `verify.yaml` 为准。下次正式发布（1.0.28）时一起带上，发布前在 `dirty` 场景里看一眼提示是否出现。
+1. **"另一个 VPN 开着"提醒（已在 1.0.28 发布）**：`lib/vps2vpn/takeover.dart` 的 `scanOtherVpns` 在 TUN 模式连接前用 `netsh interface ipv4 show route` 和 `show interfaces` 找别的接管全部流量的网卡（0.0.0.0/1 + 128.0.0.0/1 分段默认路由，或没有网关的默认路由），排除我们自己的网卡；`takeover_notice.dart` 显示"另一个 VPN（名字）也开着……请关掉其中一个"。单元测试在 `test/vps2vpn/takeover_test.dart` 的 `another VPN` 组。本机跑不了 Flutter 测试（用户名带中文，Go 构建钩子解析 JSON 出错），以云端 `verify.yaml` 为准。已随 1.0.28 发布。
 2. **安卓正式 APK**：模拟器路线已经走到头（第 5 节）。真机测试（第 5 节"Firebase Test Lab"）两台都失败了，但还不知道是哪一步：可能是测试驱动的界面匹配没对上（比如按钮文字），也可能是应用真的连不上。下一步：先按第 5 节说的把 Test Lab 的详细结果拷下来，看清失败在哪一步；是驱动的问题就修驱动重跑，是应用的问题再查 TUN/VpnService（`android/service/.../VpnService.kt`）。真机全部通过之前，APK 不转正，服务端也先别配 `files.android`。testlab 测试账户由管理员会话停用，要再测需重新开账户并更新 secret `TESTLAB_SUB_URL`。
 3. **`users` 场景**：APPDATA、单实例（按用户 SID 区分，`plugins/rust_api/rust/src/window/windows/instance.rs`）、第二个账户自动连接都修好了，第二个账户的客户端能常驻。剩下一项"第二个账户有自己的端口"：日志里它的 Core 也在 7890 上，`users.ps1` 已加端口归属诊断（每个监听端口属于哪个进程、哪个账户），看结果再判断是真的抢了管理员的端口还是检查写错了。
 4. **C-12**（= C8-07 前半）：macOS 网络/唤醒监听是桩实现。CI 没有 macOS，也不发 macOS 版，暂缓。
