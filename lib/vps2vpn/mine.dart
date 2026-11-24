@@ -13,6 +13,7 @@ import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/qr_view.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:flutter/services.dart';
@@ -752,6 +753,10 @@ class _ProfileCard extends ConsumerWidget {
           if (hasSubscriptionExtras(sub)) ...[
             const SizedBox(height: 14),
             VpsSubscriptionExtras(info: sub),
+          ],
+          if (profile.url.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            VpsQrToggle(link: profile.url),
           ],
         ],
       ),
