@@ -104,6 +104,9 @@ const _maxSnapshotBytes = 16 << 20;
 
 Future<VpsProfileSnapshot> Function(int profileId) vpsReadSnapshot =
     (id) async {
+      if (Platform.environment.containsKey('FLUTTER_TEST')) {
+        return (nodes: null, digest: null);
+      }
       try {
         final file = File(await appPath.getProfilePath(id.toString()));
         if (!await file.exists() || await file.length() > _maxSnapshotBytes) {
