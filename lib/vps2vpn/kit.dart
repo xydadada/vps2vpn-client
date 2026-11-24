@@ -242,7 +242,35 @@ class _VpsCardState extends State<VpsCard> {
     final hovered = MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
-      child: box,
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          box,
+          if (p.dark && !widget.highlight)
+            // Light from above, fading out before the corners.
+            Positioned(
+              top: 0,
+              left: widget.radius,
+              right: widget.radius,
+              height: 1,
+              child: const IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0x00FFFFFF),
+                        Color(0x0FFFFFFF),
+                        Color(0x0FFFFFFF),
+                        Color(0x00FFFFFF),
+                      ],
+                      stops: [0, 0.2, 0.8, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
     if (widget.onTap == null) {
       return widget.selected == null
