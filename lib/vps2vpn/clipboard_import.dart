@@ -29,7 +29,11 @@ Future<String?> vpsClipboardLink({bool strict = false}) async {
 
 Future<VpsImportResult> vpsImportLink(WidgetRef ref, String link) async {
   final before = ref.read(profilesProvider).length;
-  await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
+  try {
+    await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
+  } catch (_) {
+    return VpsImportResult.failed;
+  }
   return ref.read(profilesProvider).length > before
       ? VpsImportResult.added
       : VpsImportResult.failed;

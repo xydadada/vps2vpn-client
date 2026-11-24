@@ -95,6 +95,9 @@ const _builtinOutbounds = {
   'COMPATIBLE',
 };
 
+bool vpsBuiltinOutbound(String name) =>
+    _builtinOutbounds.contains(name.trim().toUpperCase());
+
 /// The first selectable group whose first choice is a proxy, as the Core's
 /// smart line picks it: what "the server you use" means here.
 Group? mainGroup(List<Group> groups) {
@@ -103,8 +106,8 @@ Group? mainGroup(List<Group> groups) {
       if (g.type == GroupType.Selector && g.hidden != true) g,
   ];
   for (final g in selectors) {
-    final first = g.all.firstOrNull?.name.trim().toUpperCase();
-    if (first == null || !_builtinOutbounds.contains(first)) return g;
+    final first = g.all.firstOrNull?.name;
+    if (first == null || !vpsBuiltinOutbound(first)) return g;
   }
   return selectors.firstOrNull ?? groups.firstOrNull;
 }

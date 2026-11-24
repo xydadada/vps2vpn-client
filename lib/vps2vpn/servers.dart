@@ -73,6 +73,10 @@ final _byLatency = ValueNotifier<bool>(true);
 /// Per node: whether Claude and ChatGPT both open through it, from the last
 /// "Test AI" this session.
 final _aiOk = ValueNotifier<Map<String, bool>>(const {});
+(int?, DateTime?)? _aiOkProfile;
+
+(int?, DateTime?) _profileKey(Profile? profile) =>
+    (profile?.id, profile?.lastUpdateDate);
 
 /// Sort key: answered lines by latency, then untested, then timeouts.
 int _rank(int? d) => switch (d) {
@@ -106,10 +110,16 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   Future<void> _testAi(Group group) async {
     if (_testingAi) return;
     setState(() => _testingAi = true);
+    final key = _profileKey(ref.read(currentProfileProvider));
+    if (_aiOkProfile != key) {
+      _aiOkProfile = key;
+      _aiOk.value = const {};
+    }
     final core = ref.read(coreHandlerProvider);
     final names = [
       for (final proxy in group.all)
-        if (!_isPinned(proxy.name)) proxy.name,
+        if (!_isPinned(proxy.name) && !vpsBuiltinOutbound(proxy.name))
+          proxy.name,
     ];
     _aiOk.value = {
       for (final e in _aiOk.value.entries)
@@ -225,7 +235,9 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     final selectable = group.type == GroupType.Selector;
     _autoTest(group);
     final byLatency = _byLatency.value;
-    final aiOk = _aiOk.value;
+    final aiOk = _aiOkProfile == _profileKey(ref.watch(currentProfileProvider))
+        ? _aiOk.value
+        : const <String, bool>{};
     final delays = {
       for (final proxy in group.all)
         proxy.name: ref.watch(
@@ -284,7 +296,9 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                 ? tr(context, '测 AI 中…', 'Testing AI…')
                 : tr(context, '测 AI', 'Test AI'),
             icon: VpsIcon.sparkle,
-            onTap: _testingAi ? null : () => _testAi(group),
+            onTap: _testingAi || !ref.watch(isStartProvider)
+                ? null
+                : () => _testAi(group),
           ),
           VpsButton(
             label: _testing

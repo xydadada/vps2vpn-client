@@ -14,12 +14,25 @@ class VpsQrCode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = QrImage(
-      QrCode(
-        payload: QrPayload.fromString(data),
-        errorCorrectLevel: QrErrorCorrectLevel.low,
-      ),
-    );
+    final QrImage image;
+    try {
+      image = QrImage(
+        QrCode(
+          payload: QrPayload.fromString(data),
+          errorCorrectLevel: QrErrorCorrectLevel.low,
+        ),
+      );
+    } catch (_) {
+      final p = VpsPalette.of(context);
+      return Text(
+        tr(
+          context,
+          '链接太长，放不进二维码：请直接复制链接',
+          'The link is too long for a QR code; copy the link instead',
+        ),
+        style: vpsText(p, size: 13, color: p.soft),
+      );
+    }
     return SizedBox.square(
       dimension: size,
       child: CustomPaint(painter: _QrPainter(image)),

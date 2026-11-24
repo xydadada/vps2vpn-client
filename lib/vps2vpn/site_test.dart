@@ -55,12 +55,13 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
   List<VpsSite> _sites = vpsDefaultSites;
   String? _error;
   bool _testing = false;
+  bool _edited = false;
 
   @override
   void initState() {
     super.initState();
     preferences.getVpsSites().then((stored) {
-      if (mounted) setState(() => _sites = _decode(stored));
+      if (mounted && !_edited) setState(() => _sites = _decode(stored));
     });
   }
 
@@ -71,6 +72,7 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
   }
 
   void _save(List<VpsSite> sites) {
+    _edited = true;
     setState(() => _sites = sites);
     preferences.setVpsSites([for (final s in sites) '${s.name}|${s.url}']);
   }
@@ -98,7 +100,8 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
     final group = mainGroup(ref.read(currentGroupsStateProvider).value);
     if (group == null) return null;
     final name = ref.read(selectedProxyNameProvider(group.name)) ?? group.now;
-    return group.all.where((p) => p.name == name).firstOrNull;
+    return group.all.where((p) => p.name == name).firstOrNull ??
+        group.all.where((p) => p.name == group.now).firstOrNull;
   }
 
   Future<void> _testAll() async {
@@ -107,9 +110,13 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
     setState(() => _testing = true);
     try {
       final action = ref.read(proxiesActionProvider.notifier);
-      await Future.wait([
-        for (final site in _sites) action.delayTest([proxy], site.url),
-      ]);
+      final sites = [..._sites];
+      for (var i = 0; i < sites.length && mounted; i += 4) {
+        await Future.wait([
+          for (final site in sites.skip(i).take(4))
+            action.delayTest([proxy], site.url),
+        ]);
+      }
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -120,9 +127,12 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
     final p = VpsPalette.of(context);
     final on = ref.watch(isStartProvider);
     final group = mainGroup(ref.watch(currentGroupsStateProvider).value);
-    final picked = group == null
+    final selected = group == null
         ? null
         : ref.watch(selectedProxyNameProvider(group.name)) ?? group.now;
+    final picked = group != null && group.all.any((p) => p.name == selected)
+        ? selected
+        : group?.now;
     return VpsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
