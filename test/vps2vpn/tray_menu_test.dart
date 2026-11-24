@@ -42,6 +42,11 @@ void main() {
     expect(_labels(menu(_state())), contains('Connect'));
     expect(_labels(menu(_state(isStart: true))), contains('Disconnect'));
     expect(_labels(menu(_state(isStart: true))).first, 'Connected');
+    expect(
+      _labels(menu(_state(isStart: true))),
+      contains('Close all connections'),
+    );
+    expect(_labels(menu(_state())), isNot(contains('Close all connections')));
   });
 
   test('the tray offers no direct mode', () {

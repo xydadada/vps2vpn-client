@@ -55,6 +55,11 @@ List<TrayMenuItem>? vpsTrayMenu({
       label: state.isStart ? say('断开', 'Disconnect') : say('连接', 'Connect'),
       onSelected: () => read(commonActionProvider.notifier).toggleRunning(),
     ),
+    if (state.isStart)
+      TrayMenuAction(
+        label: say('断开所有连接', 'Close all connections'),
+        onSelected: () => read(coreActionProvider.notifier).closeConnections(),
+      ),
     const TrayMenuSeparator(),
     TrayMenuCheckbox(
       label: say('规则模式', 'Rule mode'),
