@@ -940,8 +940,8 @@ class _Stats extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final traffics = ref.watch(trafficsProvider);
     final now = traffics.list.safeLast(const Traffic());
-    final all = traffics.list;
-    final recent = all.length > 30 ? all.sublist(all.length - 30) : all;
+    final recent = traffics.list;
+    final on = ref.watch(isStartProvider);
     final total = ref.watch(totalTrafficProvider);
     final profile = ref.watch(currentProfileProvider);
     final sub = profile?.subscriptionInfo;
@@ -949,13 +949,13 @@ class _Stats extends ConsumerWidget {
     // subscription carried at its last update otherwise, so this tile and
     // the account card in Settings never disagree.
     final member = ref.watch(vpsMemberProvider).value?.member;
-    String? left;
+    TrafficShow? left;
     String? expire;
     if (member != null) {
       if (!member.unlimited) {
         final quota = (math.max(0, member.quotaGb) * 1024 * 1024 * 1024)
             .round();
-        left = math.max(0, quota - member.used).traffic.show;
+        left = math.max(0, quota - member.used).traffic;
       }
       if (member.expireAt != null) {
         expire = vpsExpiryText(context, member.expireAt!);
@@ -963,7 +963,7 @@ class _Stats extends ConsumerWidget {
     } else {
       if (sub != null && sub.total > 0) {
         final remain = math.max(0, sub.total - sub.upload - sub.download);
-        left = remain.traffic.show;
+        left = remain.traffic;
       }
       final expiry = sub?.expireDate;
       if (expiry != null) {
@@ -973,7 +973,7 @@ class _Stats extends ConsumerWidget {
     final p = VpsPalette.of(context);
     final groups = ref.watch(currentGroupsStateProvider).value;
     final main = mainGroup(groups);
-    if (main != null && ref.watch(isStartProvider)) vpsAutoTestOnce(ref, main);
+    if (main != null && on) vpsAutoTestOnce(ref, main);
     // Share of the plan still left, for the ring (null: unlimited/unknown).
     double? leftShare;
     if (member != null && !member.unlimited) {
@@ -987,21 +987,26 @@ class _Stats extends ConsumerWidget {
       _Stat(
         icon: VpsIcon.arrowDown,
         label: tr(context, '实时速度', 'Speed'),
-        value: '${now.down.traffic.show}/s',
-        foot: '↑ ${now.up.traffic.show}/s',
-        spark: [for (final t in recent) t.down + t.up],
+        value: on ? now.down.traffic.value : '—',
+        unit: on ? '${now.down.traffic.unit}/s' : null,
+        foot: on
+            ? '↑ ${now.up.traffic.value} ${now.up.traffic.unit}/s'
+            : tr(context, '连接后显示', 'Shown once connected'),
+        spark: on ? [for (final t in recent) t.down + t.up] : null,
         sparkColor: p.good,
       ),
       _Stat(
         icon: VpsIcon.sparkle,
         label: tr(context, '本次流量', 'This session'),
-        value: (total.up + total.down).traffic.show,
+        value: on ? (total.up + total.down).traffic.value : '—',
+        unit: on ? (total.up + total.down).traffic.unit : null,
       ),
       if (left != null)
         _Stat(
           icon: VpsIcon.shield,
           label: tr(context, '剩余流量', 'Data left'),
-          value: left,
+          value: left.value,
+          unit: left.unit,
           ring: leftShare,
           ringColor: leftShare == null
               ? p.accent
@@ -1061,6 +1066,7 @@ class _Stat extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.unit,
     this.foot,
     this.spark,
     this.sparkColor,
@@ -1071,6 +1077,7 @@ class _Stat extends StatelessWidget {
   final VpsIcon icon;
   final String label;
   final String value;
+  final String? unit;
   final String? foot;
 
   /// Recent samples drawn as a soft area chart under the number.
@@ -1156,15 +1163,34 @@ class _Stat extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        VpsRollingText(
-          value,
-          style: vpsText(
-            p,
-            size: 22,
-            weight: FontWeight.w600,
-            spacing: -0.5,
-            tabular: true,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Flexible(
+              child: VpsRollingText(
+                value,
+                style: vpsText(
+                  p,
+                  size: 22,
+                  weight: FontWeight.w600,
+                  spacing: -0.5,
+                ),
+              ),
+            ),
+            if (unit case final unit?) ...[
+              const SizedBox(width: 4),
+              Text(
+                unit,
+                style: vpsText(
+                  p,
+                  size: 13,
+                  weight: FontWeight.w500,
+                  color: p.soft,
+                ),
+              ),
+            ],
+          ],
         ),
         if (foot != null)
           Padding(
