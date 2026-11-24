@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:fl_clash/common/dialog.dart' show dialogs;
 import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/core/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -18,6 +19,7 @@ import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/prism_ui.dart' show BannerLevel;
 
 /// Hosts with only an AAAA record, so an answer means IPv6 got through.
 final Map<String, IpInfo Function(Map<String, dynamic>)> _ipv6Sources = {
@@ -495,7 +497,16 @@ class VpsFindingCard extends StatelessWidget {
                 label: tr(context, '复制结果', 'Copy'),
                 onTap: !settled
                     ? null
-                    : () => Clipboard.setData(ClipboardData(text: copyText())),
+                    : () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: copyText()),
+                        );
+                        if (!context.mounted) return;
+                        dialogs.showBanner(
+                          tr(context, '已复制检测结果', 'Results copied'),
+                          level: BannerLevel.success,
+                        );
+                      },
               ),
             ],
           ),

@@ -1,5 +1,6 @@
 // vps2vpn "Servers": pick the line you use, see how fast each one answers.
 
+import 'package:fl_clash/common/dialog.dart' show dialogs;
 import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -9,6 +10,7 @@ import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/prism_ui.dart' show BannerLevel;
 
 /// Protocol names a non-expert can read.
 String protocolLabel(BuildContext context, String type) {
@@ -161,16 +163,38 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     });
   }
 
-  Future<void> _test(Group group) async {
+  Future<void> _test(Group group, {bool tell = false}) async {
     if (_testing) return;
     setState(() => _testing = true);
     try {
       await ref
           .read(proxiesActionProvider.notifier)
           .delayTest(group.all, group.testUrl);
+      if (tell && mounted) _tellTested(group);
     } finally {
       if (mounted) setState(() => _testing = false);
     }
+  }
+
+  void _tellTested(Group group) {
+    final nodes = [
+      for (final proxy in group.all)
+        if (!vpsBuiltinOutbound(proxy.name)) proxy,
+    ];
+    final ok = nodes.where((proxy) {
+      final delay = ref.read(
+        delayProvider(proxyName: proxy.name, testUrl: group.testUrl),
+      );
+      return delay != null && delay > 0;
+    }).length;
+    dialogs.showBanner(
+      tr(
+        context,
+        '测速完成：${nodes.length} 个节点里 $ok 个能用',
+        'Tested: $ok of ${nodes.length} servers answer',
+      ),
+      level: ok > 0 ? BannerLevel.success : BannerLevel.warning,
+    );
   }
 
   @override
@@ -305,7 +329,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                 ? tr(context, '测速中…', 'Testing…')
                 : tr(context, '测速', 'Test speed'),
             icon: VpsIcon.bolt,
-            onTap: _testing ? null : () => _test(group),
+            onTap: _testing ? null : () => _test(group, tell: true),
           ),
         ],
       ),
