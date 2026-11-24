@@ -2,7 +2,9 @@
 // buttons, switches, segmented control, logo and line icons.
 // Everything simple mode draws comes from here, so the look stays one system.
 
+import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:prism_ui/prism_ui.dart'
     show AppRadius, AppShape, BuildContextExtension, SpringCurve;
@@ -1370,6 +1372,7 @@ class VpsBackdrop extends StatelessWidget {
                     size: 720,
                   ),
                 ),
+                const Positioned.fill(child: _Grain()),
                 Positioned.fill(child: child!),
               ],
             );
@@ -1380,6 +1383,83 @@ class VpsBackdrop extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A faint film grain over the glows, so their gradients do not band.
+class _Grain extends StatefulWidget {
+  const _Grain();
+
+  @override
+  State<_Grain> createState() => _GrainState();
+}
+
+class _GrainState extends State<_Grain> {
+  static Future<ui.Image>? _tile;
+
+  static Future<ui.Image> _make() {
+    const side = 128;
+    final random = math.Random(7);
+    final pixels = Uint8List(side * side * 4);
+    for (var i = 0; i < pixels.length; i += 4) {
+      final light = random.nextBool() ? 255 : 0;
+      pixels
+        ..[i] = light
+        ..[i + 1] = light
+        ..[i + 2] = light
+        ..[i + 3] = random.nextInt(9);
+    }
+    final done = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      pixels,
+      side,
+      side,
+      ui.PixelFormat.rgba8888,
+      done.complete,
+    );
+    return done.future;
+  }
+
+  ui.Image? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    (_tile ??= _make()).then((image) {
+      if (mounted) setState(() => _image = image);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final image = _image;
+    if (image == null) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: RepaintBoundary(child: CustomPaint(painter: _GrainPainter(image))),
+    );
+  }
+}
+
+class _GrainPainter extends CustomPainter {
+  _GrainPainter(this.image);
+
+  final ui.Image image;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = ImageShader(
+          image,
+          TileMode.repeated,
+          TileMode.repeated,
+          Matrix4.identity().storage,
+        ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GrainPainter old) => old.image != image;
 }
 
 class _Glow extends StatelessWidget {
