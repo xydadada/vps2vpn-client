@@ -1,5 +1,5 @@
-// Client updates the panel owner published (panel.dart's member API): found
-// on the panel, downloaded and signature-checked in the background, then
+// Client updates: found on GitHub Releases, with a vps2vpn panel's member API
+// as a mirror, downloaded and signature-checked in the background, then
 // installed with one tap. The install itself is the app's own update path
 // (CommonAction.installUpdate): Inno Setup's silent install that relaunches
 // the app on Windows, the system package installer on Android.
@@ -14,12 +14,13 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
+import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart' show BannerLevel;
 import 'package:url_launcher/url_launcher.dart';
 
-/// How often a running app asks the panel for a newer client.
+/// How often a running app asks GitHub (and the panel) for a newer client.
 const vpsUpdateCheckInterval = Duration(hours: 6);
 const vpsUpdateRetryInterval = Duration(minutes: 30);
 
@@ -97,6 +98,7 @@ Future<File> _fetchUpdate(
     pinnedSha256: pins,
     currentVersion: current,
     onProgress: onProgress,
+    proxyFirst: panel == null || !vpsSameOrigin(panel, url),
     proxyPort: on ? container.read(patchClashConfigProvider).mixedPort : null,
     proxyAuth: on
         ? vpsLocalProxyAuth(
@@ -119,7 +121,65 @@ final _autoTried = <String>{};
 @visibleForTesting
 void resetVpsAutoUpdate() => _autoTried.clear();
 
-/// Downloads [release] from the panel and keeps it only when it carries the
+Future<(String, File)?> vpsReadyInstaller(
+  Directory dir,
+  String current, {
+  String publicKeyHex = vpsUpdatePublicKeyHex,
+}) async {
+  if (!await dir.exists()) return null;
+  (String, File)? best;
+  await for (final entry in dir.list(followLinks: false)) {
+    if (entry is! File) continue;
+    final name = entry.uri.pathSegments.last;
+    final version = vpsUpdateFileVersion(name);
+    final sig = File('${entry.path}.sig');
+    if (!name.endsWith('-setup.exe') ||
+        version == null ||
+        !vpsVersionNewer(version, current) ||
+        (best != null && !vpsVersionNewer(version, best.$1)) ||
+        !await sig.exists()) {
+      continue;
+    }
+    if (vpsVerifyUpdate(
+      fileName: name,
+      sha256Hex: await fileSha256(entry.path),
+      size: await entry.length(),
+      signatureText: await sig.readAsString(),
+      publicKeyHex: publicKeyHex,
+    )) {
+      best = (version, entry);
+    }
+  }
+  return best;
+}
+
+Future<void> vpsRestoreUpdate(ProviderContainer container) async {
+  final current = vpsAppVersion();
+  if (current == null || selfUpdateAsset?.os != ReleaseOs.windows) {
+    return clearUpdateDownloads();
+  }
+  try {
+    final dir = Directory(await appPath.updateDirPath);
+    final ready = await vpsReadyInstaller(dir, current);
+    if (ready == null) return await clearUpdateDownloads();
+    final (version, file) = ready;
+    final keep = {file.path, '${file.path}.sig'};
+    await for (final entry in dir.list(followLinks: false)) {
+      if (!keep.contains(entry.path)) await safeDeletePath(entry.path);
+    }
+    final download = container.read(updateDownloadStateProvider.notifier);
+    if (download.value == null) {
+      download.value = UpdateReady('v$version', file.path);
+    }
+  } on FileSystemException catch (error) {
+    commonPrint.log(
+      'Restoring the update download failed: ${compactError(error)}',
+      logLevel: LogLevel.warning,
+    );
+  }
+}
+
+/// Downloads [release] and keeps it only when it carries the
 /// release signature and is newer than [current]. A build that installs by
 /// itself gets it as the pending update (the dashboard and the Settings card
 /// offer "install"); any other opens the folder for a manual install. When
@@ -215,12 +275,15 @@ Future<_Got> _downloadUpdate(
     if (install) {
       download.value = UpdateReady(tag, file.path);
       _banner(
-        (c) => tr(
-          c,
-          '新版本 ${release.version} 已下载并校验签名，点这里安装（会自动重启 vps2vpn）',
-          'Version ${release.version} is downloaded and its signature checked. '
-              'Tap to install it (vps2vpn restarts)',
-        ),
+        (c) => [
+          tr(
+            c,
+            '新版本 ${release.version} 已下载并校验签名，点这里安装（会自动重启 vps2vpn）',
+            'Version ${release.version} is downloaded and its signature '
+                'checked. Tap to install it (vps2vpn restarts)',
+          ),
+          ?vpsReleaseSummary(release.notes, zh: vpsZh(c)),
+        ].join('\n'),
         BannerLevel.success,
         onTap: () => unawaited(
           container.read(commonActionProvider.notifier).installUpdate(),
@@ -323,10 +386,13 @@ class VpsUpdateCheck {
     this.at,
     this.releases = const [],
     this.error,
+    this.panelOnly = false,
   });
 
   final VpsUpdateStatus status;
   final DateTime? at;
+
+  final bool panelOnly;
 
   /// Newer releases this device can use, newest first.
   final List<VpsClientRelease> releases;
@@ -388,10 +454,12 @@ Future<VpsUpdateCheck> _check(
     }
   }
   final keep = container.listen(vpsMemberProvider, (_, _) {});
+  var panelAnswered = false;
   try {
     final result = await container
         .read(vpsMemberProvider.future)
         .timeout(const Duration(seconds: 30));
+    panelAnswered = result?.member != null;
     if (result?.member?.client case final client?) found.add(client);
   } catch (_) {
   } finally {
@@ -408,15 +476,17 @@ Future<VpsUpdateCheck> _check(
     if (vpsVersionNewer(b.$2.version, a.$2.version)) return 1;
     return a.$1 - b.$1;
   });
+  final known = answered || panelAnswered;
   final check = VpsUpdateCheck(
     status: usable.isNotEmpty
         ? VpsUpdateStatus.available
-        : answered
+        : known
         ? VpsUpdateStatus.latest
         : VpsUpdateStatus.failed,
     at: DateTime.now(),
     releases: [for (final (_, r) in usable) r],
-    error: usable.isEmpty && !answered ? error ?? 'no answer' : null,
+    error: usable.isEmpty && !known ? error ?? 'no answer' : null,
+    panelOnly: !answered && panelAnswered,
   );
   notifier.set(check);
   return check;

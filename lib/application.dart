@@ -149,8 +149,9 @@ class ApplicationState extends ConsumerState<Application> {
     });
   }
 
-  /// A newer client the panel offers is fetched in the background and then
-  /// offered for a one-tap install (vps2vpn/auto_update.dart).
+  /// A newer client on GitHub, or on the panel's mirror, is fetched in the
+  /// background and then offered for a one-tap install
+  /// (vps2vpn/auto_update.dart).
   void _clientUpdateTask(Duration delay) {
     _clientUpdateTimer = Timer(delay, () async {
       _clientUpdateRunning = true;

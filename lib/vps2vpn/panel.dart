@@ -14,6 +14,7 @@ import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/http.dart';
 import 'package:fl_clash/common/path.dart';
+import 'package:fl_clash/common/print.dart';
 import 'package:fl_clash/common/yaml.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -1132,14 +1133,40 @@ VpsClientRelease? vpsReleaseFromGitHub(
       ? 'vps2vpn-$version-windows-amd64-setup.exe'
       : 'vps2vpn-$version-windows-amd64-portable.zip';
   final page = Uri.tryParse('${json['html_url'] ?? ''}');
+  final body = '${json['body'] ?? ''}'.trim();
   return VpsClientRelease(
     version: version,
+    notes: body.isEmpty || body.startsWith(_testReleaseBody) ? null : body,
     url: page != null && page.isScheme('https')
         ? page
         : Uri.https('github.com', '/$vpsReleaseRepository/releases/tag/$tag'),
     files: {'windows': file(windows)},
   );
 }
+
+const _testReleaseBody = 'Pre-release for the automated installer check';
+
+String? vpsReleaseSummary(String? notes, {required bool zh}) {
+  if (notes == null) return null;
+  final paragraphs = [
+    for (final p in notes.split(RegExp(r'\r?\n\s*\r?\n')))
+      if (_plain(p) case final text when text.isNotEmpty) text,
+  ];
+  if (paragraphs.isEmpty) return null;
+  final cjk = RegExp(r'[\u4e00-\u9fff]');
+  return paragraphs.firstWhere(
+    (p) => cjk.hasMatch(p) == zh,
+    orElse: () => paragraphs.first,
+  );
+}
+
+String _plain(String markdown) => [
+  for (final line in markdown.split(RegExp(r'\r?\n')))
+    if (!line.trimLeft().startsWith('#'))
+      if (line.replaceFirst(RegExp(r'^\s*([-*+]|\d+\.)\s+'), '').trim()
+          case final text when text.isNotEmpty)
+        text.replaceAll(RegExp(r'\*\*|__|`'), ''),
+].join(' ');
 
 /// Download a release only over verified or explicitly pinned HTTPS, and keep
 /// it only when `<url>.sig` is the release key's signature for it (see
@@ -1159,6 +1186,8 @@ Future<File> vpsDownloadRelease(
   void Function(int received, int total)? onProgress,
   int? proxyPort,
   String? proxyAuth,
+  // GitHub: a direct connection may reach it only at a crawl.
+  bool proxyFirst = false,
 }) async {
   if (!url.isScheme('https')) {
     throw const HttpException('Release link is not HTTPS');
@@ -1190,7 +1219,8 @@ Future<File> vpsDownloadRelease(
     throw const HttpException('Release download already in progress');
   }
   try {
-    for (final port in [null, ?proxyPort]) {
+    final order = proxyFirst ? [?proxyPort, null] : [null, ?proxyPort];
+    for (final (i, port) in order.indexed) {
       try {
         return await _downloadReleaseVia(
           url,
@@ -1207,7 +1237,7 @@ Future<File> vpsDownloadRelease(
       } on FileSystemException {
         rethrow;
       } on Exception {
-        if (port != null || proxyPort == null) rethrow;
+        if (i == order.length - 1) rethrow;
       }
     }
     throw StateError('unreachable');
@@ -1295,7 +1325,13 @@ Future<File> _downloadReleaseVia(
     // file for a moment.
     for (var attempt = 1; ; attempt++) {
       try {
-        return await part.rename(out.path);
+        final kept = await part.rename(out.path);
+        try {
+          await File('${out.path}.sig').writeAsString(signature);
+        } on FileSystemException {
+          commonPrint.log('Keeping the update signature failed');
+        }
+        return kept;
       } on FileSystemException {
         if (!Platform.isWindows || attempt >= 5) rethrow;
         await Future<void>.delayed(Duration(milliseconds: 200 * attempt));

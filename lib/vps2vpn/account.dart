@@ -385,6 +385,72 @@ class VpsAccountCard extends ConsumerWidget {
   }
 }
 
+/// Home, while a verified update waits: a banner shown to a window hidden in
+/// the tray is gone by the time the user looks.
+class VpsUpdateNotice extends ConsumerWidget {
+  const VpsUpdateNotice({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final download = ref.watch(updateDownloadStateProvider);
+    if (download is! UpdateReady) return const SizedBox.shrink();
+    final version = download.tag.replaceFirst(RegExp('^v'), '');
+    final notes = ref
+        .watch(vpsUpdateCheckProvider)
+        .releases
+        .where((r) => r.version == version)
+        .firstOrNull
+        ?.notes;
+    final summary = vpsReleaseSummary(notes, zh: vpsZh(context));
+    final p = VpsPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: VpsCard(
+        highlight: true,
+        padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
+        child: Row(
+          children: [
+            VpsIconView(VpsIcon.sparkle, size: 19, color: p.accent),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr(
+                      context,
+                      '新版本 $version 已下载并校验签名',
+                      'Version $version is downloaded and checked',
+                    ),
+                    style: vpsText(p, size: 14, weight: FontWeight.w600),
+                  ),
+                  if (summary != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      summary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: vpsText(p, size: 12.5, color: p.soft, height: 1.4),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            VpsButton(
+              label: tr(context, '安装并重启', 'Install & restart'),
+              filled: true,
+              onTap: () => unawaited(
+                ref.read(commonActionProvider.notifier).installUpdate(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 String _clock(BuildContext context, DateTime at) {
   final now = DateTime.now();
   String two(int n) => n.toString().padLeft(2, '0');
@@ -455,27 +521,25 @@ class VpsUpdateCard extends ConsumerWidget {
         '有新版本 ${release.version}',
         'Version ${release.version} is available',
       );
-      detail =
-          release.notes ??
-          (installs
-              ? tr(
-                  context,
-                  '当前 $version，更新会自动安装并重启 vps2vpn',
-                  'You have $version; the update installs itself and '
-                      'restarts vps2vpn',
-                )
-              : installer == null
-              ? tr(
-                  context,
-                  '当前 $version，在下载页获取新版本',
-                  'You have $version; get it from the download page',
-                )
-              : tr(
-                  context,
-                  '当前 $version，下载并校验签名后会打开所在文件夹',
-                  'You have $version; it is downloaded, its signature '
-                      'checked, and its folder opened',
-                ));
+      detail = installs
+          ? tr(
+              context,
+              '当前 $version，更新会自动安装并重启 vps2vpn',
+              'You have $version; the update installs itself and '
+                  'restarts vps2vpn',
+            )
+          : installer == null
+          ? tr(
+              context,
+              '当前 $version，在下载页获取新版本',
+              'You have $version; get it from the download page',
+            )
+          : tr(
+              context,
+              '当前 $version，下载并校验签名后会打开所在文件夹',
+              'You have $version; it is downloaded, its signature '
+                  'checked, and its folder opened',
+            );
       action = VpsButton(
         label: ready
             ? tr(context, '安装并重启', 'Install & restart')
@@ -500,6 +564,12 @@ class VpsUpdateCard extends ConsumerWidget {
       title = tr(context, '版本与更新', 'Version and updates');
       final status = switch (check.status) {
         VpsUpdateStatus.checking => tr(context, '正在检查…', 'Checking…'),
+        VpsUpdateStatus.latest when check.panelOnly => tr(
+          context,
+          '已是最新（$at 检查；GitHub 暂时连不上，已从订阅服务器确认）',
+          'Up to date (checked $at; GitHub was out of reach, the '
+              'subscription server confirmed it)',
+        ),
         VpsUpdateStatus.latest => tr(
           context,
           '已是最新（$at 检查）',
@@ -581,6 +651,40 @@ class VpsUpdateCard extends ConsumerWidget {
                 action,
               ],
             ),
+            if (vpsReleaseSummary(release?.notes, zh: vpsZh(context))
+                case final summary?) ...[
+              const SizedBox(height: 10),
+              VpsPressable(
+                semanticLabel: tr(context, '更新内容', "What's new"),
+                onTap: () => unawaited(
+                  dialogs.showMessage(
+                    title: tr(
+                      context,
+                      '${release!.version} 更新内容',
+                      "What's new in ${release.version}",
+                    ),
+                    message: TextSpan(text: release.notes),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 31),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(text: summary),
+                        TextSpan(
+                          text: tr(context, '  查看全部', '  See all'),
+                          style: TextStyle(color: p.accent),
+                        ),
+                      ],
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: vpsText(p, size: 13, color: p.soft, height: 1.45),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Container(height: 1, color: p.line),
             const SizedBox(height: 6),

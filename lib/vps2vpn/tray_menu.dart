@@ -1,4 +1,5 @@
 import 'package:fl_clash/common/app_localizations.dart';
+import 'package:fl_clash/common/app_update.dart';
 import 'package:fl_clash/common/provider_reader.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -40,6 +41,7 @@ List<TrayMenuItem>? vpsTrayMenu({
     vpsAIGroupName => say('AI 专线', 'AI line'),
     final name => name,
   };
+  final download = read(updateDownloadStateProvider);
   final status = !state.isStart
       ? say('未连接', 'Not connected')
       : state.suspended
@@ -85,6 +87,16 @@ List<TrayMenuItem>? vpsTrayMenu({
       onSelected: () => vpsUseWholeSystem(read, true),
     ),
     const TrayMenuSeparator(),
+    if (download is UpdateReady) ...[
+      TrayMenuAction(
+        label: say(
+          '安装更新 ${download.tag.replaceFirst('v', '')}',
+          'Install update ${download.tag.replaceFirst('v', '')}',
+        ),
+        onSelected: () => read(commonActionProvider.notifier).installUpdate(),
+      ),
+      const TrayMenuSeparator(),
+    ],
     TrayMenuAction(
       label: say('打开 vps2vpn', 'Open vps2vpn'),
       onSelected: onShow,

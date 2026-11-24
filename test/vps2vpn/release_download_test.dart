@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:fl_clash/vps2vpn/auto_update.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -226,6 +227,42 @@ void main() {
       );
     }
     expect(dir.listSync(), isEmpty);
+  });
+
+  test('a fetched installer is offered again on the next start', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-release-keep-');
+    addTearDown(() => dir.delete(recursive: true));
+    const name = 'vps2vpn-1.0.9-windows-amd64-setup.exe';
+    final saved = await _localSocket(
+      () => vpsDownloadRelease(
+        Uri.parse('https://127.0.0.1:${server.port}/$name'),
+        dir,
+        pinnedSha256: {fingerprint},
+        currentVersion: '1.0.8',
+        publicKeyHex: _testKey,
+      ),
+    );
+    expect(File('${saved.path}.sig').existsSync(), isTrue);
+
+    final ready = await vpsReadyInstaller(dir, '1.0.8', publicKeyHex: _testKey);
+    expect(ready?.$1, '1.0.9');
+    expect(ready?.$2.path, saved.path);
+    expect(
+      await vpsReadyInstaller(dir, '1.0.9', publicKeyHex: _testKey),
+      isNull,
+      reason: 'installed already',
+    );
+    await saved.writeAsString('tampered payload');
+    expect(
+      await vpsReadyInstaller(dir, '1.0.8', publicKeyHex: _testKey),
+      isNull,
+    );
+    await saved.writeAsString('release payload');
+    await File('${saved.path}.sig').delete();
+    expect(
+      await vpsReadyInstaller(dir, '1.0.8', publicKeyHex: _testKey),
+      isNull,
+    );
   });
 
   test('verified download replaces an existing complete installer', () async {

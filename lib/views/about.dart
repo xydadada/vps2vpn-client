@@ -6,6 +6,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/ui.dart';
+import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -88,6 +89,7 @@ class AboutView extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 8),
+          if (vps2vpnUpdatesDisabled) const VpsUpdateCard(),
           generateSection(
             title: appLocalizations.more,
             items: [

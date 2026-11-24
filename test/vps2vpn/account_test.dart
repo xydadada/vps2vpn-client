@@ -379,6 +379,23 @@ void main() {
       expect(find.text('Version 1.1.0 is available'), findsOneWidget);
     });
 
+    testWidgets('GitHub out of reach, the panel still says up to date', (
+      tester,
+    ) async {
+      vpsGitHubLookup = _gitHub(const SocketException('unreachable'));
+      await _pump(
+        tester,
+        const VpsUpdateCard(currentVersion: '1.0.0'),
+        const VpsMemberResult(member: VpsMember(name: 'Ann', enabled: true)),
+      );
+      await check(tester);
+      expect(find.textContaining('Check failed'), findsNothing);
+      expect(
+        find.textContaining('the subscription server confirmed it'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('the newer of GitHub and the mirror wins', (tester) async {
       vpsGitHubLookup = _gitHub(_onGitHub('1.4.0'));
       await _pump(

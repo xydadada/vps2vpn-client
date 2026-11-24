@@ -168,6 +168,25 @@ void main() {
     expect(VpsClientRelease.fromJson(null), isNull);
   });
 
+  test("a GitHub release's notes, one paragraph in the reader's language", () {
+    final r = vpsReleaseFromGitHub({
+      'tag_name': 'v1.0.30',
+      'body':
+          '## 1.0.30\n\n- 订阅更新后**说结果**\n- 节点名的倍率单独显示\n\n'
+          'Updating a subscription now says what changed.',
+    }, installed: true)!;
+    expect(vpsReleaseSummary(r.notes, zh: true), '订阅更新后说结果 节点名的倍率单独显示');
+    expect(
+      vpsReleaseSummary(r.notes, zh: false),
+      'Updating a subscription now says what changed.',
+    );
+    final test = vpsReleaseFromGitHub({
+      'tag_name': 'v1.0.30',
+      'body': 'Pre-release for the automated installer check. Not for users.',
+    }, installed: true)!;
+    expect(test.notes, isNull);
+  });
+
   test('prefers the installer the panel holds for this platform', () {
     final r = VpsClientRelease.fromJson({
       'version': '1.10.0',

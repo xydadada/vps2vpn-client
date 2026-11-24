@@ -35,6 +35,11 @@ class _TrayManagerState extends ConsumerState<TrayManager> {
         _requestUpdate();
       }
     });
+    ref.listenManual(updateDownloadStateProvider, (prev, next) {
+      if (prev is UpdateReady != next is UpdateReady) {
+        _requestUpdate();
+      }
+    });
     ref.listenManual(loadedLocaleProvider, (prev, next) {
       if (prev != null && prev != next) {
         _requestUpdate();

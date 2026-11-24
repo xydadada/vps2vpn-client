@@ -15,6 +15,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/views/disclaimer.dart';
 import 'package:fl_clash/views/navigation.dart';
+import 'package:fl_clash/vps2vpn/auto_update.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -154,7 +155,7 @@ class Bootstrap {
 
   Future<void> _initApp() async {
     unawaited(_container.read(systemActionProvider.notifier).updateTray());
-    unawaited(clearUpdateDownloads());
+    unawaited(vpsRestoreUpdate(_container));
     unawaited(_container.read(commonActionProvider.notifier).autoCheckUpdate());
     unawaited(
       autoLaunch?.updateStatus(_container.read(appSettingProvider).autoLaunch),

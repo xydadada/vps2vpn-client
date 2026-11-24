@@ -155,6 +155,7 @@ class VpsHomePage extends ConsumerWidget {
       title: tr(context, '概览', 'Overview'),
       children: [
         const VpsTakeoverNotice(),
+        const VpsUpdateNotice(),
         const VpsSubscriptionNotice(),
         // Android would announce every read of the clipboard.
         if (!Platform.isAndroid) const VpsClipboardOffer(),
