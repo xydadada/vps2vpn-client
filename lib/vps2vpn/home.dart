@@ -435,8 +435,8 @@ class _HeroState extends ConsumerState<_Hero> {
     final sub = !hasProfile
         ? tr(
             context,
-            '把管理员发给你的订阅链接粘贴到下面的框里，再点"导入"',
-            'Paste the subscription link the owner gave you into the box below, then tap Import',
+            '把订阅链接粘贴到下面的框里，再点"导入"',
+            'Paste your subscription link into the box below, then tap Import',
           )
         : block != null
         ? vpsAccountBlockHint(context, block)

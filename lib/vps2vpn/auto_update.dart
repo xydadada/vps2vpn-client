@@ -250,20 +250,19 @@ Future<_Got> _downloadUpdate(
       (c) => switch (e.reason) {
         'unsigned' => tr(
           c,
-          '这个安装包没有签名，已拒绝。请让管理员把发布页上同名的 .sig 文件一起放到面板上',
-          'This installer is not signed and was refused. Ask the owner to '
-              'put the matching .sig file from the release on the panel',
+          '这个安装包没有签名，已拒绝，没有安装',
+          'This installer is not signed; it was refused and not installed',
         ),
         'notNewer' => tr(
           c,
-          '面板提供的安装包不比当前版本新，已拒绝',
-          'The installer on the panel is not newer than this version; refused',
+          '下载到的安装包不比当前版本新，已拒绝',
+          'The downloaded installer is not newer than this version; refused',
         ),
         _ => tr(
           c,
-          '安装包签名不对，可能被篡改，已删除。请联系管理员',
+          '安装包签名不对，可能被篡改，已删除，没有安装',
           "The installer's signature is wrong (it may have been tampered "
-              'with) and it was deleted. Contact the owner',
+              'with); it was deleted and not installed',
         ),
       },
       BannerLevel.warning,
