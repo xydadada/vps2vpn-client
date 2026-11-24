@@ -9,6 +9,7 @@ import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/home.dart' show mainGroup;
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,6 +29,7 @@ String vpsLegAdvice(
   BuildContext context,
   VpsLeg leg, {
   required bool on,
+  bool subscriptionDown = false,
 }) => switch (leg) {
   VpsLeg.network => tr(
     context,
@@ -40,7 +42,13 @@ String vpsLegAdvice(
     'The network is up but names do not resolve: disconnect and connect again, or restart the computer.',
   ),
   VpsLeg.node =>
-    on
+    on && subscriptionDown
+        ? tr(
+            context,
+            '本机网络正常，但线路和订阅地址都连不上：这是服务商那边的问题（服务器停了或换了地址），不是你的电脑断网。请联系提供者，拿到新链接后在「设置」的订阅卡上点"替换链接"。',
+            'Your network is fine, but neither the line nor the subscription address answers: the problem is on the provider\'s side (its server stopped or moved), not your computer. Contact your provider; with a new link, tap Replace link on the subscription in Settings.',
+          )
+        : on
         ? tr(
             context,
             '本机网络正常，但节点连不上：到「节点」换一个；都不行就联系管理员看看服务器。',
@@ -155,6 +163,13 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final on = ref.watch(isStartProvider);
+    final profileId = ref.watch(currentProfileIdProvider);
+    final subscriptionDown = ref.watch(
+      vpsProfileHealthProvider.select((m) {
+        final h = m[profileId];
+        return h != null && !h.ok && h.unreachable;
+      }),
+    );
     final done =
         !_running && _states.values.every((s) => s != VpsLegState.waiting);
     final failed = _failed;
@@ -203,7 +218,12 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
           if (failed != null) ...[
             const SizedBox(height: 8),
             Text(
-              vpsLegAdvice(context, failed, on: on),
+              vpsLegAdvice(
+                context,
+                failed,
+                on: on,
+                subscriptionDown: subscriptionDown,
+              ),
               style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
             ),
           ],

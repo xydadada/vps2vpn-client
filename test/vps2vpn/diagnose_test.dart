@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:fl_clash/vps2vpn/diagnose.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../helpers/test_app.dart';
 
 void main() {
   test('one bare address that answers means the network is up', () async {
@@ -28,5 +31,33 @@ void main() {
           Future.error(const SocketException('unreachable')),
     );
     expect(up, isFalse);
+  });
+
+  testWidgets('a dead line with a dead subscription is the provider, not you', (
+    tester,
+  ) async {
+    late String withSub;
+    late String without;
+    await tester.pumpWidget(
+      TestApp(
+        includeNavigatorKey: false,
+        locale: const Locale('en'),
+        child: Builder(
+          builder: (context) {
+            withSub = vpsLegAdvice(
+              context,
+              VpsLeg.node,
+              on: true,
+              subscriptionDown: true,
+            );
+            without = vpsLegAdvice(context, VpsLeg.node, on: true);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    expect(withSub, contains("provider's side"));
+    expect(withSub, contains('Replace link'));
+    expect(without, isNot(contains("provider's side")));
   });
 }
