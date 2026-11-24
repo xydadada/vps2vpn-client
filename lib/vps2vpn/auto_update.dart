@@ -64,7 +64,7 @@ bool vpsReleaseSelfInstalls(VpsClientRelease release) {
 /// release signature and is newer than [current] (see vpsDownloadRelease).
 typedef VpsUpdateFetcher =
     Future<File> Function(
-      WidgetRef ref,
+      ProviderContainer container,
       Uri url, {
       required bool install,
       required String current,
@@ -72,7 +72,7 @@ typedef VpsUpdateFetcher =
     });
 
 Future<File> _fetchUpdate(
-  WidgetRef ref,
+  ProviderContainer container,
   Uri url, {
   required bool install,
   required String current,
@@ -80,24 +80,27 @@ Future<File> _fetchUpdate(
 }) async {
   // The panel's own certificate pins vouch for the panel alone, not for a
   // download it links to on another host.
-  final panel = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
+  final panel = vpsApiBase(container.read(currentProfileProvider)?.url ?? '');
   final pins = panel != null && vpsSameOrigin(panel, url)
-      ? await ref.read(vpsPanelPinsProvider.future)
+      ? await container.read(vpsPanelPinsProvider.future)
       : const <String>{};
   final dir = Directory(
     install ? await appPath.updateDirPath : await appPath.downloadDirPath,
   );
   await dir.create(recursive: true);
-  final on = ref.read(isStartProvider) && !ref.read(suspendProvider);
+  final on =
+      container.read(isStartProvider) && !container.read(suspendProvider);
   return vpsDownloadRelease(
     url,
     dir,
     pinnedSha256: pins,
     currentVersion: current,
     onProgress: onProgress,
-    proxyPort: on ? ref.read(patchClashConfigProvider).mixedPort : null,
+    proxyPort: on ? container.read(patchClashConfigProvider).mixedPort : null,
     proxyAuth: on
-        ? vpsLocalProxyAuth(ref.read(networkSettingProvider).authentication)
+        ? vpsLocalProxyAuth(
+            container.read(networkSettingProvider).authentication,
+          )
         : null,
   );
 }
@@ -124,8 +127,21 @@ void resetVpsAutoUpdate() => _autoTried.clear();
 /// [auto] keeps transfer failures quiet; refusals are always shown, as the
 /// owner has to fix them. Returns false only when the transfer failed, so a
 /// later try may succeed.
+/// The app's container is read throughout: [ref]'s page may be gone.
 Future<bool> vpsDownloadPanelUpdate(
   WidgetRef ref,
+  VpsClientRelease release, {
+  required String current,
+  bool auto = false,
+}) => _downloadUpdate(
+  ProviderScope.containerOf(ref.context, listen: false),
+  release,
+  current: current,
+  auto: auto,
+);
+
+Future<bool> _downloadUpdate(
+  ProviderContainer container,
   VpsClientRelease release, {
   required String current,
   bool auto = false,
@@ -139,7 +155,7 @@ Future<bool> vpsDownloadPanelUpdate(
     return true;
   }
   final install = vpsSelfInstallable(_fileName(url));
-  final download = ref.read(updateDownloadStateProvider.notifier);
+  final download = container.read(updateDownloadStateProvider.notifier);
   final tag = 'v${release.version}';
   // One download at a time; a ready older version gives way to this one.
   final pending = download.value;
@@ -162,7 +178,7 @@ Future<bool> vpsDownloadPanelUpdate(
   try {
     var shown = 0;
     final file = await vpsUpdateFetcher(
-      ref,
+      container,
       url,
       install: install,
       current: current,
@@ -190,8 +206,9 @@ Future<bool> vpsDownloadPanelUpdate(
               'Tap to install it (vps2vpn restarts)',
         ),
         BannerLevel.success,
-        onTap: () =>
-            unawaited(ref.read(commonActionProvider.notifier).installUpdate()),
+        onTap: () => unawaited(
+          container.read(commonActionProvider.notifier).installUpdate(),
+        ),
       );
       return true;
     }
@@ -260,18 +277,19 @@ Future<void> vpsAutoUpdateCheck(
   if (!ref.read(appSettingProvider).autoCheckUpdate) return;
   final current = currentVersion ?? vpsAppVersion();
   if (current == null) return;
+  final container = ProviderScope.containerOf(ref.context, listen: false);
   // The member provider disposes itself without a listener.
-  final keep = ref.listenManual(vpsMemberProvider, (_, _) {});
+  final keep = container.listen(vpsMemberProvider, (_, _) {});
   try {
-    final result = await ref
+    final result = await container
         .read(vpsMemberProvider.future)
         .timeout(const Duration(minutes: 1));
     final release = result?.member?.client;
     if (release == null || !release.newerThan(current)) return;
     if (!vpsReleaseSelfInstalls(release)) return;
     if (!_autoTried.add(release.version)) return;
-    final settled = await vpsDownloadPanelUpdate(
-      ref,
+    final settled = await _downloadUpdate(
+      container,
       release,
       current: current,
       auto: true,

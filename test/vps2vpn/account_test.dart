@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fl_clash/common/app_update.dart';
@@ -383,6 +384,68 @@ void main() {
         ProviderScope.containerOf(tester.element(find.byType(SizedBox))),
       );
     }
+
+    testWidgets('a download outlives the page that started it (C11-02)', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      final done = Completer<File>();
+      vpsUpdateFetcher =
+          (
+            container,
+            url, {
+            required install,
+            required current,
+            onProgress,
+          }) async {
+            final file = await done.future;
+            container.read(appSettingProvider);
+            return file;
+          };
+      final shown = ValueNotifier(true);
+      addTearDown(shown.dispose);
+      late WidgetRef page;
+      await tester.pumpWidget(
+        TestApp(
+          includeNavigatorKey: false,
+          locale: const Locale('en'),
+          child: ValueListenableBuilder<bool>(
+            valueListenable: shown,
+            builder: (context, on, _) => on
+                ? Consumer(
+                    builder: (context, ref, _) {
+                      page = ref;
+                      return const SizedBox();
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ValueListenableBuilder<bool>)),
+      );
+      final settled = vpsDownloadPanelUpdate(
+        page,
+        VpsClientRelease(
+          version: '1.1.0',
+          url: Uri.parse(
+            'https://example.com/client/vps2vpn-1.1.0-${Platform.operatingSystem}-amd64-setup.exe',
+          ),
+        ),
+        current: '1.0.0',
+        auto: true,
+      );
+      shown.value = false;
+      await tester.pump();
+      done.complete(File('setup.exe'));
+
+      expect(await settled, isTrue);
+      expect(tester.takeException(), isNull);
+      final download = container.read(updateDownloadStateProvider.notifier);
+      expect(download.value, isA<UpdateReady>());
+      download.value = null;
+    });
 
     testWidgets('fetches a newer signed installer and offers to install it', (
       tester,
