@@ -18,4 +18,15 @@ void main() {
     expect(restarts.take(), isTrue);
     expect(restarts.take(), isFalse);
   });
+
+  test('a clock set back does not lock restarts out for good (C11-04)', () {
+    var now = DateTime(2026, 11, 23, 12);
+    final restarts = VpsCrashRestarts(now: () => now);
+    for (var i = 0; i < 3; i++) {
+      expect(restarts.take(), isTrue);
+    }
+    expect(restarts.take(), isFalse);
+    now = now.subtract(const Duration(hours: 1));
+    expect(restarts.take(), isTrue);
+  });
 }

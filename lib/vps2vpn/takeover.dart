@@ -286,7 +286,9 @@ Set<int> parseVpnRouteIndexes(String routes) {
   for (final line in routes.split(RegExp(r'\r?\n'))) {
     final m = row.firstMatch(line);
     if (m == null) continue;
-    if (m[1] == '0.0.0.0/0' && gateway.hasMatch(m[3]!)) continue;
+    final via = m[3]!;
+    final onLink = via == '0.0.0.0';
+    if (m[1] == '0.0.0.0/0' && gateway.hasMatch(via) && !onLink) continue;
     found.add(int.parse(m[2]!));
   }
   return found;

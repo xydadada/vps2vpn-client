@@ -122,6 +122,16 @@ void main() {
       ]);
     });
 
+    test('an on-link default route through 0.0.0.0 is a VPN (C11-04)', () {
+      expect(
+        parseVpnRouteIndexes(
+          'No       Manual    0    0.0.0.0/0                  33  0.0.0.0\r\n'
+          'No       Manual    0    0.0.0.0/0                   5  192.0.2.1\r\n',
+        ),
+        {33},
+      );
+    });
+
     test('a plain network card is no other VPN', () async {
       Future<ProcessResult> run(String exe, List<String> args) async => _ok(
         args.last == 'route'

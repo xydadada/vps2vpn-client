@@ -15,7 +15,11 @@ class VpsCrashRestarts {
   /// Whether one more automatic restart fits; counts it when it does.
   bool take() {
     final now = _now();
-    _recent.removeWhere((at) => now.difference(at) >= window);
+    // A clock set back leaves restarts in the future; they cannot be aged,
+    // so they no longer count.
+    _recent.removeWhere(
+      (at) => at.isAfter(now) || now.difference(at) >= window,
+    );
     if (_recent.length >= limit) return false;
     _recent.add(now);
     return true;
