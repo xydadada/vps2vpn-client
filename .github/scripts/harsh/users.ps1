@@ -133,6 +133,11 @@ if (Test-Path `$prefs) {
   profiles = @(Get-ChildItem (Join-Path `$home_ 'profiles') -File -ErrorAction SilentlyContinue).Count
   prefs = Test-Path (Join-Path `$home_ 'shared_preferences.json')
 }
+# The same request from inside the account, through its own Core's ports.
+`$core = Get-Process vps2vpnCore -ErrorAction SilentlyContinue | Where-Object { `$_.SessionId -eq (Get-Process -Id `$PID).SessionId } | Select-Object -First 1
+`$r.own = @(foreach (`$port in @(Get-NetTCPConnection -State Listen -OwningProcess `$core.Id -ErrorAction SilentlyContinue | ForEach-Object LocalPort | Sort-Object -Unique)) {
+  "`$port " + ((& curl.exe -sS -o NUL -w '%{http_code}' --max-time 15 -x "http://127.0.0.1:`$port" '$($script:probeUrl)' 2>&1) -join ' ')
+})
 `$r | ConvertTo-Json | Set-Content `$result -Encoding utf8
 "@
   $app = Invoke-AsUser $credential $run 'run' 180
@@ -155,7 +160,11 @@ if (Test-Path `$prefs) {
     "second account Core listens on: $($ports -join ', ')"
     $mixed = $ports | Where-Object { $_ -ne $adminPort } | Select-Object -First 1
     Check ($mixed -and $mixed -ne $adminPort) "second account: a port of its own ($mixed, admin on $adminPort)"
-    if ($mixed) { Test-Through $mixed 'second account' }
+    if ($app) { "from inside the second account: $($app.own -join ' | ')" }
+    if ($mixed) {
+      (& curl.exe -sS -v -o NUL --max-time 20 -x "http://127.0.0.1:$mixed" $script:probeUrl 2>&1 | Select-Object -Last 8) -join ' / ' | Out-Host
+      Test-Through $mixed 'second account'
+    }
   }
   Check (@(Get-NetTCPConnection -State Listen -LocalPort $adminPort -OwningProcess $adminCore -ErrorAction SilentlyContinue).Count -gt 0) "admin: its own Core (pid $adminCore) still listens on $adminPort with the second account running"
   Test-AppAlive 'admin'
