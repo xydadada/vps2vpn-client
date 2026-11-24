@@ -571,21 +571,79 @@ class _ProxyCard extends ConsumerWidget {
             off: p.line,
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 52,
-            child: Text(
-              delayText,
-              textAlign: TextAlign.right,
-              style: vpsText(
-                p,
-                size: 12.5,
-                weight: FontWeight.w600,
-                color: delayColor,
-                tabular: true,
-              ),
-            ),
+          _DelayCell(
+            testing: delay == 0,
+            text: delayText,
+            color: delayColor,
+            onRetest: () => ref.read(proxiesActionProvider.notifier).delayTest([
+              proxy,
+            ], testUrl),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A node's delay. Pointing at it offers a test of this node alone; while a
+/// test runs a placeholder breathes where the number will land.
+class _DelayCell extends StatefulWidget {
+  const _DelayCell({
+    required this.testing,
+    required this.text,
+    required this.color,
+    required this.onRetest,
+  });
+
+  final bool testing;
+  final String text;
+  final Color color;
+  final VoidCallback onRetest;
+
+  @override
+  State<_DelayCell> createState() => _DelayCellState();
+}
+
+class _DelayCellState extends State<_DelayCell> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final Widget shown = widget.testing
+        ? const VpsSkeleton(key: ValueKey('testing'), width: 34, height: 10)
+        : _hover
+        ? VpsIconView(
+            key: const ValueKey('retest'),
+            VpsIcon.refresh,
+            size: 15,
+            color: p.soft,
+          )
+        : Text(
+            widget.text,
+            key: ValueKey(widget.text),
+            textAlign: TextAlign.right,
+            style: vpsText(
+              p,
+              size: 12.5,
+              weight: FontWeight.w600,
+              color: widget.color,
+            ),
+          );
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: VpsPressable(
+        onTap: widget.testing ? null : widget.onRetest,
+        semanticLabel: tr(context, '重测这个节点', 'Test this server again'),
+        child: SizedBox(
+          width: 52,
+          height: 28,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: AnimatedSwitcher(duration: VpsMotion.medium, child: shown),
+          ),
+        ),
       ),
     );
   }
