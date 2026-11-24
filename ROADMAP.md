@@ -38,6 +38,8 @@
 
 ### 2. Claude 专项检测（简易模式侧边栏单独一项）
 
+> 进度（2026-11-24）：已写好，待发布——侧边栏第 4 项"Claude"（`lib/vps2vpn/claude_check.dart`）：Claude 能否打开、出口地区、claude.ai 和 api.anthropic.com 的 Cloudflare 出口是否一致、终端代理是否指向本软件，再加上第 1 项的 IP 类型、IPv6、DNS、时区和语言。域名出口用 `cdn-cgi/trace` 比对，而不是读核心规则。
+
 - 在简易模式导航（`lib/vps2vpn/simple_mode.dart` 的 `simpleNavigationItems`）加一项"Claude"。
 - 内容：
   - Claude 能不能用（已有探测）；

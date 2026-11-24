@@ -62,7 +62,7 @@ class VpsExitFacts {
   final ({String ip, String geo})? dns;
 }
 
-Future<OutboundIpResult?> _ask(
+Future<OutboundIpResult?> vpsAskCore(
   CoreController core,
   String proxyName,
   List<String> urls,
@@ -90,9 +90,9 @@ final vpsExitFactsProvider = FutureProvider.autoDispose<VpsExitFacts>((
     (_) => 'abcdefghijklmnopqrstuvwxyz0123456789'[Random.secure().nextInt(36)],
   ).join();
   final answers = await Future.wait([
-    _ask(core, routedOutbound, ipv6),
-    _ask(core, directOutbound, ipv6),
-    _ask(core, routedOutbound, ['http://$token.edns.ip-api.com/json']),
+    vpsAskCore(core, routedOutbound, ipv6),
+    vpsAskCore(core, directOutbound, ipv6),
+    vpsAskCore(core, routedOutbound, ['http://$token.edns.ip-api.com/json']),
   ]);
   final dns = answers[2];
   return VpsExitFacts(
@@ -404,7 +404,6 @@ class VpsExitReport extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final p = VpsPalette.of(context);
     final facts = ref.watch(vpsExitFactsProvider);
     final ip = exit?.ip;
     final quality = ip == null ? null : ref.watch(ipQualityProvider(ip)).value;
@@ -416,9 +415,37 @@ class VpsExitReport extends ConsumerWidget {
       offset: DateTime.now().timeZoneOffset,
       localeName: Platform.localeName,
     );
+    return VpsFindingCard(
+      rows: rows,
+      settled: exit != null && !facts.isLoading,
+      copyText: () => vpsExitReportText(
+        context,
+        exit: exit,
+        ipv6Exit: facts.value?.ipv6Exit,
+        rows: rows,
+      ),
+    );
+  }
+}
+
+/// A verdict line over one row per finding, with a copy button.
+class VpsFindingCard extends StatelessWidget {
+  const VpsFindingCard({
+    super.key,
+    required this.rows,
+    required this.settled,
+    required this.copyText,
+  });
+
+  final List<VpsFinding> rows;
+  final bool settled;
+  final String Function() copyText;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
     final bad = rows.any((r) => r.level == VpsFindingLevel.bad);
     final warn = rows.any((r) => r.level == VpsFindingLevel.warn);
-    final settled = exit != null && !facts.isLoading;
     return VpsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -452,16 +479,7 @@ class VpsExitReport extends ConsumerWidget {
                 label: tr(context, '复制结果', 'Copy'),
                 onTap: !settled
                     ? null
-                    : () => Clipboard.setData(
-                        ClipboardData(
-                          text: vpsExitReportText(
-                            context,
-                            exit: exit,
-                            ipv6Exit: facts.value?.ipv6Exit,
-                            rows: rows,
-                          ),
-                        ),
-                      ),
+                    : () => Clipboard.setData(ClipboardData(text: copyText())),
               ),
             ],
           ),

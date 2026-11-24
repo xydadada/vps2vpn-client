@@ -9,6 +9,7 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
+import 'package:fl_clash/vps2vpn/claude_check.dart';
 import 'package:fl_clash/vps2vpn/check.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
@@ -20,15 +21,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart' show Theme;
 
 /// The open tab; pages switch it (e.g. the home button opens "Me").
-/// VPS2VPN_TAB (0-3) opens a page at start; used for test screenshots.
+/// VPS2VPN_TAB (0-4) opens a page at start; used for test screenshots.
 final vpsTab = ValueNotifier<int>(
-  (int.tryParse(Platform.environment['VPS2VPN_TAB'] ?? '') ?? 0).clamp(0, 3),
+  (int.tryParse(Platform.environment['VPS2VPN_TAB'] ?? '') ?? 0).clamp(0, 4),
 );
 
 const vpsTabHome = 0;
 const vpsTabServers = 1;
 const vpsTabCheck = 2;
-const vpsTabMe = 3;
+const vpsTabClaude = 3;
+const vpsTabMe = 4;
 
 class VpsShell extends StatelessWidget {
   const VpsShell({super.key});
@@ -37,6 +39,7 @@ class VpsShell extends StatelessWidget {
     VpsHomePage(),
     VpsServersPage(),
     VpsCheckPage(),
+    VpsClaudePage(),
     VpsMePage(),
   ];
 
@@ -113,6 +116,7 @@ List<(VpsIcon, String)> _tabs(BuildContext context) => [
   (VpsIcon.home, tr(context, '概览', 'Overview')),
   (VpsIcon.servers, tr(context, '节点', 'Nodes')),
   (VpsIcon.check, tr(context, '检测', 'Check')),
+  (VpsIcon.sparkle, 'Claude'),
   (VpsIcon.me, tr(context, '设置', 'Settings')),
 ];
 

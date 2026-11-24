@@ -32,6 +32,7 @@ const _tabs = {
   vpsTabHome: 'home',
   vpsTabServers: 'nodes',
   vpsTabCheck: 'check',
+  vpsTabClaude: 'claude',
   vpsTabMe: 'settings',
 };
 
