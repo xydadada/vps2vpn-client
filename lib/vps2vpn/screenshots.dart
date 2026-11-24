@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:fl_clash/common/constant.dart' show defaultPrimaryColor;
+import 'package:fl_clash/common/dialog.dart' show dialogs;
+import 'package:prism_ui/navigator.dart' show rootNavigatorKey;
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/mine.dart' show vpsThemeColors;
 import 'package:fl_clash/vps2vpn/panel.dart';
@@ -74,6 +76,7 @@ class _ShotRun {
       await _until(() => container.read(isStartProvider), 60);
       await _settle(15000);
       await _round('connected', tabs: _tabs.keys.toList());
+      await _alert('connected');
       for (final (color, _, en) in vpsThemeColors.skip(1)) {
         container
             .read(themeSettingProvider.notifier)
@@ -84,6 +87,7 @@ class _ShotRun {
           sizes: const ['default'],
           locales: const ['zh'],
         );
+        await _alert('accent-${en.split(' ').first.toLowerCase()}');
       }
       container
           .read(themeSettingProvider.notifier)
@@ -123,6 +127,31 @@ class _ShotRun {
           }
         }
       }
+    }
+  }
+
+  Future<void> _alert(String state) async {
+    await desktopWindow.setSize(_sizes['default']!);
+    vpsTab.value = vpsTabHome;
+    container
+        .read(appSettingProvider.notifier)
+        .update((s) => s.copyWith(locale: 'zh'));
+    for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+      container
+          .read(themeSettingProvider.notifier)
+          .update((s) => s.copyWith(themeMode: theme));
+      await _settle(800);
+      unawaited(
+        dialogs.showMessage(
+          title: '删除订阅',
+          message: const TextSpan(text: '删除后需要重新导入订阅链接才能连接。'),
+          confirmText: '删除',
+        ),
+      );
+      await _settle(1500);
+      await _shoot('$state-alert-default-${theme.name}-zh');
+      rootNavigatorKey.currentState?.pop();
+      await _settle(800);
     }
   }
 

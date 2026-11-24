@@ -16,10 +16,28 @@ import 'package:fl_clash/views/theme.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 
 import 'flags.dart';
+import 'kit.dart' show VpsPalette;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'flags.dart';
+
+/// An alert's default action in simple mode's accent with white text, where
+/// FlClash's tonal primary puts dark text on pale coral.
+Widget vpsDressAlert(BuildContext context, Widget child) {
+  if (vps2vpnAdvancedMode || vps2vpnUpstreamUi) return child;
+  final p = VpsPalette.of(context);
+  final theme = Theme.of(context);
+  return Theme(
+    data: theme.copyWith(
+      colorScheme: theme.colorScheme.copyWith(
+        primary: p.accent,
+        onPrimary: p.accentInk,
+      ),
+    ),
+    child: child,
+  );
+}
 
 /// "Outbound mode" in advanced mode, "How you go online" in simple mode.
 String outboundModeTitle(BuildContext context) =>

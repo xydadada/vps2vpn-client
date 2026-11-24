@@ -13,6 +13,9 @@ class Dialogs {
 
   Dialogs._();
 
+  /// vps2vpn: lets simple mode dress an alert in its own accent.
+  Widget Function(BuildContext context, Widget child)? dress;
+
   // Focus sits in the route the user acts in, so an alert raised from a form
   // sheet, or a page pushed inside one, opens over it, beside the navigation
   // as the sheet sits.
@@ -37,9 +40,12 @@ class Dialogs {
     BuildContext? context,
     bool? dismissible,
   }) async {
+    final dress = this.dress;
     return showFloatingDialog<T>(
       context: context ?? _context,
-      child: child,
+      child: dress == null
+          ? child
+          : Builder(builder: (context) => dress(context, child)),
       dismissible: dismissible ?? true,
     );
   }
