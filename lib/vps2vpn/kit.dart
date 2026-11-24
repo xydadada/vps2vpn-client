@@ -18,6 +18,53 @@ const vpsCoralSoft = Color(0xFFFF8A70);
 const vpsCoralDeep = Color(0xFFE63E5C);
 const vpsViolet = Color(0xFF8B5CF6);
 
+/// The logo keeps the brand colours whatever theme colour is picked.
+const vpsBrandGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [vpsCoralSoft, vpsCoralDeep, vpsViolet],
+  stops: [0, 0.65, 1],
+);
+
+/// The theme colour simple mode draws its accent from, per brightness.
+class VpsAccentScope extends InheritedWidget {
+  const VpsAccentScope({
+    super.key,
+    required this.light,
+    required this.dark,
+    required super.child,
+  });
+
+  final Color light;
+  final Color dark;
+
+  static Color? seedOf(BuildContext context, {required bool dark}) {
+    final scope = context.dependOnInheritedWidgetOfExactType<VpsAccentScope>();
+    return dark ? scope?.dark : scope?.light;
+  }
+
+  @override
+  bool updateShouldNotify(VpsAccentScope old) =>
+      old.light != light || old.dark != dark;
+}
+
+HSLColor vpsAtLuminance(HSLColor c, double min, double max) {
+  var lo = 0.0;
+  var hi = 1.0;
+  final lum = c.toColor().computeLuminance();
+  if (lum >= min && lum <= max) return c;
+  final target = lum < min ? min : max;
+  for (var i = 0; i < 24; i++) {
+    final mid = (lo + hi) / 2;
+    if (c.withLightness(mid).toColor().computeLuminance() < target) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return c.withLightness(lum < min ? hi : lo);
+}
+
 class VpsPalette {
   const VpsPalette._({
     required this.dark,
@@ -43,6 +90,8 @@ class VpsPalette {
     required this.lineHover,
     required this.toggleOff,
     required this.popover,
+    this.seed = vpsCoral,
+    this.gradient = const [vpsCoralSoft, vpsCoralDeep, vpsViolet],
   });
 
   final bool dark;
@@ -72,6 +121,9 @@ class VpsPalette {
   final Color lineHover;
   final Color toggleOff;
   final Color popover;
+
+  final Color seed;
+  final List<Color> gradient;
 
   // Neutral greys in clear steps (page < sidebar < card < raised), the way
   // macOS and iOS group content: colour is kept for state and the one main
@@ -129,15 +181,79 @@ class VpsPalette {
     popover: Color(0xF7FFFFFF),
   );
 
-  static VpsPalette of(BuildContext context) =>
-      context.colorScheme.brightness == Brightness.dark ? _dark : _light;
+  static final _tinted = <(int, bool), VpsPalette>{};
 
-  /// Brand gradient: logo and the connect button only.
-  LinearGradient get accentGradient => const LinearGradient(
+  static VpsPalette of(BuildContext context) {
+    final base = context.colorScheme.brightness == Brightness.dark
+        ? _dark
+        : _light;
+    final seed = VpsAccentScope.seedOf(context, dark: base.dark);
+    if (seed == null || seed.toARGB32() == vpsCoral.toARGB32()) return base;
+    return _tinted.putIfAbsent((
+      seed.toARGB32(),
+      base.dark,
+    ), () => base.tinted(seed));
+  }
+
+  /// The accent sits where white text on it reads and, in dark, it still
+  /// stands off the page.
+  VpsPalette tinted(Color seed) {
+    final hsl = HSLColor.fromColor(seed);
+    final accent = vpsAtLuminance(
+      hsl,
+      dark ? 0.2 : 0.1,
+      dark ? 0.35 : 0.27,
+    ).toColor();
+    final a = HSLColor.fromColor(accent);
+    return VpsPalette._(
+      dark: dark,
+      bg: bg,
+      side: side,
+      card: card,
+      cardHi: cardHi,
+      line: line,
+      text: text,
+      soft: soft,
+      muted: muted,
+      accent: accent,
+      accentInk: accentInk,
+      accentWash: dark
+          ? accent.withValues(alpha: 0.12)
+          : Color.alphaBlend(accent.withValues(alpha: 0.1), card),
+      good: good,
+      warn: warn,
+      bad: bad,
+      glowA: glowA,
+      glowB: glowB,
+      track: track,
+      thumb: thumb,
+      selected: selected,
+      lineHover: lineHover,
+      toggleOff: toggleOff,
+      popover: popover,
+      seed: seed,
+      gradient: [
+        _turn(
+          a,
+          8,
+        ).withLightness((a.lightness + 0.08).clamp(0, 0.82)).toColor(),
+        _turn(
+          a,
+          -6,
+        ).withLightness((a.lightness - 0.04).clamp(0.2, 1)).toColor(),
+        _turn(a, 35).toColor(),
+      ],
+    );
+  }
+
+  static HSLColor _turn(HSLColor c, double degrees) =>
+      c.withHue((c.hue + degrees) % 360);
+
+  LinearGradient get accentGradient => LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [vpsCoralSoft, vpsCoralDeep, vpsViolet],
-    stops: [0, 0.65, 1],
+    colors: gradient,
+    stops: const [0, 0.65, 1],
   );
 
   List<BoxShadow> get raise => dark
@@ -1056,12 +1172,11 @@ class VpsLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = VpsPalette.of(context);
     return Container(
       width: size,
       height: size,
       decoration: ShapeDecoration(
-        gradient: p.accentGradient,
+        gradient: vpsBrandGradient,
         shape: RoundedSuperellipseBorder(
           borderRadius: BorderRadius.circular(size * 0.28),
         ),

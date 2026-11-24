@@ -13,6 +13,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/vps2vpn/auto_update.dart';
+import 'package:fl_clash/vps2vpn/kit.dart' show VpsAccentScope;
 import 'package:fl_clash/vps2vpn/panel.dart'
     show vpsLinkSource, vpsSubscriptionLink;
 import 'package:fl_clash/vps2vpn/screenshots.dart';
@@ -193,6 +194,10 @@ class ApplicationState extends ConsumerState<Application> {
         );
         final themeProps = ref.watch(themeSettingProvider);
         final textScale = themeProps.textScale;
+        final dynamicColor = ref.watch(dynamicColorProvider);
+        Color seedOf(Brightness b) => themeProps.primaryColor != null
+            ? Color(themeProps.primaryColor!)
+            : dynamicColor.seedOf(b);
         return PrismApp(
           debugShowCheckedModeBanner: false,
           navigatorKey: globalState.navigatorKey,
@@ -203,12 +208,16 @@ class ApplicationState extends ConsumerState<Application> {
             GlobalWidgetsLocalizations.delegate,
           ],
           builder: (context, child) {
-            return vpsShotBoundary(
-              buildManagerStack(
-                isDesktop: system.isDesktop,
-                onConnectivityChanged: _handleConnectivityChanged,
-                terminateSignals: _terminateSignals,
-                child: child!,
+            return VpsAccentScope(
+              light: seedOf(Brightness.light),
+              dark: seedOf(Brightness.dark),
+              child: vpsShotBoundary(
+                buildManagerStack(
+                  isDesktop: system.isDesktop,
+                  onConnectivityChanged: _handleConnectivityChanged,
+                  terminateSignals: _terminateSignals,
+                  child: child!,
+                ),
               ),
             );
           },

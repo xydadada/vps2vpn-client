@@ -224,6 +224,12 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               ),
               Container(height: 1, color: p.line),
               _ChoiceRow(
+                icon: VpsIcon.sparkle,
+                label: tr(context, '主题色', 'Theme colour'),
+                child: const VpsAccentPicker(),
+              ),
+              Container(height: 1, color: p.line),
+              _ChoiceRow(
                 icon: VpsIcon.globe,
                 label: tr(context, '语言', 'Language'),
                 child: VpsSegmented<String?>(
@@ -554,6 +560,92 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
 }
 
 /// A labelled choice: label on the left, segmented control on the right.
+/// The theme colours offered, coral first; null follows the system accent.
+const vpsThemeColors = <(int?, String, String)>[
+  (defaultPrimaryColor, '珊瑚', 'Coral'),
+  (0xFF0A84FF, '天蓝', 'Blue'),
+  (0xFF5E5CE6, '靛蓝', 'Indigo'),
+  (0xFFAF52DE, '紫罗兰', 'Violet'),
+  (0xFFFF375F, '玫红', 'Rose'),
+  (0xFF0FB5AE, '青绿', 'Teal'),
+  (null, '跟随系统强调色', 'System accent'),
+];
+
+const _rainbow = SweepGradient(
+  colors: [
+    Color(0xFFFF453A),
+    Color(0xFFFFD60A),
+    Color(0xFF32D74B),
+    Color(0xFF64D2FF),
+    Color(0xFF5E5CE6),
+    Color(0xFFFF375F),
+    Color(0xFFFF453A),
+  ],
+);
+
+class VpsAccentPicker extends ConsumerWidget {
+  const VpsAccentPicker({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = VpsPalette.of(context);
+    final current = ref.watch(
+      themeSettingProvider.select((s) => s.primaryColor),
+    );
+    final system = ref.watch(dynamicColorProvider).accentColor;
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final (value, zh, en) in vpsThemeColors)
+          VpsPressable(
+            semanticLabel: tr(context, zh, en),
+            selected: value == current,
+            onTap: () => ref
+                .read(themeSettingProvider.notifier)
+                .update((s) => s.copyWith(primaryColor: value)),
+            child: AnimatedContainer(
+              duration: VpsMotion.medium,
+              curve: VpsMotion.settle,
+              width: 30,
+              height: 30,
+              padding: const EdgeInsets.all(3),
+              decoration: ShapeDecoration(
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: value == current ? p.text : const Color(0x00000000),
+                    width: 2,
+                  ),
+                ),
+              ),
+              child: DecoratedBox(
+                decoration: ShapeDecoration(
+                  color: value == null ? null : Color(value),
+                  gradient: value == null ? _rainbow : null,
+                  shape: const CircleBorder(),
+                ),
+                child: value == null
+                    ? Center(
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: ShapeDecoration(
+                            color: system,
+                            shape: CircleBorder(
+                              side: BorderSide(color: p.card, width: 1.5),
+                            ),
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _ChoiceRow extends StatelessWidget {
   const _ChoiceRow({
     required this.icon,

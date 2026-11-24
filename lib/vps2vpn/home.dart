@@ -777,7 +777,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: (widget.on ? widget.tone : vpsCoral).withValues(
+                      color: (widget.on ? widget.tone : p.seed).withValues(
                         alpha: widget.on ? 0.32 : 0.22,
                       ),
                       blurRadius: widget.on ? 56 : 36,
