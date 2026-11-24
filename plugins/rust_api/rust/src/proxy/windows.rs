@@ -203,13 +203,20 @@ fn restored_settings(
     })
 }
 
-/// The port of any `http://127.0.0.1:<port>/...` URL, another app's PAC too.
+/// The port of any loopback `http://<host>:<port>/...` URL, another app's
+/// PAC too, however the scheme and host are cased.
 fn local_url_port(url: &str) -> Option<u16> {
-    let rest = url
-        .strip_prefix("http://")?
-        .strip_prefix(PROXY_HOST)?
-        .strip_prefix(':')?;
-    let port = rest.split(['/', '?']).next()?;
+    if !url.get(..7)?.eq_ignore_ascii_case("http://") {
+        return None;
+    }
+    let authority = url[7..].split(['/', '?', '#']).next()?;
+    let (host, port) = authority.rsplit_once(':')?;
+    if !["127.0.0.1", "localhost", "[::1]"]
+        .iter()
+        .any(|local| host.eq_ignore_ascii_case(local))
+    {
+        return None;
+    }
     local_proxy_port(&format!("{PROXY_HOST}:{port}"))
 }
 
@@ -790,6 +797,11 @@ mod tests {
         assert_eq!(local_url_port("http://127.0.0.1:33331"), Some(33331));
         assert_eq!(local_url_port("http://10.0.0.1:80/pac"), None);
         assert_eq!(local_url_port("https://127.0.0.1:443/pac"), None);
+        assert_eq!(local_url_port("http://localhost:33331/pac"), Some(33331));
+        assert_eq!(local_url_port("HTTP://LOCALHOST:33331/pac"), Some(33331));
+        assert_eq!(local_url_port("http://[::1]:33331/pac"), Some(33331));
+        assert_eq!(local_url_port("http://evil.localhost:33331/pac"), None);
+        assert_eq!(local_url_port("http://127.0.0.1/pac"), None);
     }
 
     #[test]

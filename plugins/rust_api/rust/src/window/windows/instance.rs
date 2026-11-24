@@ -116,6 +116,11 @@ pub fn allow_relaunch_messages(window: HWND) {
     }
 }
 
+// An account that cannot be read is nobody's: two unknowns are not a match.
+fn same_user(peer: Option<&str>, mine: Option<&str>) -> bool {
+    matches!((peer, mine), (Some(peer), Some(mine)) if peer == mine)
+}
+
 struct Search {
     executable: String,
     found: HWND,
@@ -137,7 +142,7 @@ unsafe extern "system" fn match_running_window(window: HWND, lparam: LPARAM) -> 
     if process.is_null() {
         return 1;
     }
-    if process_user_sid(process).as_deref() != user_sid() {
+    if !same_user(process_user_sid(process).as_deref(), user_sid()) {
         CloseHandle(process);
         return 1;
     }
@@ -247,7 +252,15 @@ pub extern "C" fn flclash_activate_window(window: HWND) {
 
 #[cfg(test)]
 mod tests {
-    use super::{fnv1a, lowercase};
+    use super::{fnv1a, lowercase, same_user};
+
+    #[test]
+    fn only_a_known_account_matches_itself() {
+        assert!(same_user(Some("S-1-5-21-1"), Some("S-1-5-21-1")));
+        assert!(!same_user(Some("S-1-5-21-1"), Some("S-1-5-21-2")));
+        assert!(!same_user(None, None));
+        assert!(!same_user(Some("S-1-5-21-1"), None));
+    }
 
     #[test]
     fn fnv1a_matches_the_reference_vectors() {
