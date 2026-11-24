@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:fl_clash/common/constant.dart' show defaultPrimaryColor;
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/vps2vpn/mine.dart' show vpsThemeColors;
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/rendering.dart';
@@ -72,6 +74,20 @@ class _ShotRun {
       await _until(() => container.read(isStartProvider), 60);
       await _settle(15000);
       await _round('connected', tabs: _tabs.keys.toList());
+      for (final (color, _, en) in vpsThemeColors.skip(1)) {
+        container
+            .read(themeSettingProvider.notifier)
+            .update((s) => s.copyWith(primaryColor: color));
+        await _round(
+          'accent-${en.split(' ').first.toLowerCase()}',
+          tabs: const [vpsTabHome, vpsTabServers, vpsTabMe],
+          sizes: const ['default'],
+          locales: const ['zh'],
+        );
+      }
+      container
+          .read(themeSettingProvider.notifier)
+          .update((s) => s.copyWith(primaryColor: defaultPrimaryColor));
 
       container.read(commonActionProvider.notifier).toggleRunning();
       await _until(() => !container.read(isStartProvider), 30);
@@ -87,6 +103,7 @@ class _ShotRun {
     String state, {
     required List<int> tabs,
     List<String> sizes = const ['default', 'min', 'wide'],
+    List<String> locales = const ['zh', 'en'],
   }) async {
     for (final size in sizes) {
       await desktopWindow.setSize(_sizes[size]!);
@@ -95,7 +112,7 @@ class _ShotRun {
         container
             .read(themeSettingProvider.notifier)
             .update((s) => s.copyWith(themeMode: theme));
-        for (final locale in const ['zh', 'en']) {
+        for (final locale in locales) {
           container
               .read(appSettingProvider.notifier)
               .update((s) => s.copyWith(locale: locale));
