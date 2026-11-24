@@ -67,6 +67,17 @@ class Preferences {
     await preferences?.setStringList('vpsSites', sites);
   }
 
+  /// vps2vpn: each subscription's last update result, as JSON.
+  Future<String?> getVpsProfileHealth() async {
+    final preferences = await _store.value;
+    return preferences?.getString('vpsProfileHealth');
+  }
+
+  Future<void> setVpsProfileHealth(String json) async {
+    final preferences = await _store.value;
+    await preferences?.setString('vpsProfileHealth', json);
+  }
+
   Future<void> saveShareState(SharedState shareState) async {
     final preferences = await _store.value;
     await preferences?.setString('sharedState', json.encode(shareState));

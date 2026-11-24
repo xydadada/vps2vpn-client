@@ -13,13 +13,14 @@ import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:fl_clash/vps2vpn/qr_view.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart' show ThemeMode;
+import 'package:prism_ui/prism_ui.dart' show BannerLevel, ThemeMode;
 
 /// vps2vpn: strict-route is on by default for the Windows TUN (see
 /// withWindowsStrictRoute in lib/common/migration.dart). This switch turns it
@@ -78,28 +79,58 @@ class VpsMePage extends ConsumerStatefulWidget {
 class _VpsMePageState extends ConsumerState<VpsMePage> {
   bool _updating = false;
 
+  // Every tap ends in a sentence: what changed, nothing changed, or why not.
   Future<void> _updateProfiles(List<Profile> profiles) async {
     if (_updating) return;
-    final action = ref.read(profilesActionProvider.notifier);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final action = container.read(profilesActionProvider.notifier);
     setState(() => _updating = true);
+    final results = <(String, VpsProfileHealth)>[];
     try {
-      await globalState.batchRun(
-        profiles.where((p) => p.type == ProfileType.url).toList(),
-        (profile) async {
-          final list = mounted
-              ? ref.read(profilesProvider)
-              : globalState.container.read(profilesProvider);
-          final current = list.getProfile(profile.id);
-          if (current == null || current.type != ProfileType.url) return;
+      for (final profile in profiles) {
+        final current = container.read(profilesProvider).getProfile(profile.id);
+        if (current == null || current.type != ProfileType.url) continue;
+        try {
           await action.updateProfile(current, showLoading: true);
-        },
-        label: (profile) => profile.realLabel,
-        concurrency: 1,
-        tag: null,
-      );
+        } catch (_) {}
+        final health = container.read(vpsProfileHealthProvider)[current.id];
+        if (health != null) results.add((current.realLabel, health));
+      }
     } finally {
       if (mounted) setState(() => _updating = false);
     }
+    if (!mounted || results.isEmpty) return;
+    dialogs.showBanner(
+      [for (final (label, h) in results) vpsUpdateResultText(context, label, h)]
+          .join('\n'),
+      level: results.any((r) => !r.$2.ok)
+          ? BannerLevel.warning
+          : BannerLevel.info,
+    );
+  }
+
+  Future<String?> _replaceLink(Profile profile, String link) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final profiles = container.read(profilesProvider.notifier);
+    try {
+      await container
+          .read(profilesActionProvider.notifier)
+          .updateProfile(profile.copyWith(url: link), showLoading: true);
+    } catch (e) {
+      // The old link stays until a new one works.
+      final latest = container.read(profilesProvider).getProfile(profile.id);
+      if (latest != null && latest.url == link) {
+        profiles.put(latest.copyWith(url: profile.url));
+      }
+      return vpsUpdateErrorText(e);
+    }
+    final health = container.read(vpsProfileHealthProvider)[profile.id];
+    if (mounted && health != null) {
+      dialogs.showBanner(
+        vpsUpdateResultText(context, profile.realLabel, health),
+      );
+    }
+    return null;
   }
 
   @override
@@ -165,6 +196,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               onTap: () => ref.read(currentProfileIdProvider.notifier).value =
                   profile.id,
               onUpdate: _updating ? null : () => _updateProfiles([profile]),
+              onReplace: (link) => _replaceLink(profile, link),
             ),
           ),
         VpsCard(
@@ -705,22 +737,42 @@ class _ChoiceRow extends StatelessWidget {
   }
 }
 
-class _ProfileCard extends ConsumerWidget {
+class _ProfileCard extends ConsumerStatefulWidget {
   const _ProfileCard({
     required this.profile,
     required this.selected,
     required this.onTap,
     required this.onUpdate,
+    required this.onReplace,
   });
 
   final Profile profile;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback? onUpdate;
+  final Future<String?> Function(String link) onReplace;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends ConsumerState<_ProfileCard> {
+  bool _replacing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.profile;
+    final selected = widget.selected;
+    final onTap = widget.onTap;
+    final onUpdate = widget.onUpdate;
     final p = VpsPalette.of(context);
+    final busy = ref.watch(
+      updatingKeysProvider.select((k) => k.contains(profile.updatingKey)),
+    );
+    final health = ref.watch(
+      vpsProfileHealthProvider.select((m) => m[profile.id]),
+    );
+    final failing = busy ? null : vpsFailingText(context, health);
     final sub = profile.subscriptionInfo;
     final used = sub == null ? 0 : sub.upload + sub.download;
     final total = sub?.total ?? 0;
@@ -777,11 +829,25 @@ class _ProfileCard extends ConsumerWidget {
                     Text(
                       [
                         if (selected) tr(context, '使用中', 'In use'),
-                        if (updated != null)
+                        if (busy)
+                          tr(context, '正在更新…', 'Updating…')
+                        else if (updated != null)
                           tr(
                             context,
-                            '${_ago(context, updated)}更新',
+                            '上次更新：${_ago(context, updated)}',
                             'updated ${_ago(context, updated)}',
+                          ),
+                        if (!busy &&
+                            health != null &&
+                            health.ok &&
+                            health.changedAt != null &&
+                            DateTime.now().difference(health.changedAt!) <
+                                vpsNewNodeFor &&
+                            health.added.isNotEmpty)
+                          tr(
+                            context,
+                            '新增 ${health.added.length} 个节点',
+                            '${health.added.length} new nodes',
                           ),
                       ].join(' · '),
                       style: vpsText(
@@ -795,19 +861,47 @@ class _ProfileCard extends ConsumerWidget {
               ),
               if (profile.url.isNotEmpty)
                 VpsPressable(
-                  onTap: onUpdate,
+                  onTap: busy ? null : onUpdate,
                   semanticLabel: context.appLocalizations.update,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: VpsIconView(
                       VpsIcon.refresh,
                       size: 18,
-                      color: p.soft,
+                      color: busy ? p.accent : p.soft,
                     ),
                   ),
                 ),
             ],
           ),
+          if (failing != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              failing,
+              style: vpsText(p, size: 12.5, color: p.warn, height: 1.45),
+            ),
+          ],
+          if (profile.url.isNotEmpty &&
+              health != null &&
+              !health.ok &&
+              !busy) ...[
+            const SizedBox(height: 10),
+            if (_replacing)
+              VpsImportField(
+                replace: widget.onReplace,
+                onAdded: () => setState(() => _replacing = false),
+              )
+            else
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: VpsButton(
+                  label: tr(context, '替换链接', 'Replace link'),
+                  icon: VpsIcon.paste,
+                  filled: health.deadAt(DateTime.now()),
+                  onTap: () => setState(() => _replacing = true),
+                ),
+              ),
+          ],
           if (total > 0 || expire != null) ...[
             const SizedBox(height: 14),
             if (total > 0)

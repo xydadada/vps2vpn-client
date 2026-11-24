@@ -256,10 +256,18 @@ String? vpsLinkProblem(BuildContext context, String text) {
 /// "Paste from clipboard" (which only fills the box). Long links wrap, so
 /// the whole link stays visible.
 class VpsImportField extends ConsumerStatefulWidget {
-  const VpsImportField({super.key, this.onAdded, this.withFile = false});
+  const VpsImportField({
+    super.key,
+    this.onAdded,
+    this.withFile = false,
+    this.replace,
+  });
 
   final VoidCallback? onAdded;
   final bool withFile;
+
+  /// Replaces a subscription's link; answers why it failed, or null.
+  final Future<String?> Function(String link)? replace;
 
   @override
   ConsumerState<VpsImportField> createState() => VpsImportFieldState();
@@ -320,14 +328,20 @@ class VpsImportFieldState extends ConsumerState<VpsImportField> {
       _busy = true;
       _error = null;
     });
-    final result = await vpsImportLink(ref, link);
+    final String? error;
+    if (widget.replace case final replace?) {
+      error = await replace(link);
+    } else {
+      final result = await vpsImportLink(ref, link);
+      error = mounted ? vpsImportNote(context, result) : null;
+    }
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _error = vpsImportNote(context, result);
-      if (result == VpsImportResult.added) _controller.clear();
+      _error = error;
+      if (error == null) _controller.clear();
     });
-    if (result == VpsImportResult.added) widget.onAdded?.call();
+    if (error == null) widget.onAdded?.call();
   }
 
   @override
@@ -364,7 +378,11 @@ class VpsImportFieldState extends ConsumerState<VpsImportField> {
           runSpacing: 10,
           children: [
             VpsButton(
-              label: _busy
+              label: widget.replace != null
+                  ? (_busy
+                        ? tr(context, '替换中…', 'Replacing…')
+                        : tr(context, '替换', 'Replace'))
+                  : _busy
                   ? tr(context, '导入中…', 'Adding…')
                   : tr(context, '导入', 'Import'),
               filled: true,
@@ -375,7 +393,7 @@ class VpsImportFieldState extends ConsumerState<VpsImportField> {
               icon: VpsIcon.paste,
               onTap: _busy ? null : _paste,
             ),
-            if (widget.withFile)
+            if (widget.withFile && widget.replace == null)
               VpsButton(
                 label: tr(context, '本地文件', 'Local file'),
                 icon: VpsIcon.file,

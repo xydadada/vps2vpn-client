@@ -202,9 +202,18 @@ class ProfilesAction extends _$ProfilesAction {
         if (sourceChanged) {
           ref.read(profilesProvider.notifier).put(profile);
         }
-        final updated = await target.update(
-          validate: (path, key) => _core.validateProfile(path, key),
-        );
+        // vps2vpn: the subscription card says what the update brought.
+        final health = ref.read(vpsProfileHealthProvider.notifier);
+        final before = await vpsReadSnapshot(target.id);
+        final Profile updated;
+        try {
+          updated = await target.update(
+            validate: (path, key) => _core.validateProfile(path, key),
+          );
+        } catch (e) {
+          health.failed(target.id, e, vpsUpdateErrorText(e));
+          rethrow;
+        }
         // The download can take minutes; edits and deletes made meanwhile win.
         final latest = ref.read(profilesProvider).getProfile(target.id);
         if (latest == null) {
@@ -218,6 +227,7 @@ class ProfilesAction extends _$ProfilesAction {
         final newProfile = latest.withUpdate(target: target, updated: updated);
         ref.read(profilesProvider.notifier).put(newProfile);
         autoUpdateBackoff.succeed(target.id);
+        await health.succeeded(target.id, before);
         if (target.id == ref.read(currentProfileIdProvider)) {
           ref
               .read(setupActionProvider.notifier)
