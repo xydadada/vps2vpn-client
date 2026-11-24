@@ -6,6 +6,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
+import 'package:fl_clash/vps2vpn/exit_check.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
@@ -101,6 +102,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
     _ip.refresh([routedOutbound]);
     _services.refresh(_all);
     ref.invalidate(vpsMemberProvider);
+    ref.invalidate(vpsExitFactsProvider);
   }
 
   @override
@@ -153,6 +155,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
               ),
             ),
           ),
+        if (isStart) ...[VpsExitReport(exit: info), const SizedBox(height: 12)],
         LayoutBuilder(
           builder: (context, c) {
             final wide = c.maxWidth >= 640;
