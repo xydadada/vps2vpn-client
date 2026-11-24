@@ -264,8 +264,8 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
       dialogs.showBanner(message, level: BannerLevel.error);
     }
-    // vps2vpn: the system proxy still points at the dead Core, so the whole
-    // machine is offline until it is back. Bring it back without a click.
+    // vps2vpn: onCoreLost already put the system proxy back; restartCore
+    // brings the run back too, but only while wantsRunning.
     if (system.isDesktop && setup.wantsRunning && _crashRestarts.take()) {
       Future<void>.delayed(const Duration(seconds: 2), () {
         if (!mounted ||
