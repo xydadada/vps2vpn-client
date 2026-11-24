@@ -12,6 +12,7 @@ import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/site_test.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -326,6 +327,9 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
           ),
           if (name == 'AI') const VpsServerAiCard(),
         ],
+        const SizedBox(height: 22),
+        VpsSectionTitle(tr(context, '网站测试', 'Website test')),
+        const VpsSiteTestCard(),
         const SizedBox(height: 22),
         VpsSectionTitle(tr(context, '网络诊断', 'Diagnosis')),
         const VpsDiagnoseCard(),

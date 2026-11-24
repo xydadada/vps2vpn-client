@@ -56,6 +56,17 @@ class Preferences {
     await preferences?.setInt('upgradeVersion', version);
   }
 
+  /// The websites the user tests on Check, as `name|url`.
+  Future<List<String>?> getVpsSites() async {
+    final preferences = await _store.value;
+    return preferences?.getStringList('vpsSites');
+  }
+
+  Future<void> setVpsSites(List<String> sites) async {
+    final preferences = await _store.value;
+    await preferences?.setStringList('vpsSites', sites);
+  }
+
   Future<void> saveShareState(SharedState shareState) async {
     final preferences = await _store.value;
     await preferences?.setString('sharedState', json.encode(shareState));
