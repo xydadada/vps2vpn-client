@@ -52,6 +52,7 @@ try {
   $adminPort = Get-AppPort
   Check (Wait-Until 60 { Get-ListenerName $adminPort }) "admin: the Core listens on $adminPort"
   $adminCore = (Get-Listener $adminPort).OwningProcess
+  $adminApp = (Get-Process vps2vpn -ErrorAction SilentlyContinue | Select-Object -First 1).Id
   $pipes = @([IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { $_ -match 'FlClashCore_' })
   "admin Core pipes: $($pipes.Count)"
 
@@ -151,6 +152,8 @@ if (Test-Path `$prefs) {
     Check ($app.profiles -gt 0) 'second account: the subscription imported'
   }
   # Who holds which port: the admin's Core must keep its own, the second one gets another.
+  Get-Process vps2vpn, vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue |
+    ForEach-Object { "proc $($_.Name) pid $($_.Id) $($_.UserName) started $($_.StartTime.ToString('HH:mm:ss'))" }
   Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 7890..7899 -or $_.LocalPort -in 17890..17990 } |
     ForEach-Object { $o = Get-Process -Id $_.OwningProcess -IncludeUserName -ErrorAction SilentlyContinue; "listen $($_.LocalAddress):$($_.LocalPort) pid $($_.OwningProcess) $($o.Name) $($o.UserName)" }
   $theirs = @(Get-Process vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Where-Object UserName -match ([regex]::Escape($userName)))
@@ -167,7 +170,12 @@ if (Test-Path `$prefs) {
     }
   }
   Check (@(Get-NetTCPConnection -State Listen -LocalPort $adminPort -OwningProcess $adminCore -ErrorAction SilentlyContinue).Count -gt 0) "admin: its own Core (pid $adminCore) still listens on $adminPort with the second account running"
-  Test-AppAlive 'admin'
+  Check (Get-Process -Id $adminApp -ErrorAction SilentlyContinue) "admin: its own vps2vpn.exe (pid $adminApp) still runs"
+  Copy-AppLogs
+  Get-ChildItem (Join-Path $Out 'app') -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object {
+    Select-String -Path $_.FullName -Pattern 'bind|listen|port|restart|exit|stop|start' -ErrorAction SilentlyContinue | Select-Object -Last 25 |
+      ForEach-Object { 'admin log: ' + ($_.Line -replace '\d{1,3}(\.\d{1,3}){3}', 'x.x.x.x') }
+  }
 
   Get-Process vps2vpn, vps2vpnCore -IncludeUserName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
   Uninstall-App
