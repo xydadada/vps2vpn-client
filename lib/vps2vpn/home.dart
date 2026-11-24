@@ -87,12 +87,26 @@ String friendlyLineName(BuildContext context, String name) => switch (name) {
   _ => name,
 };
 
-/// The first selectable group: what "the server you use" means here.
+const _builtinOutbounds = {
+  'DIRECT',
+  'REJECT',
+  'REJECT-DROP',
+  'PASS',
+  'COMPATIBLE',
+};
+
+/// The first selectable group whose first choice is a proxy, as the Core's
+/// smart line picks it: what "the server you use" means here.
 Group? mainGroup(List<Group> groups) {
-  for (final g in groups) {
-    if (g.type == GroupType.Selector && g.hidden != true) return g;
+  final selectors = [
+    for (final g in groups)
+      if (g.type == GroupType.Selector && g.hidden != true) g,
+  ];
+  for (final g in selectors) {
+    final first = g.all.firstOrNull?.name.trim().toUpperCase();
+    if (first == null || !_builtinOutbounds.contains(first)) return g;
   }
-  return groups.isEmpty ? null : groups.first;
+  return selectors.firstOrNull ?? groups.firstOrNull;
 }
 
 void useWholeSystem(WidgetRef ref, bool whole) =>
