@@ -75,7 +75,7 @@ class VpsShell extends StatelessWidget {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, c) {
-              final wide = c.maxWidth >= 760;
+              final wide = c.maxWidth >= _wideFrom;
               return ValueListenableBuilder<int>(
                 valueListenable: vpsTab,
                 builder: (context, tab, _) {
@@ -142,6 +142,72 @@ class VpsShell extends StatelessWidget {
 /// end here, so no card is cut off under the bar.
 const _barClearance = 90.0;
 
+const _wideFrom = 760.0;
+const _sideWidth = 224.0;
+final _sideBlur = ImageFilter.blur(
+  sigmaX: 40,
+  sigmaY: 40,
+  tileMode: TileMode.clamp,
+);
+
+Color _sideGlass(VpsPalette p) =>
+    p.side.withValues(alpha: p.dark ? 0.62 : 0.70);
+
+/// What simple mode's title bar paints: the strip above the page and, on a
+/// wide window, the sidebar's glass carried up to the top edge.
+class VpsTitleBarBackdrop extends StatelessWidget {
+  const VpsTitleBarBackdrop({super.key, required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final strip = VpsBackdrop.above(lift: height);
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (c.maxWidth < _wideFrom) return strip;
+        final p = VpsPalette.of(context);
+        return Stack(
+          children: [
+            Positioned.fill(child: strip),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: _sideWidth,
+              child: ClipRect(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      width: c.maxWidth,
+                      height: c.maxHeight,
+                      child: ImageFiltered(
+                        imageFilter: _sideBlur,
+                        child: strip,
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: _sideGlass(p),
+                          border: Border(right: BorderSide(color: p.line)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 List<(VpsIcon, String)> _tabs(BuildContext context) => [
   (VpsIcon.home, tr(context, '概览', 'Overview')),
   (VpsIcon.servers, tr(context, '节点', 'Nodes')),
@@ -165,9 +231,9 @@ class _SideNav extends ConsumerWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
         child: Container(
-          width: 224,
+          width: _sideWidth,
           decoration: BoxDecoration(
-            color: p.side.withValues(alpha: p.dark ? 0.62 : 0.70),
+            color: _sideGlass(p),
             border: Border(right: BorderSide(color: p.line)),
           ),
           padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),

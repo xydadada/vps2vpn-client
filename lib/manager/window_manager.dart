@@ -9,6 +9,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/shell.dart' show VpsTitleBarBackdrop;
 import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
@@ -413,7 +414,7 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
       height: kHeaderHeight,
       backdropOpacity: simple ? null : backdropOpacity,
       fill: simple ? VpsPalette.of(context).bg : null,
-      backdrop: simple ? VpsBackdrop.above(lift: kHeaderHeight) : null,
+      backdrop: simple ? VpsTitleBarBackdrop(height: kHeaderHeight) : null,
       onDragStart: desktopWindow.startDragging,
       // rust_api answers title-bar double clicks on macOS by the system setting.
       onDoubleTap: system.isMacOS ? null : caption.toggleMaximized,
