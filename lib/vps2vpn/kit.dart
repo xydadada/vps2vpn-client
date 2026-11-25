@@ -1505,8 +1505,7 @@ class _IconPainter extends CustomPainter {
 class VpsBackdrop extends StatelessWidget {
   const VpsBackdrop({super.key, required Widget this.child}) : lift = 0;
 
-  /// The strip [lift] tall right above a [VpsBackdrop]: the title bar paints
-  /// it, so the glow and grain run on under the window buttons.
+  /// The strip [lift] tall above a [VpsBackdrop], lined up with it.
   const VpsBackdrop.above({super.key, required this.lift}) : child = null;
 
   final Widget? child;
