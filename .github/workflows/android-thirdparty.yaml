@@ -1,0 +1,131 @@
+name: Hiddify and Karing on real phones (server C-5)
+
+# Server logic review C-5: the subscription's sing-box format, as Hiddify and
+# Karing fetch it, imported and connected on Firebase Test Lab phones. Same
+# project, sign-in and test account (secrets.TESTLAB_SUB_URL) as
+# android-testlab.yaml; nothing prints the link. The two apps come from their
+# own GitHub releases. Runs on pushes to this branch only: set DEVICES and PROBE
+# below for each try (PROBE=1 stops after the import, for virtual phones).
+on:
+  push:
+    branches: [testlab-thirdparty]
+    paths:
+      - .github/workflows/android-thirdparty.yaml
+      - .github/testlab-thirdparty/**
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  DEVICES: 'model=MediumPhone.arm,version=34'
+  PROBE: '1'
+  HIDDIFY_TAG: v5.9.15
+  KARING_TAG: v1.2.26.2934
+
+jobs:
+  thirdparty:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Keep the project out of the log
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: '[ -z "$PROJECT" ] || echo "::add-mask::$PROJECT"'
+
+      - name: Checkout the driver
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/testlab-thirdparty
+            .github/testlab
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.0'
+
+      - name: Build the driver
+        working-directory: .github/testlab-thirdparty
+        run: gradle --no-daemon assembleDebug assembleDebugAndroidTest
+
+      - name: Download Hiddify and Karing (their own releases)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$HIDDIFY_TAG" -R hiddify/hiddify-app -p 'Hiddify-Android-arm64.apk' -D apk
+          gh release download "$KARING_TAG" -R KaringX/karing -p '*_android_arm64-v8a.apk' -D apk
+          ls -l apk
+          sha256sum apk/*.apk
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          echo "PKG_HIDDIFY=$("$aapt2" dump packagename apk/Hiddify-Android-arm64.apk)" >> "$GITHUB_ENV"
+          echo "PKG_KARING=$("$aapt2" dump packagename apk/karing_*_android_arm64-v8a.apk)" >> "$GITHUB_ENV"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TESTLAB_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Phones on offer (arm)
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud firebase test android models list --project "$PROJECT" \
+            --filter='supportedAbis:arm64-v8a' --format='table(id,form,brand,name,supportedVersionIds.list())' || true
+
+      - name: Import and connect
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          SUB: ${{ secrets.TESTLAB_SUB_URL }}
+        run: |
+          set -o pipefail
+          [ -n "$SUB" ] || { echo 'secret TESTLAB_SUB_URL is not set' >&2; exit 1; }
+          echo "packages: $PKG_HIDDIFY $PKG_KARING"
+          hex=$(printf '%s' "$SUB" | xxd -p | tr -d '\n')
+          echo "::add-mask::$hex"
+          echo "::add-mask::$(python3 -I -c 'import sys, urllib.parse; print(urllib.parse.urlsplit(sys.argv[1]).hostname or "")' "$SUB")"
+          args=()
+          IFS=';' read -ra devices <<< "$DEVICES"
+          for d in "${devices[@]}"; do args+=(--device "$d"); done
+          gcloud firebase test android run --project "$PROJECT" --type instrumentation \
+            --app .github/testlab-thirdparty/driver/build/outputs/apk/debug/driver-debug.apk \
+            --test .github/testlab-thirdparty/driver/build/outputs/apk/androidTest/debug/driver-debug-androidTest.apk \
+            --additional-apks "apk/Hiddify-Android-arm64.apk,$(ls apk/karing_*.apk | head -1)" \
+            --environment-variables "sub=$hex,pkg_hiddify=$PKG_HIDDIFY,pkg_karing=$PKG_KARING,probe=$PROBE" \
+            --timeout 15m --num-flaky-test-attempts 0 --no-record-video --no-performance-metrics \
+            --results-dir "vps2vpn-thirdparty/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --results-history-name vps2vpn-thirdparty "${args[@]}" 2>&1 | tee testlab.log
+
+      # Raw results stay in the project's bucket; only a scrubbed summary leaves it.
+      - name: What each phone saw
+        if: always()
+        env:
+          SUB: ${{ secrets.TESTLAB_SUB_URL }}
+        run: |
+          bucket=$(grep -oE 'storage/browser/[^/]+/' testlab.log | head -1 | cut -d/ -f3)
+          [ -n "$bucket" ] || { echo 'no results bucket in the log'; exit 0; }
+          mkdir -p raw
+          gcloud storage cp -r "gs://$bucket/vps2vpn-thirdparty/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/*" raw/ || true
+          for dir in raw/*/; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            python3 -I .github/testlab/summary.py "$dir" > "summary-$name.txt"
+            echo "== $name"
+            cat "summary-$name.txt"
+          done
+
+      - name: Upload the summary
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: thirdparty
+          path: |
+            testlab.log
+            summary-*.txt
