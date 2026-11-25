@@ -55,6 +55,9 @@ public class ThirdPartyTest {
     private static final String CONFIRM_IMPORT = "(ok|add|import|install|save|confirm|yes|确定|添加|导入|安装|保存|确认|是)";
     private static final String CONNECT = "(connect|tap to connect|点击连接|连接|start|启动|disconnected|未连接|已断开)";
 
+    private static final Pattern LANGUAGE_BAR = Pattern.compile("(?s)^Language\\s*\\n\\s*Next.*");
+    private static final Pattern TUN_LINE = Pattern.compile("(?m)^\\d+: tun\\d*[:@]");
+
     private Instrumentation instrumentation;
     private UiDevice device;
     private Context context;
@@ -98,6 +101,17 @@ public class ThirdPartyTest {
     }
 
     private void run(String name, String pkg, String importLink) throws Exception {
+        try {
+            runSteps(name, pkg, importLink);
+        } catch (Throwable t) {
+            report("NOTE  FAIL " + name + ": " + t.getMessage());   // NOTE: the summary keeps these lines
+            throw t;
+        } finally {
+            stop(pkg);                                    // never leave its VPN up for the next app
+        }
+    }
+
+    private void runSteps(String name, String pkg, String importLink) throws Exception {
         step(name + ": start");
         shell("appops set " + pkg + " ACTIVATE_VPN allow");
         shell("pm grant " + pkg + " android.permission.POST_NOTIFICATIONS");
@@ -112,6 +126,8 @@ public class ThirdPartyTest {
         sleep(6_000);
         note(name + " first screen");
         onboard(name, 8);
+        language(name);
+        onboard(name, 4);
 
         sleep(8_000);
         // Hiddify's core may still be starting ("Couldn't connect, Tap to try again"): give it a nudge first.
@@ -159,7 +175,7 @@ public class ThirdPartyTest {
         check(tapped, name + ": no connect button");
         tap("(ok|确定|allow|允许)", 3_000);
         check(waitVpn(true, 60_000), name + ": the VPN did not come up");
-        step(name + ": the VPN is up");
+        step(name + ": the VPN is up (tun interface: " + tunUp() + ")");
         sleep(5_000);
         note(name + " connected");
 
@@ -180,8 +196,30 @@ public class ThirdPartyTest {
         step(name + ": done");
     }
 
+    /** Karing asks for a language first ("Language" bar with a "Next" action at its right end). */
+    private boolean language(String name) {
+        UiObject2 english = device.findObject(By.desc(Pattern.compile("^English$")));
+        UiObject2 bar = device.findObject(By.desc(LANGUAGE_BAR));
+        if (english == null || bar == null) {
+            return false;
+        }
+        english.click();
+        sleep(1_500);
+        bar = device.findObject(By.desc(LANGUAGE_BAR));
+        if (bar != null) {
+            android.graphics.Rect r = bar.getVisibleBounds();
+            device.click(r.right - Math.max(40, r.height() / 2), r.centerY());   // the "Next" action
+        }
+        sleep(2_500);
+        note(name + " after choosing English");
+        return true;
+    }
+
     private void onboard(String name, int rounds) {
         for (int i = 0; i < rounds; i++) {
+            if (language(name)) {
+                continue;
+            }
             if (!tap(ONBOARD, 3_000)) {
                 return;
             }
@@ -248,8 +286,7 @@ public class ThirdPartyTest {
 
     private boolean tap(String regex, long timeoutMs) {
         // Flutter puts a button's words in content-desc, sometimes with a second line under them.
-        // Karing's language page reads "Language\nNext", so one line above the words is allowed too.
-        Pattern pattern = Pattern.compile("^(?:[^\\n]*\\n)?\\s*(?:" + regex + ")\\s*(?:\\n.*)?$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        Pattern pattern = Pattern.compile("^\\s*(?:" + regex + ")\\s*(?:\\n.*)?$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         long end = System.currentTimeMillis() + timeoutMs;
         do {
             for (BySelector selector : new BySelector[]{By.text(pattern), By.desc(pattern)}) {
@@ -272,7 +309,7 @@ public class ThirdPartyTest {
         ConnectivityManager cm = context.getSystemService(ConnectivityManager.class);
         long end = System.currentTimeMillis() + timeoutMs;
         do {
-            boolean vpn = false;
+            boolean vpn = tunUp();
             for (Network network : cm.getAllNetworks()) {
                 NetworkCapabilities caps = cm.getNetworkCapabilities(network);
                 if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
@@ -324,12 +361,22 @@ public class ThirdPartyTest {
         }
     }
 
-    private void shell(String command) throws Exception {
+    private String shell(String command) throws Exception {
         ParcelFileDescriptor out = instrumentation.getUiAutomation().executeShellCommand(command);
         try (InputStream in = new FileInputStream(out.getFileDescriptor())) {
-            readAll(in);
+            return new String(readAll(in), StandardCharsets.UTF_8);
+        } finally {
+            out.close();
         }
-        out.close();
+    }
+
+    /** A tun interface is up: the app's VPN, even when it does not route this driver. */
+    private boolean tunUp() {
+        try {
+            return TUN_LINE.matcher(shell("ip -o link show")).find();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // InputStream.readAllBytes needs API 33.
