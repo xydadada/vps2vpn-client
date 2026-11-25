@@ -108,7 +108,13 @@ function Test-Through($port, $what) {
 }
 function Test-NoProxy($what) {
   $before = Get-UpstreamCount
-  $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $script:probeUrl
+  # Right after the adapter is up its routes and DNS may not carry traffic yet.
+  $clock = [Diagnostics.Stopwatch]::StartNew()
+  do {
+    $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $script:probeUrl
+    if ($code -ne '204') { Start-Sleep 1 }
+  } while ($code -ne '204' -and $clock.Elapsed.TotalSeconds -lt 15)
+  if ($clock.Elapsed.TotalSeconds -ge 1) { Note "$what`: the first request without a proxy answered after $([int]$clock.Elapsed.TotalSeconds)s" | Out-Host }
   $seen = Wait-Until 5 { (Get-UpstreamCount) -gt $before }
   Check ($code -eq '204') "$what`: curl with no proxy answers 204 (got $code)" | Out-Host
   $seen

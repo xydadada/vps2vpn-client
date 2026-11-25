@@ -23,6 +23,7 @@ import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:fl_clash/vps2vpn/takeover_notice.dart';
+import 'package:fl_clash/vps2vpn/tun_ready.dart';
 import 'package:fl_clash/vps2vpn/tray_menu.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -419,10 +420,11 @@ class _HeroState extends ConsumerState<_Hero> {
           );
     final lineDown = on && delay != null && delay < 0;
     final onSince = _onSince;
+    final tunReady = ref.watch(vpsTunReadyProvider).value;
     final connecting =
         on &&
         block == null &&
-        (delay == null || delay == 0) &&
+        (delay == null || delay == 0 || tunReady == null) &&
         onSince != null &&
         DateTime.now().difference(onSince) < _connectWindow;
     final failure = isStart || !hasProfile ? null : _failure;

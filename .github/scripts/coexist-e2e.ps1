@@ -244,7 +244,12 @@ rules:
   $adapter = Wait-Until 60 { Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -match 'Wintun|Meta|vps2vpn' } }
   Check $adapter 'tun: the virtual adapter is up'
   $before = Get-UpstreamCount
-  $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $probeUrl
+  $clock = [Diagnostics.Stopwatch]::StartNew()
+  do {
+    $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 20 --noproxy '*' $probeUrl
+    if ($code -ne '204') { Start-Sleep 1 }
+  } while ($code -ne '204' -and $clock.Elapsed.TotalSeconds -lt 15)
+  if ($clock.Elapsed.TotalSeconds -ge 1) { "INFO  tun: the first request through the adapter answered after $([int]$clock.Elapsed.TotalSeconds)s" }
   $seen = Wait-Until 5 { (Get-UpstreamCount) -gt $before }
   Check ($code -eq '204') "tun: curl with no proxy answers 204 (got $code)"
   Check $seen 'tun: the request went out through the CI upstream proxy'

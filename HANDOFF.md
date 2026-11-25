@@ -126,6 +126,7 @@
 
 ## 6a. Windows 严苛测试（`harsh.yaml`）
 
+- TUN 刚建好时的请求（2026-11-25 结论）：1.0.29 的 coexist 和 harsh chaos 各有一次"TUN 下 curl 拿到 000"，都发生在虚拟网卡刚 Up 之后（chaos 网卡 Up 后 0.4 秒内立刻失败，coexist 17 秒后失败、没到 20 秒超时，像 DNS 没解析出来），稍后再测都通，所以是网卡起来了但路由和 DNS 还没真正生效的那一两秒，不是外部网络抖动，真实用户点连接后马上开网页也会失败一次。1.0.30 起 TUN 模式下首页要等一次不走代理的请求真正通了才报"已连接"（`lib/vps2vpn/tun_ready.dart`，最多等 15 秒）；`Test-NoProxy`（harsh）和 coexist 的 TUN 检查改成 15 秒内重试，通了但超过 1 秒的记一条 NOTE/INFO 写明等了几秒，一直不通照样 FAIL。
 - 只能手动触发：`gh workflow run harsh.yaml --ref vps2vpn -f tag=v<版本> -f scenarios='["dirty"]'`（`scenarios` 留默认就是全部）。`proxy-restore` 在 windows-2022 上总会顺带跑。脚本在 `.github/scripts/harsh/`，公共函数在 `lib.ps1`（`Check` 记 PASS/FAIL，`Note` 只记录不算失败）。
 - 场景：
   - `proxy-restore`：断开、关机或注销时，把系统代理还原成连接前的样子（公司代理、别的软件的活代理或 PAC 原样还回；死端口不还；连接中被别人改过就不动）。
