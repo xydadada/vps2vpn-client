@@ -18,7 +18,7 @@ permissions:
   id-token: write
 
 env:
-  DEVICES: 'model=CPH2449,version=34'
+  DEVICES: 'model=a16x,version=35'
   PROBE: '0'
   HIDDIFY_TAG: v5.9.15
   KARING_TAG: v1.2.26.2934
@@ -26,7 +26,7 @@ env:
 jobs:
   thirdparty:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 150
     steps:
       - name: Keep the project out of the log
         env:
