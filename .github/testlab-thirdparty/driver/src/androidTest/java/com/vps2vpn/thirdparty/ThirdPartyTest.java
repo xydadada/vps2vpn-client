@@ -171,8 +171,21 @@ public class ThirdPartyTest {
         UiObject2 onOff = device.findObject(By.pkg(pkg).checkable(true).desc(Pattern.compile("(?i)disconnected|未连接|已断开")));
         boolean tapped = false;
         if (onOff != null) {
-            onOff.click();
+            // a Flutter switch: tap its middle as a finger would, then the round "Disconnected" button below
+            android.graphics.Rect r = onOff.getVisibleBounds();
+            device.click(r.centerX(), r.centerY());
             tapped = true;
+            tap("(ok|确定|allow|允许)", 3_000);
+            if (!waitVpn(true, 20_000)) {
+                note(name + " after the on/off switch");
+                UiObject2 round = device.findObject(By.pkg(pkg).checkable(false).desc(Pattern.compile("(?i)^disconnected$")));
+                if (round != null) {
+                    android.graphics.Rect b = round.getVisibleBounds();
+                    device.click(b.centerX(), b.centerY());
+                    tap("(ok|确定|allow|允许)", 3_000);
+                    if (!waitVpn(true, 20_000)) note(name + " after the round button");
+                }
+            }
         } else {
             tapped = tap(CONNECT, 15_000);
         }
