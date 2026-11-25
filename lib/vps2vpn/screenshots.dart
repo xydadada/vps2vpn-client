@@ -76,6 +76,7 @@ class _ShotRun {
       await _until(() => container.read(isStartProvider), 60);
       await _settle(15000);
       await _round('connected', tabs: _tabs.keys.toList());
+      await _scaled();
       await _alert('connected');
       for (final (color, _, en) in vpsThemeColors.skip(1)) {
         container
@@ -130,6 +131,29 @@ class _ShotRun {
     }
   }
 
+  /// Windows display scaling: the same scene rasterised at 125% and 150%,
+  /// where a tile drawn in logical pixels could beat against the pixel grid.
+  Future<void> _scaled() async {
+    await desktopWindow.setSize(_sizes['default']!);
+    await _settle(800);
+    vpsTab.value = vpsTabHome;
+    container
+        .read(appSettingProvider.notifier)
+        .update((s) => s.copyWith(locale: 'zh'));
+    for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+      container
+          .read(themeSettingProvider.notifier)
+          .update((s) => s.copyWith(themeMode: theme));
+      await _settle(1200);
+      for (final (ratio, tag) in const [(1.25, '125'), (1.5, '150')]) {
+        await _shoot(
+          'scaled$tag-home-default-${theme.name}-zh',
+          pixelRatio: ratio,
+        );
+      }
+    }
+  }
+
   Future<void> _alert(String state) async {
     await desktopWindow.setSize(_sizes['default']!);
     vpsTab.value = vpsTabHome;
@@ -155,14 +179,16 @@ class _ShotRun {
     }
   }
 
-  Future<void> _shoot(String name) async {
+  Future<void> _shoot(String name, {double? pixelRatio}) async {
     final object = _boundary.currentContext?.findRenderObject();
     if (object is! RenderRepaintBoundary) {
       _log.writeln('$name: nothing to photograph');
       return;
     }
     final view = WidgetsBinding.instance.platformDispatcher.views.first;
-    final image = await object.toImage(pixelRatio: view.devicePixelRatio);
+    final image = await object.toImage(
+      pixelRatio: (pixelRatio ?? 1) * view.devicePixelRatio,
+    );
     final png = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     if (png == null) return;
