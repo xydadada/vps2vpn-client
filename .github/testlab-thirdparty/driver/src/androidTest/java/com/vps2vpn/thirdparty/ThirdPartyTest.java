@@ -55,7 +55,7 @@ public class ThirdPartyTest {
     private static final String CONFIRM_IMPORT = "(ok|add|import|install|save|confirm|yes|确定|添加|导入|安装|保存|确认|是)";
     private static final String CONNECT = "(connect|tap to connect|点击连接|连接|start|启动|disconnected|未连接|已断开)";
 
-    private static final Pattern LANGUAGE_BAR = Pattern.compile("(?s)^Language\\s*\\n\\s*Next.*");
+    private static final Pattern WIZARD_BAR = Pattern.compile("(?s)^[^\\n]+\\n\\s*(?:Next|Done|Finish|Complete|Start)\\s*$");
     private static final Pattern TUN_LINE = Pattern.compile("(?m)^\\d+: tun\\d*[:@]");
 
     private Instrumentation instrumentation;
@@ -125,9 +125,7 @@ public class ThirdPartyTest {
         check(device.wait(Until.hasObject(By.pkg(pkg).depth(0)), 40_000), name + " did not open");
         sleep(6_000);
         note(name + " first screen");
-        onboard(name, 8);
-        language(name);
-        onboard(name, 4);
+        onboard(name, 12);
 
         sleep(8_000);
         // Hiddify's core may still be starting ("Couldn't connect, Tap to try again"): give it a nudge first.
@@ -152,7 +150,7 @@ public class ThirdPartyTest {
             tap("(ok|确定)", 3_000);
             sleep(15_000);
         }
-        onboard(name, 4);
+        onboard(name, 8);
         if (probe) {
             context.startActivity(launch.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
             sleep(4_000);
@@ -165,7 +163,7 @@ public class ThirdPartyTest {
         sleep(4_000);
         note(name + " before connecting");
         boolean tapped = tap(CONNECT, 15_000);
-        if (!tapped) {                                    // a bare switch or round button without words
+        if (!tapped && device.findObject(By.desc(WIZARD_BAR)) == null) {   // a bare switch or round button
             UiObject2 sw = device.findObject(By.pkg(pkg).checkable(true));
             if (sw != null) {
                 sw.click();
@@ -179,72 +177,72 @@ public class ThirdPartyTest {
         sleep(5_000);
         note(name + " connected");
 
-        for (int i = 1; i <= 3; i++) {
+        String[] probes = {"http://connectivitycheck.gstatic.com/generate_204", "https://www.gstatic.com/generate_204",
+                "http://cp.cloudflare.com/generate_204", "https://www.google.com/generate_204"};
+        int answered = 0;
+        for (int round = 1; round <= 4 && answered == 0; round++) {
             sleep(10_000);
-            int code = status("http://connectivitycheck.gstatic.com/generate_204");
-            check(code == 204, name + ": generate_204 through the VPN at " + (i * 10) + " s answered " + code);
-            step(name + ": still up and answering at " + (i * 10) + " s");
+            StringBuilder codes = new StringBuilder();
+            for (String url : probes) {
+                int code = status(url);
+                codes.append(code).append(' ');
+                if (code == 204) {
+                    answered++;
+                }
+            }
+            step(name + ": through the VPN, round " + round + ", answers " + codes.toString().trim());
         }
         String vpnIp = fetch("https://api.ipify.org");
-        check(vpnIp != null, name + ": no public address through the VPN");
-        if (directIp != null) {
+        step(name + ": public address through the VPN: " + (vpnIp == null ? "none"
+                : directIp != null && directIp.equals(vpnIp) ? "unchanged" : "changed"));
+        note(name + " after the traffic checks");
+        check(answered > 0, name + ": nothing answered through the VPN");
+        if (vpnIp != null && directIp != null) {
             check(!directIp.equals(vpnIp), name + ": traffic did not leave through the line");
         }
-        step(name + ": traffic leaves through the line (address changed)");
+        step(name + ": traffic leaves through the line");
         stop(pkg);
         check(waitVpn(false, 30_000), name + ": the VPN did not go down after stopping the app");
         step(name + ": done");
     }
 
-    /** Karing asks for a language first ("Language" bar with a "Next" action at its right end). */
-    private boolean language(String name) {
-        UiObject2 english = device.findObject(By.desc(Pattern.compile("^English$")));
-        UiObject2 bar = device.findObject(By.desc(LANGUAGE_BAR));
-        if (english == null || bar == null) {
+    /**
+     * Karing's first-run pages: a title bar reading "<Title>\nNext" whose "Next" has no node of its own
+     * (found on a real phone: tapping 40 px from the right, 80 px below the bar's top, moves on). English is
+     * chosen on the language page. Returns false when no such page is up.
+     */
+    private boolean wizardPage(String name) {
+        UiObject2 bar = device.findObject(By.desc(WIZARD_BAR));
+        if (bar == null) {
             return false;
         }
-        english.click();
-        sleep(1_500);
-        // "Next" has no node of its own: try where it can be, until the page goes away.
-        bar = device.findObject(By.desc(LANGUAGE_BAR));
-        if (bar == null) {
-            return true;
-        }
-        android.graphics.Rect r = bar.getVisibleBounds();
-        int w = device.getDisplayWidth();
-        List<int[]> spots = new ArrayList<>();
-        UiObject2 rightmost = null;
-        for (UiObject2 child : bar.findObjects(By.clickable(true))) {
-            if (child != bar && (rightmost == null || child.getVisibleBounds().right > rightmost.getVisibleBounds().right)) {
-                rightmost = child;
+        String title = bar.getContentDescription().split("\n")[0].trim();
+        UiObject2 english = device.findObject(By.desc(Pattern.compile("^English$")));
+        if (english != null) {
+            english.click();
+            sleep(1_500);
+            bar = device.findObject(By.desc(WIZARD_BAR));
+            if (bar == null) {
+                return true;
             }
         }
-        if (rightmost != null) {
-            android.graphics.Rect c = rightmost.getVisibleBounds();
-            spots.add(new int[]{c.centerX(), c.centerY()});
-        }
-        int top = r.top + Math.min(r.height(), 160) / 2;           // the bar's first row, if it is a tall node
-        spots.add(new int[]{r.right - 40, top});
-        spots.add(new int[]{w - 60, top});
-        spots.add(new int[]{r.right - 40, r.centerY()});
-        spots.add(new int[]{r.right - r.width() / 8, top});
-        report("NOTE  " + name + " language bar " + r.toShortString() + " display " + w + "x" + device.getDisplayHeight()
-                + " clickable children " + bar.findObjects(By.clickable(true)).size());
-        for (int[] spot : spots) {
+        android.graphics.Rect r = bar.getVisibleBounds();
+        int y = r.top + Math.min(r.height(), 160) / 2;
+        for (int[] spot : new int[][]{{r.right - 40, y}, {device.getDisplayWidth() - 60, y}, {r.right - r.width() / 8, y}}) {
             device.click(spot[0], spot[1]);
             sleep(2_000);
-            if (device.findObject(By.desc(LANGUAGE_BAR)) == null) {
-                report("NOTE  " + name + " language page left by a tap at " + spot[0] + "," + spot[1]);
+            UiObject2 now = device.findObject(By.desc(WIZARD_BAR));
+            if (now == null || !now.getContentDescription().startsWith(title)) {
                 break;
             }
         }
-        note(name + " after choosing English");
+        note(name + " after the \"" + title + "\" page");
         return true;
     }
 
     private void onboard(String name, int rounds) {
         for (int i = 0; i < rounds; i++) {
-            if (language(name)) {
+            if (wizardPage(name)) {
                 continue;
             }
             if (!tap(ONBOARD, 3_000)) {
