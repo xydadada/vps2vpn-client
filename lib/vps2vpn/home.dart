@@ -541,7 +541,8 @@ class _HeroState extends ConsumerState<_Hero> {
             ),
             < 0 => VpsChip(label: tr(context, '延迟 —', '— ms'), color: p.muted),
             final d => VpsChip(
-              label: tr(context, '延迟 $d ms', '$d ms'),
+              label: tr(context, '延迟 $d', '$d'),
+              unit: 'ms',
               color: d < 200 ? p.good : (d < 500 ? p.warn : p.soft),
             ),
           };
@@ -641,26 +642,29 @@ class _HeroState extends ConsumerState<_Hero> {
     return LayoutBuilder(
       builder: (context, c) {
         final wide = c.maxWidth >= 640;
-        final button = _PowerRing(
-          on: on,
-          busy: connecting,
-          tone: tone ?? p.good,
-          add: !hasProfile,
-          size: wide ? 148 : 132,
-          label: !hasProfile
-              ? tr(context, '导入', 'Import')
-              : connecting && !tunWaiting
-              ? tr(context, '连接中…', 'Connecting…')
-              : isStart
-              ? tr(context, '断开', 'Disconnect')
-              : failure != null
-              ? tr(context, '重试', 'Retry')
-              : tr(context, '连接', 'Connect'),
-          onTap: !hasProfile
-              ? () => _importField.currentState?.submitOrFill()
-              : connecting && !tunWaiting
-              ? null
-              : _toggle,
+        // Breathing and spinning repaint the ring alone.
+        final button = RepaintBoundary(
+          child: _PowerRing(
+            on: on,
+            busy: connecting,
+            tone: tone ?? p.good,
+            add: !hasProfile,
+            size: wide ? 148 : 132,
+            label: !hasProfile
+                ? tr(context, '导入', 'Import')
+                : connecting && !tunWaiting
+                ? tr(context, '连接中…', 'Connecting…')
+                : isStart
+                ? tr(context, '断开', 'Disconnect')
+                : failure != null
+                ? tr(context, '重试', 'Retry')
+                : tr(context, '连接', 'Connect'),
+            onTap: !hasProfile
+                ? () => _importField.currentState?.submitOrFill()
+                : connecting && !tunWaiting
+                ? null
+                : _toggle,
+          ),
         );
         final head = Column(
           crossAxisAlignment: wide
@@ -875,6 +879,19 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
     vsync: this,
     duration: const Duration(milliseconds: 1100),
   );
+  late final AnimationController _shift = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 600),
+  )..addListener(() => setState(() {}));
+  late ColorTween _arc = ColorTween(begin: _arcTarget, end: _arcTarget);
+
+  Color get _arcTarget =>
+      widget.on ? widget.tone : widget.tone.withValues(alpha: 0);
+
+  /// The arc's colour, transparent while not connected, eased between states.
+  Color get _arcNow =>
+      _arc.transform(VpsMotion.settle.transform(_shift.value))!;
+
   late final Animation<double> _glow = _breath.drive(
     Tween<double>(
       begin: 0.72,
@@ -895,6 +912,10 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
     super.didUpdateWidget(old);
     if (!old.on && widget.on && !_still) _ripple.forward(from: 0);
     if (old.busy != widget.busy || old.on != widget.on) _sync();
+    if (_arc.end != _arcTarget) {
+      _arc = ColorTween(begin: _arcNow, end: _arcTarget);
+      _still ? _shift.value = 1 : _shift.forward(from: 0);
+    }
   }
 
   // Busy, the ring turns fast while the line is tried; connected, the glow
@@ -923,6 +944,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
     _spin.dispose();
     _breath.dispose();
     _ripple.dispose();
+    _shift.dispose();
     super.dispose();
   }
 
@@ -930,6 +952,8 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final s = widget.size;
+    final arc = _arcNow;
+    final tone = arc.withValues(alpha: 1);
     return VpsPressable(
       onTap: widget.onTap,
       child: SizedBox(
@@ -952,7 +976,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: (widget.on ? widget.tone : p.seed).withValues(
+                      color: (widget.on ? tone : p.seed).withValues(
                         alpha: widget.on ? 0.32 : 0.22,
                       ),
                       blurRadius: widget.on ? 56 : 36,
@@ -976,7 +1000,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: widget.tone.withValues(alpha: 0.4 * (1 - t)),
+                        color: tone.withValues(alpha: 0.4 * (1 - t)),
                         width: 2,
                       ),
                     ),
@@ -991,11 +1015,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                 angle: _spin.value * 2 * math.pi,
                 child: CustomPaint(
                   size: Size(s, s),
-                  painter: _RingPainter(
-                    on: widget.on,
-                    track: p.line,
-                    tone: widget.tone,
-                  ),
+                  painter: _RingPainter(track: p.line, tone: arc),
                 ),
               ),
             ),
@@ -1012,7 +1032,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                 color: widget.on ? p.cardHi : null,
                 border: Border.all(
                   color: widget.on
-                      ? widget.tone.withValues(alpha: 0.45)
+                      ? tone.withValues(alpha: 0.45)
                       : const Color(0x00000000),
                   width: 1.5,
                 ),
@@ -1029,9 +1049,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                   else
                     CustomPaint(
                       size: Size.square(s * 0.2),
-                      painter: _PowerGlyph(
-                        widget.on ? widget.tone : p.accentInk,
-                      ),
+                      painter: _PowerGlyph(widget.on ? tone : p.accentInk),
                     ),
                   SizedBox(height: s * 0.03),
                   Text(
@@ -1054,9 +1072,8 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
 }
 
 class _RingPainter extends CustomPainter {
-  _RingPainter({required this.on, required this.track, required this.tone});
+  _RingPainter({required this.track, required this.tone});
 
-  final bool on;
   final Color track;
   final Color tone;
 
@@ -1073,7 +1090,7 @@ class _RingPainter extends CustomPainter {
         ..strokeWidth = 2
         ..color = track,
     );
-    if (!on) return;
+    if (tone.a == 0) return;
     // The gradient spans only the arc, and the arc starts a little past 0
     // so its round cap never samples the violet end of the sweep.
     const start = 0.12;
@@ -1101,7 +1118,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.on != on || old.track != track || old.tone != tone;
+      old.track != track || old.tone != tone;
 }
 
 class _PowerGlyph extends CustomPainter {

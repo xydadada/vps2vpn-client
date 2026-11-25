@@ -753,16 +753,29 @@ class VpsFlag extends StatelessWidget {
         style: vpsText(p, size: size * 0.55, weight: FontWeight.w600),
       );
     }
+    final span = _flagSpan[code.toUpperCase()] ?? (38, 1238);
     return Semantics(
       label: code.toUpperCase(),
       child: ExcludeSemantics(
-        child: Text(
-          flag,
-          textScaler: TextScaler.noScaling,
-          style: TextStyle(
-            fontFamily: FontFamily.twEmoji.value,
-            fontSize: size,
-            height: 1,
+        child: CustomPaint(
+          foregroundPainter: span.$1 < 0
+              ? null
+              : _FlagEdge(
+                  span: span,
+                  size: size,
+                  pixel: 1 / MediaQuery.devicePixelRatioOf(context),
+                  color: p.dark
+                      ? const Color(0x24FFFFFF)
+                      : const Color(0x1A000000),
+                ),
+          child: Text(
+            flag,
+            textScaler: TextScaler.noScaling,
+            style: TextStyle(
+              fontFamily: FontFamily.twEmoji.value,
+              fontSize: size,
+              height: 1,
+            ),
           ),
         ),
       ),
@@ -1097,12 +1110,16 @@ class VpsChip extends StatelessWidget {
   const VpsChip({
     super.key,
     required this.label,
+    this.unit,
     this.color,
     this.tinted = false,
     this.beat,
   });
 
   final String label;
+
+  /// Set a size smaller and quieter after [label].
+  final String? unit;
   final Color? color;
 
   /// The dot hops each time this changes: a sign of life.
@@ -1151,19 +1168,84 @@ class VpsChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 6,
-            height: 6,
+            width: 5,
+            height: 5,
             decoration: BoxDecoration(color: c, shape: BoxShape.circle),
           ),
           const SizedBox(width: 7),
-          Text(
-            label,
-            style: vpsText(p, size: 12, weight: FontWeight.w500, color: p.text),
+          Text.rich(
+            TextSpan(
+              text: label,
+              children: [
+                if (unit case final unit?)
+                  TextSpan(
+                    text: ' $unit',
+                    style: vpsText(p, size: 10.5, color: p.soft),
+                  ),
+              ],
+            ),
+            style: vpsText(
+              p,
+              size: 12,
+              weight: FontWeight.w500,
+              color: p.text,
+              height: 1.25,
+            ).copyWith(leadingDistribution: TextLeadingDistribution.even),
           ),
         ],
       ),
     );
   }
+}
+
+/// Twemoji flags span x 38–1238, y −83–783 of a 1024 em (ascent 950, descent
+/// 250) with corners of 4/36 of their width; these few are narrower, and
+/// Nepal's pennant (−1) gets no edge.
+const _flagSpan = {
+  'BE': (138, 1138),
+  'CH': (204, 1071),
+  'VA': (204, 1071),
+  'NP': (-1, -1),
+};
+
+class _FlagEdge extends CustomPainter {
+  _FlagEdge({
+    required this.span,
+    required this.size,
+    required this.pixel,
+    required this.color,
+  });
+
+  final (int, int) span;
+  final double size;
+  final double pixel;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size box) {
+    final em = size / 1024;
+    final baseline = size * 950 / 1200;
+    final rect = Rect.fromLTRB(
+      span.$1 * em,
+      baseline - 783 * em,
+      span.$2 * em,
+      baseline + 83 * em,
+    ).deflate(pixel / 2);
+    canvas.drawRSuperellipse(
+      RSuperellipse.fromRectAndRadius(rect, Radius.circular(1200 * em / 9)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = pixel
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FlagEdge old) =>
+      old.span != span ||
+      old.size != size ||
+      old.pixel != pixel ||
+      old.color != color;
 }
 
 /// The vps2vpn mark: a rounded tile with a "V" path rising to a point,

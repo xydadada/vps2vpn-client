@@ -441,6 +441,53 @@ class _SideStatus extends ConsumerWidget {
   }
 }
 
+class _TabFill extends StatefulWidget {
+  const _TabFill({
+    required this.selected,
+    required this.radius,
+    this.padding,
+    required this.child,
+  });
+
+  final bool selected;
+  final double radius;
+  final EdgeInsetsGeometry? padding;
+  final Widget child;
+
+  @override
+  State<_TabFill> createState() => _TabFillState();
+}
+
+class _TabFillState extends State<_TabFill> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final fill = widget.selected
+        ? p.selected
+        : _hover
+        ? p.selected.withValues(alpha: p.selected.a * 0.55)
+        : p.selected.withValues(alpha: 0);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedContainer(
+        duration: VpsMotion.fast,
+        curve: VpsMotion.settle,
+        padding: widget.padding,
+        decoration: ShapeDecoration(
+          color: fill,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(widget.radius),
+          ),
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.icon,
@@ -460,15 +507,10 @@ class _NavItem extends StatelessWidget {
     return VpsPressable(
       onTap: onTap,
       selected: selected,
-      child: AnimatedContainer(
-        duration: VpsMotion.medium,
+      child: _TabFill(
+        selected: selected,
+        radius: VpsRadius.small,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: ShapeDecoration(
-          color: selected ? p.selected : const Color(0x00000000),
-          shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(VpsRadius.small),
-          ),
-        ),
         child: Row(
           children: [
             VpsIconView(icon, size: 18, color: selected ? p.accent : p.muted),
@@ -544,14 +586,9 @@ class _BottomNav extends StatelessWidget {
             child: VpsPressable(
               onTap: () => vpsTab.value = i,
               selected: i == tab,
-              child: AnimatedContainer(
-                duration: VpsMotion.medium,
-                decoration: ShapeDecoration(
-                  color: i == tab ? p.selected : const Color(0x00000000),
-                  shape: RoundedSuperellipseBorder(
-                    borderRadius: BorderRadius.circular(VpsRadius.large),
-                  ),
-                ),
+              child: _TabFill(
+                selected: i == tab,
+                radius: VpsRadius.large,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
