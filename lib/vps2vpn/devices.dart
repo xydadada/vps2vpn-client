@@ -12,6 +12,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/ui/ui.dart' show QrCodeView;
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,7 @@ enum VpsDeviceOutcome {
   rateLimited,
   rejected,
   unreachable,
+  maybeDone,
 }
 
 /// A path under `<sub>/api/`, with a JSON body for a POST.
@@ -274,21 +276,95 @@ typedef VpsKickResult = ({
   bool switched,
 });
 
+/// 128 random bits, base64url without padding: 22 characters.
+String vpsNewRequestId([Random? random]) {
+  final r = random ?? Random.secure();
+  return base64Url
+      .encode([for (var i = 0; i < 16; i++) r.nextInt(256)])
+      .replaceAll('=', '');
+}
+
+const vpsKickReplayWindow = Duration(minutes: 10);
+
+typedef VpsKickPending = ({
+  int profileId,
+  String oldUrl,
+  String requestId,
+  DateTime at,
+});
+
+Future<VpsKickPending?> vpsLoadKickPending() async {
+  try {
+    final j = jsonDecode(await vpsDeviceLoad('Kick') ?? '');
+    if (j is! Map) return null;
+    final (id, url, request, at) = (
+      j['profile'],
+      j['url'],
+      j['request'],
+      j['at'],
+    );
+    if (id is! int || url is! String || request is! String || at is! int) {
+      return null;
+    }
+    return (
+      profileId: id,
+      oldUrl: url,
+      requestId: request,
+      at: DateTime.fromMillisecondsSinceEpoch(at),
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> vpsSaveKickPending(VpsKickPending? p) => vpsDeviceSave(
+  'Kick',
+  p == null
+      ? ''
+      : jsonEncode({
+          'profile': p.profileId,
+          'url': p.oldUrl,
+          'request': p.requestId,
+          'at': p.at.millisecondsSinceEpoch,
+        }),
+);
+
 /// The old link dies the moment the panel answers, so the new one is taken
 /// on before it is fetched: a fetch that fails leaves this device on the new
-/// link with a retry, never on the dead one.
+/// link with a retry, never on the dead one. No answer is sent again with the
+/// same [requestId], which the panel replays; a 404 to a resend means the
+/// replay is gone.
 Future<VpsKickResult> vpsKickOthers({
   required VpsDeviceCall call,
   required Uri base,
   required String ownId,
+  required String requestId,
   required void Function(String link) adopt,
   required Future<void> Function() refetch,
+  bool resumed = false,
+  List<Duration> backoff = const [
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+  ],
+  Future<void> Function(Duration) wait = Future<void>.delayed,
 }) async {
-  final (outcome, json) = await _ask(
-    call,
-    'devices/kick-others',
-    body: {'device_id': ownId},
-  );
+  var resent = resumed;
+  VpsDeviceOutcome outcome;
+  Map<String, Object?> json;
+  for (var i = 0; ; i++) {
+    (outcome, json) = await _ask(
+      call,
+      'devices/kick-others',
+      body: {'device_id': ownId, 'request_id': requestId},
+    );
+    if (outcome == VpsDeviceOutcome.notFound && resent) {
+      outcome = VpsDeviceOutcome.maybeDone;
+    }
+    if (outcome != VpsDeviceOutcome.unreachable || i >= backoff.length) break;
+    resent = true;
+    await wait(backoff[i]);
+  }
   if (outcome != VpsDeviceOutcome.ok) {
     return (outcome: outcome, link: null, switched: false);
   }
@@ -304,6 +380,109 @@ Future<VpsKickResult> vpsKickOthers({
   }
   return (outcome: VpsDeviceOutcome.ok, link: link, switched: true);
 }
+
+var _kicking = false;
+
+/// What is in flight stays on disk until the panel has answered, so a
+/// restart within [vpsKickReplayWindow] sends the same request again.
+Future<VpsKickResult?> vpsRunKick({
+  required VpsDeviceCall call,
+  required Profile profile,
+  required void Function(Profile moved) put,
+  required Future<void> Function(Profile moved) update,
+  VpsKickPending? resume,
+  Future<void> Function(Duration) wait = Future<void>.delayed,
+}) async {
+  final base = vpsApiBase(profile.url);
+  if (base == null || _kicking) return null;
+  _kicking = true;
+  try {
+    final pending =
+        resume ??
+        (
+          profileId: profile.id,
+          oldUrl: profile.url,
+          requestId: vpsNewRequestId(),
+          at: DateTime.now(),
+        );
+    if (resume == null) await vpsSaveKickPending(pending);
+    Profile? moved;
+    final result = await vpsKickOthers(
+      call: call,
+      base: base,
+      ownId: await vpsDeviceId(),
+      requestId: pending.requestId,
+      resumed: resume != null,
+      wait: wait,
+      adopt: (link) {
+        moved = profile.copyWith(url: link);
+        put(moved!);
+      },
+      refetch: () => update(moved!),
+    );
+    if (result.outcome != VpsDeviceOutcome.unreachable) {
+      await vpsSaveKickPending(null);
+    }
+    return result;
+  } finally {
+    _kicking = false;
+  }
+}
+
+/// A sign-out cut short by a restart or a dead network goes on by itself.
+final vpsKickResumeProvider = Provider.autoDispose<void>((ref) {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+  ref.watch(isStartProvider);
+  final calls = ref.read(vpsDeviceCallsProvider);
+  final profiles = ref.read(profilesProvider);
+  final put = ref.read(profilesProvider.notifier).put;
+  final actions = ref.read(profilesActionProvider.notifier);
+  unawaited(() async {
+    final pending = await vpsLoadKickPending();
+    if (pending == null) return;
+    final profile = profiles.getProfile(pending.profileId);
+    final base = vpsApiBase(pending.oldUrl);
+    final context = globalState.navigatorKey.currentContext;
+    if (profile == null || profile.url != pending.oldUrl || base == null) {
+      await vpsSaveKickPending(null);
+      return;
+    }
+    if (DateTime.now().difference(pending.at) > vpsKickReplayWindow) {
+      await vpsSaveKickPending(null);
+      if (context != null && context.mounted) {
+        dialogs.showBanner(_outcomeText(context, VpsDeviceOutcome.maybeDone));
+      }
+      return;
+    }
+    final result = await vpsRunKick(
+      call: calls(base),
+      profile: profile,
+      put: put,
+      update: actions.updateProfile,
+      resume: pending,
+    );
+    final now = globalState.navigatorKey.currentContext;
+    if (result == null || now == null || !now.mounted) return;
+    final link = result.link;
+    if (link == null) {
+      if (result.outcome != VpsDeviceOutcome.unreachable) {
+        dialogs.showBanner(_outcomeText(now, result.outcome));
+      }
+      return;
+    }
+    unawaited(
+      dialogs.showQrCode(
+        title: tr(now, '其他设备已踢掉，本机已换上新链接', 'Others signed out; new link here'),
+        data: link,
+        message: tr(
+          now,
+          '其他设备要用的话，扫码或复制这条新链接重新导入。',
+          'Scan or copy this new link on any other device you still use.',
+        ),
+      ),
+    );
+  }());
+});
 
 Future<String?> Function() vpsRemovedLoad = () => vpsDeviceLoad('Removed');
 Future<void> Function(String) vpsRemovedSave = (value) =>
@@ -347,8 +526,6 @@ VpsDeviceCall vpsDeviceCallFor(Ref ref, Uri base) =>
         proxyPort: route.port,
         proxyAuth: route.auth,
         pinnedSha256: route.pins,
-        // Sent twice it would fail on the link the first one already killed.
-        oneRoute: path == 'devices/kick-others',
       );
     };
 
@@ -461,6 +638,11 @@ String _outcomeText(BuildContext context, VpsDeviceOutcome outcome) =>
         context,
         '现在连不上服务器，稍后再试',
         'The server is out of reach; try again later',
+      ),
+      VpsDeviceOutcome.maybeDone => tr(
+        context,
+        '可能已经生效，请到会员页查看新链接',
+        'It may have gone through; look for the new link on the member page',
       ),
     };
 
@@ -680,19 +862,13 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
       final profile = ref.read(currentProfileProvider);
       final base = vpsApiBase(profile?.url ?? '');
       if (profile == null || base == null) return null;
-      Profile? moved;
-      final result = await vpsKickOthers(
+      final result = await vpsRunKick(
         call: ref.read(vpsDeviceCallsProvider)(base),
-        base: base,
-        ownId: await vpsDeviceId(),
-        adopt: (link) {
-          moved = profile.copyWith(url: link);
-          ref.read(profilesProvider.notifier).put(moved!);
-        },
-        refetch: () =>
-            ref.read(profilesActionProvider.notifier).updateProfile(moved!),
+        profile: profile,
+        put: ref.read(profilesProvider.notifier).put,
+        update: ref.read(profilesActionProvider.notifier).updateProfile,
       );
-      if (!mounted) return null;
+      if (!mounted || result == null) return null;
       if (result.link != null) {
         setState(() => _kicked = result);
         return null;
@@ -700,9 +876,10 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
       if (result.outcome == VpsDeviceOutcome.unreachable) {
         return tr(
           context,
-          '没收到服务器的回答，可能已经生效，请到会员页查看新链接',
-          'No answer from the server; it may have gone through. Look for '
-              'the new link on the member page',
+          '没收到服务器的回答。10 分钟内重新连接或重开软件时会自动接着发，不会再换一次链接',
+          'No answer from the server. It is sent again by itself when you '
+              'reconnect or reopen the app within 10 minutes, without a '
+              'second new link',
         );
       }
       return _outcomeText(context, result.outcome);
@@ -753,6 +930,10 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                 ),
           style: vpsText(p, size: 13, color: p.soft, height: 1.5),
         ),
+        if (QrCodeView.fits(link)) ...[
+          const SizedBox(height: 12),
+          Center(child: QrCodeView(data: link, size: 200)),
+        ],
         const SizedBox(height: 12),
         Wrap(
           spacing: 10,

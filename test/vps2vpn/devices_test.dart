@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/vps2vpn/devices.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -194,47 +196,55 @@ void main() {
   });
 
   group('sign out every other device', () {
-    test('no answer is sent once and changes nothing', () async {
-      var tries = 0;
-      final r = await vpsKickOthers(
-        call: (path, {body, headers = const {}}) async {
-          tries++;
-          throw const SocketException('timed out');
-        },
-        base: base,
-        ownId: 'me',
-        adopt: (_) => fail('no new link'),
-        refetch: () async => fail('nothing to fetch'),
-      );
-      expect(tries, 1);
-      expect(r.outcome, VpsDeviceOutcome.unreachable);
-      expect(r.link, isNull);
-    });
     const fresh = 'https://panel.example.com:8443/s/NewToken0123456789/';
+    const old = 'https://panel.example.com:8443/s/OldToken0123456789';
+    final answered = (
+      200,
+      jsonEncode({
+        'ok': true,
+        'sub_url': fresh,
+        'base': '/s/NewToken0123456789/',
+      }),
+    );
+    Future<void> noWait(Duration _) async {}
+
+    Future<VpsKickResult> kick(
+      VpsDeviceCall call, {
+      List<String>? adopted,
+      Future<void> Function()? refetch,
+      bool resumed = false,
+    }) => vpsKickOthers(
+      call: call,
+      base: base,
+      ownId: 'me',
+      requestId: 'Rq_0123456789abcdefghij',
+      resumed: resumed,
+      wait: noWait,
+      adopt: adopted?.add ?? (_) => fail('no new link'),
+      refetch: refetch ?? () async {},
+    );
+
+    test('a request id is 128 random bits the panel takes', () {
+      final id = vpsNewRequestId(Random(7));
+      expect(id, matches(RegExp(r'^[A-Za-z0-9_-]{22,128}$')));
+      expect(id, hasLength(22));
+      expect(vpsNewRequestId(), isNot(vpsNewRequestId()));
+    });
 
     test('the new link is taken on and fetched', () async {
       final sent = <_Sent>[];
       final adopted = <String>[];
       var fetched = 0;
-      final r = await vpsKickOthers(
-        call: _panel(
-          sent,
-          (_) => (
-            200,
-            jsonEncode({
-              'ok': true,
-              'sub_url': fresh,
-              'base': '/s/NewToken0123456789/',
-            }),
-          ),
-        ),
-        base: base,
-        ownId: 'me',
-        adopt: adopted.add,
+      final r = await kick(
+        _panel(sent, (_) => answered),
+        adopted: adopted,
         refetch: () async => fetched++,
       );
       expect(sent.single.path, 'devices/kick-others');
-      expect(sent.single.body, {'device_id': 'me'});
+      expect(sent.single.body, {
+        'device_id': 'me',
+        'request_id': 'Rq_0123456789abcdefghij',
+      });
       expect(r.outcome, VpsDeviceOutcome.ok);
       expect(r.switched, isTrue);
       expect(r.link, fresh);
@@ -244,14 +254,9 @@ void main() {
 
     test('a fetch that fails leaves this device on the new link', () async {
       final adopted = <String>[];
-      final r = await vpsKickOthers(
-        call: _panel(
-          [],
-          (_) => (200, jsonEncode({'ok': true, 'sub_url': fresh})),
-        ),
-        base: base,
-        ownId: 'me',
-        adopt: adopted.add,
+      final r = await kick(
+        _panel([], (_) => answered),
+        adopted: adopted,
         refetch: () async => throw const SocketException('down'),
       );
       expect(adopted, [fresh]);
@@ -259,10 +264,58 @@ void main() {
       expect(r.switched, isFalse);
     });
 
+    test(
+      'no answer is sent again with the same id, and the replay is taken',
+      () async {
+        final sent = <_Sent>[];
+        var tries = 0;
+        final adopted = <String>[];
+        final r = await kick((path, {body, headers = const {}}) async {
+          sent.add((path: path, body: body, headers: headers));
+          if (++tries < 3) throw const SocketException('timed out');
+          return (
+            200,
+            jsonEncode({'ok': true, 'sub_url': fresh, 'replayed': true}),
+            null,
+          );
+        }, adopted: adopted);
+        expect(sent, hasLength(3));
+        expect(sent.map((s) => s.body!['request_id']).toSet(), {
+          'Rq_0123456789abcdefghij',
+        });
+        expect(r.outcome, VpsDeviceOutcome.ok);
+        expect(adopted, [fresh]);
+      },
+    );
+
+    test('a 404 to a resend means it may have gone through', () async {
+      var tries = 0;
+      final r = await kick((path, {body, headers = const {}}) async {
+        if (++tries == 1) throw const SocketException('timed out');
+        return (404, 'Not Found', null);
+      });
+      expect(tries, 2);
+      expect(r.outcome, VpsDeviceOutcome.maybeDone);
+      expect(r.link, isNull);
+      final resumed = await kick(_panel([], (_) => (404, '')), resumed: true);
+      expect(resumed.outcome, VpsDeviceOutcome.maybeDone);
+    });
+
+    test('no answer at all stops after three retries', () async {
+      var tries = 0;
+      final r = await kick((path, {body, headers = const {}}) async {
+        tries++;
+        throw const SocketException('timed out');
+      });
+      expect(tries, 4);
+      expect(r.outcome, VpsDeviceOutcome.unreachable);
+      expect(r.link, isNull);
+    });
+
     test('a link on another host is not taken; base is used instead', () async {
       final adopted = <String>[];
-      await vpsKickOthers(
-        call: _panel(
+      await kick(
+        _panel(
           [],
           (_) => (
             200,
@@ -273,21 +326,11 @@ void main() {
             }),
           ),
         ),
-        base: base,
-        ownId: 'me',
-        adopt: adopted.add,
-        refetch: () async {},
+        adopted: adopted,
       );
       expect(adopted, [fresh]);
-      final none = await vpsKickOthers(
-        call: _panel([], (_) => (200, '{"ok":true}')),
-        base: base,
-        ownId: 'me',
-        adopt: adopted.add,
-        refetch: () async {},
-      );
+      final none = await kick(_panel([], (_) => (200, '{"ok":true}')));
       expect(none.outcome, VpsDeviceOutcome.rejected);
-      expect(adopted, hasLength(1));
     });
 
     test(
@@ -296,20 +339,78 @@ void main() {
         for (final (answer, outcome) in [
           (_off, VpsDeviceOutcome.featureOff),
           ((429, ''), VpsDeviceOutcome.rateLimited),
+          ((400, '{"code":"bad_request"}'), VpsDeviceOutcome.rejected),
           ((404, '{"code":"not_found"}'), VpsDeviceOutcome.notFound),
-          ((502, 'Bad Gateway'), VpsDeviceOutcome.unreachable),
         ]) {
-          final r = await vpsKickOthers(
-            call: _panel([], (_) => answer),
-            base: base,
-            ownId: 'me',
-            adopt: (_) => fail('no new link'),
-            refetch: () async => fail('nothing to fetch'),
-          );
+          final r = await kick(_panel([], (_) => answer));
           expect(r.outcome, outcome);
           expect(r.link, isNull);
         }
       },
     );
+
+    group('kept on disk', () {
+      late Map<String, String> store;
+      setUp(() {
+        store = {};
+        vpsDeviceLoad = (key) async => store[key];
+        vpsDeviceSave = (key, value) async => store[key] = value;
+      });
+
+      Profile profile() => const Profile(
+        id: 9,
+        type: ProfileType.url,
+        url: old,
+        autoUpdateDuration: Duration(hours: 1),
+      );
+
+      test(
+        'what got no answer waits, and a restart sends the same id',
+        () async {
+          final first = <_Sent>[];
+          final r = await vpsRunKick(
+            call: (path, {body, headers = const {}}) async {
+              first.add((path: path, body: body, headers: headers));
+              throw const SocketException('down');
+            },
+            profile: profile(),
+            put: (_) => fail('no new link'),
+            update: (_) async => fail('nothing to fetch'),
+            wait: noWait,
+          );
+          expect(r!.outcome, VpsDeviceOutcome.unreachable);
+          final pending = await vpsLoadKickPending();
+          expect(pending!.profileId, 9);
+          expect(pending.oldUrl, old);
+          expect(pending.requestId, first.first.body!['request_id']);
+
+          final put = <Profile>[];
+          final again = <_Sent>[];
+          final resumed = await vpsRunKick(
+            call: _panel(again, (_) => answered),
+            profile: profile(),
+            put: put.add,
+            update: (_) async {},
+            resume: pending,
+            wait: noWait,
+          );
+          expect(again.single.body!['request_id'], pending.requestId);
+          expect(resumed!.link, fresh);
+          expect(put.single.url, fresh);
+          expect(await vpsLoadKickPending(), isNull);
+        },
+      );
+
+      test('an answer, even a refusal, clears what waited', () async {
+        await vpsRunKick(
+          call: _panel([], (_) => (400, '{"code":"bad_request"}')),
+          profile: profile(),
+          put: (_) => fail('no new link'),
+          update: (_) async {},
+          wait: noWait,
+        );
+        expect(await vpsLoadKickPending(), isNull);
+      });
+    });
   });
 }

@@ -55,6 +55,7 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     ref.watch(vpsNodeStatusSyncProvider);
     ref.watch(vpsFeedbackSyncProvider);
     ref.watch(vpsDeviceSyncProvider);
+    ref.watch(vpsKickResumeProvider);
     return widget.child;
   }
 
