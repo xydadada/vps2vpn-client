@@ -78,6 +78,15 @@ Color vpsReadable(Color c, Color on, double ratio) {
   ).toColor();
 }
 
+double _lightness(Color c) {
+  final y = c.computeLuminance();
+  return y > 0.008856 ? 116 * math.pow(y, 1 / 3) - 16 : 903.3 * y;
+}
+
+double _luminanceAt(double lightness) => lightness > 8
+    ? math.pow((lightness + 16) / 116, 3).toDouble()
+    : lightness / 903.3;
+
 class VpsPalette {
   const VpsPalette._({
     required this.dark,
@@ -211,7 +220,22 @@ class VpsPalette {
       c.toARGB32(),
       card.toARGB32(),
       large,
-    ), () => vpsReadable(c, card, large ? 3 : 4.5));
+    ), () => _ink(c, large ? 3 : 4.5));
+  }
+
+  /// Grey text sits a clear step (8 L*) off muted text, so the two levels hold.
+  Color _ink(Color c, double ratio) {
+    final toned = vpsReadable(c, card, ratio);
+    if (c != soft) return toned;
+    final step = _lightness(vpsReadable(muted, card, ratio)) + (dark ? 8 : -8);
+    final y = _luminanceAt(step);
+    final now = toned.computeLuminance();
+    if (dark ? now >= y : now <= y) return toned;
+    return vpsAtLuminance(
+      HSLColor.fromColor(toned),
+      dark ? y : 0,
+      dark ? 1 : y,
+    ).toColor();
   }
 
   static VpsPalette of(BuildContext context) {

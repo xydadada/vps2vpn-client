@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,11 @@ double _contrast(Color a, Color b) {
   final x = a.computeLuminance() + 0.05;
   final y = b.computeLuminance() + 0.05;
   return x > y ? x / y : y / x;
+}
+
+double _lightness(Color c) {
+  final y = c.computeLuminance();
+  return y > 0.008856 ? 116 * math.pow(y, 1 / 3) - 16 : 903.3 * y;
 }
 
 Future<VpsPalette> _paletteUnder(
@@ -129,6 +136,12 @@ void main() {
               reason: why,
             );
           }
+        }
+        for (final large in [false, true]) {
+          final gap =
+              _lightness(p.ink(p.soft, large: large)) -
+              _lightness(p.ink(p.muted, large: large));
+          expect(gap.abs(), greaterThanOrEqualTo(8), reason: '$brightness');
         }
         expect(p.ink(p.text), p.text);
         expect(p.ink(p.line), p.line);
