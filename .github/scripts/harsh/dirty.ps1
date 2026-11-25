@@ -97,6 +97,7 @@ try {
   # before vps2vpn connected.
   $p0 = Get-WinInetProxy
   Show-Proxy 'before vps2vpn, takeover off'
+  $env:VPS2VPN_TAKEOVER_TRACE = Join-Path $Out 'takeover-trace.log'
   $port = Start-App 'takeover off'
   Check ($port -notin $taken) "takeover off: kept off the taken ports $($taken -join ', ') (on $port)"
   Test-Through $port 'takeover off'

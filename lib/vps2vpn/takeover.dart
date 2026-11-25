@@ -155,12 +155,44 @@ Map<int, int> parseParents(String lines) => {
 /// Every local proxy port seen as the system proxy this run, not only now.
 final _foreignProxyPorts = <int>{};
 
+final _tracePath = Platform.environment['VPS2VPN_TAKEOVER_TRACE'];
+
+void _trace(String line) {
+  final path = _tracePath;
+  if (path == null || path.isEmpty) return;
+  try {
+    File(path).writeAsStringSync(
+      '${DateTime.now().toIso8601String()} $line\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  } catch (_) {}
+}
+
+String _proxyText(VpsSystemProxy? p) =>
+    p == null ? 'none' : 'enabled=${p.enabled} server=${p.server} pac=${p.pac}';
+
 Future<Set<int>> _guardedPorts(int ourPort) async {
-  for (final proxy in [await readSystemProxy(), await readConnectionProxy()]) {
+  final system = await readSystemProxy();
+  final connection = await readConnectionProxy();
+  for (final proxy in [system, connection]) {
     final port = loopbackProxyPort(proxy);
     if (port != null && port != ourPort) _foreignProxyPorts.add(port);
   }
-  return {ourPort, ..._foreignProxyPorts};
+  final guarded = {ourPort, ..._foreignProxyPorts};
+  _trace(
+    'guarded $guarded; system ${_proxyText(system)}; '
+    'connection ${_proxyText(connection)}',
+  );
+  return guarded;
+}
+
+/// Run before our system proxy goes on, so the port it replaces is known
+/// however the takeover's own reads are timed.
+Future<void> vpsNoteForeignProxy(int ourPort) async {
+  if (!Platform.isWindows || _underTest) return;
+  _trace('before our system proxy on $ourPort');
+  await _guardedPorts(ourPort);
 }
 
 Future<({List<VpsRival> close, List<VpsRival> spare})> _sortRivals(
@@ -199,12 +231,20 @@ Future<({List<VpsRival> close, List<VpsRival> spare})> _sortRivals(
       parents = parseParents('${ps.stdout}');
     } catch (_) {}
   }
-  return vpsSortRivals(
+  final sorted = vpsSortRivals(
     rivals,
     listening: listening,
     parents: parents,
     guardedPorts: guarded,
   );
+  _trace(
+    'rivals ${[for (final r in rivals) '${r.image}:${r.pid}']}; '
+    'listening ${{for (final r in bare) r.pid: listening[r.pid]}}; '
+    'parents ${{for (final r in bare) r.pid: parents[r.pid]}}; '
+    'close ${[for (final r in sorted.close) r.pid]}; '
+    'spare ${[for (final r in sorted.spare) r.pid]}',
+  );
+  return sorted;
 }
 
 typedef VpsTakeoverAnswer = ({bool close, bool remember});
@@ -664,6 +704,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
         asked: preferences.getVpsTakeoverAsked,
         ask: vpsAskTakeover,
         remember: (close) async {
+          _trace('answer remembered: close=$close');
           await preferences.setVpsTakeoverAsked(true);
           if (ref.mounted && !close) {
             ref
@@ -680,6 +721,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
     return;
   }
   final act = canAct();
+  _trace('before connect: act=$act declined=$_declined rivals=$names');
   var still = const <String>[];
   if (act && rivals.isNotEmpty) {
     still = await quitRivals(rivals, isCurrent: canAct);

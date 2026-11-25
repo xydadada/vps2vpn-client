@@ -5,6 +5,9 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart' show ProxyState;
 import 'package:rust_api/rust_api.dart' as rust_api;
 
+/// vps2vpn: told the port before our proxy replaces whatever is set now.
+Future<void> Function(int port)? vpsBeforeSystemProxy;
+
 abstract interface class SystemProxy {
   Future<bool> start(int port, List<String> bypassDomain, String? pacScript);
 
@@ -79,6 +82,9 @@ class SystemProxyQueue {
   }
 
   Future<void> _start(ProxyState state) async {
+    try {
+      await vpsBeforeSystemProxy?.call(state.port);
+    } catch (_) {}
     try {
       final ok = await _proxy.start(
         state.port,

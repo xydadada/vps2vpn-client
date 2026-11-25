@@ -40,6 +40,20 @@ ProxyState _state({required bool isStart}) {
 }
 
 void main() {
+  test('the port to be replaced is noted before our proxy goes on', () async {
+    final proxy = _FakeProxy();
+    final queue = SystemProxyQueue(proxy);
+    addTearDown(() => vpsBeforeSystemProxy = null);
+    vpsBeforeSystemProxy = (port) async {
+      proxy.calls.add('note $port');
+      throw StateError('a failing note does not stop the proxy');
+    };
+
+    await queue.apply(_state(isStart: true));
+
+    expect(proxy.calls, ['note 7890', 'start 7890']);
+  });
+
   test('applies changes in the order they come', () async {
     final proxy = _FakeProxy();
     final queue = SystemProxyQueue(proxy);
