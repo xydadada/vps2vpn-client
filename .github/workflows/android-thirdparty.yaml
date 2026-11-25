@@ -18,7 +18,7 @@ permissions:
   id-token: write
 
 env:
-  DEVICES: 'model=a16x,version=35'
+  DEVICES: 'model=MediumPhone.arm,version=34'   # the real-phone quota for the day ran out
   PROBE: '0'
   APPS: 'karing'          # which of hiddify,karing to run (Hiddify passed in run 45672627980)
   HIDDIFY_TAG: v5.9.15
