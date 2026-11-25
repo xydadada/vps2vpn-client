@@ -19,7 +19,7 @@ permissions:
 
 env:
   DEVICES: 'model=MediumPhone.arm,version=34'
-  PROBE: '1'
+  PROBE: '0'
   HIDDIFY_TAG: v5.9.15
   KARING_TAG: v1.2.26.2934
 

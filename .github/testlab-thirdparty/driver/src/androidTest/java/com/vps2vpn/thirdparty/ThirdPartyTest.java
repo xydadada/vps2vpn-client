@@ -49,7 +49,7 @@ import java.util.regex.Pattern;
 public class ThirdPartyTest {
     private static final String TAG = "vps2vpn-thirdparty";
     // Words on first-run screens that move on; tried in this order, one tap per round.
-    private static final String ONBOARD = "(start|get started|开始|开始使用|continue|继续|next|下一步|agree|i agree|同意|"
+    private static final String ONBOARD = "(start|get started|开始|开始使用|accept & continue|continue|继续|next|下一步|agree|i agree|同意|"
             + "accept|接受|同意并继续|ok|okay|确定|好的|allow|允许|skip|跳过|done|完成|got it|知道了|confirm|确认|"
             + "not now|以后再说|later|稍后)";
     private static final String CONFIRM_IMPORT = "(ok|add|import|install|save|confirm|yes|确定|添加|导入|安装|保存|确认|是)";
@@ -113,16 +113,30 @@ public class ThirdPartyTest {
         note(name + " first screen");
         onboard(name, 8);
 
-        Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(importLink));
-        view.setPackage(pkg);
-        view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(view);
-        sleep(5_000);
-        note(name + " after the import link");
-        step(name + ": import confirmation tapped: " + tap(CONFIRM_IMPORT, 8_000));
-        sleep(12_000);                                    // it downloads the subscription
-        note(name + " after the import");
-        onboard(name, 3);
+        sleep(8_000);
+        // Hiddify's core may still be starting ("Couldn't connect, Tap to try again"): give it a nudge first.
+        if (tap("(tap to try again)", 2_000)) {
+            sleep(10_000);
+            note(name + " after retrying its core");
+        }
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(importLink));
+            view.setPackage(pkg);
+            view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(view);
+            sleep(5_000);
+            note(name + " after the import link (" + attempt + ")");
+            step(name + ": import confirmation tapped: " + tap(CONFIRM_IMPORT, 8_000));
+            sleep(12_000);                                // it downloads the subscription
+            String seen = screen();
+            report("NOTE  " + name + " after the import (" + attempt + "): " + seen);
+            if (!seen.matches("(?is).*(failed|error|失败|错误).*")) {
+                break;
+            }
+            tap("(ok|确定)", 3_000);
+            sleep(15_000);
+        }
+        onboard(name, 4);
         if (probe) {
             context.startActivity(launch.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
             sleep(4_000);
