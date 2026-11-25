@@ -1,6 +1,7 @@
 // vps2vpn member API: the panel the subscription comes from also answers
 //   GET  <sub>/api/me      account, usage, expiry, server-side AI check
 //   POST <sub>/api/report  "this line keeps failing / works again"
+//   POST <sub>/api/feedback, GET <sub>/api/feedback   a note to the admin
 // where <sub> is the imported link https://host:port/s/<token> without its
 // query. The token in the path is the only credential.
 
@@ -304,6 +305,8 @@ class VpsMember {
     this.expireDay,
     this.nextResetDay,
     this.nodes,
+    this.feedback = false,
+    this.feedbackUnread = 0,
     this.ai,
     this.client,
     this.throttled = false,
@@ -329,6 +332,8 @@ class VpsMember {
 
   /// Null unless the panel has `features.node_status` on.
   final List<VpsNodeStatus>? nodes;
+  final bool feedback;
+  final int feedbackUnread;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
@@ -371,6 +376,11 @@ class VpsMember {
           ],
         _ => null,
       },
+      feedback: switch (json['features']) {
+        final Map features => features['feedback'] == true,
+        _ => false,
+      },
+      feedbackUnread: _int(json['feedback_unread']),
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
       throttled: json['throttled'] == true,
@@ -679,6 +689,7 @@ Future<(int, String)> _send(
   String? proxyAuth,
   VpsRequestScope? scope,
   Set<String> pinnedSha256 = const {},
+  void Function(HttpHeaders headers)? onHeaders,
 }) async {
   final client = _client(
     proxyPort: proxyPort,
@@ -702,6 +713,7 @@ Future<(int, String)> _send(
       req.add(bytes);
     }
     final res = await req.close().timeout(const Duration(seconds: 10));
+    onHeaders?.call(res.headers);
     final text = await _readBoundedUtf8(
       res,
     ).timeout(const Duration(seconds: 10));
@@ -784,6 +796,162 @@ Future<bool> reportLine(
     } catch (_) {}
   }
   return false;
+}
+
+enum VpsFeedbackOutcome {
+  sent,
+  rateLimited,
+  tooLarge,
+  rejected,
+  featureOff,
+  linkWrong,
+  unreachable,
+}
+
+typedef VpsFeedbackAnswer = ({
+  VpsFeedbackOutcome outcome,
+  int? id,
+  Duration? retryAfter,
+});
+
+VpsFeedbackAnswer vpsFeedbackAnswer(int code, String text, {String? retry}) {
+  Object? json;
+  try {
+    json = jsonDecode(text);
+  } on FormatException {
+    json = null;
+  }
+  final body = json is Map ? json : const {};
+  VpsFeedbackAnswer as(VpsFeedbackOutcome outcome) =>
+      (outcome: outcome, id: null, retryAfter: null);
+  return switch (code) {
+    HttpStatus.ok when body['ok'] == true => (
+      outcome: VpsFeedbackOutcome.sent,
+      id: body['id'] is int ? body['id'] as int : null,
+      retryAfter: null,
+    ),
+    HttpStatus.tooManyRequests => (
+      outcome: VpsFeedbackOutcome.rateLimited,
+      id: null,
+      retryAfter: Duration(
+        seconds: (int.tryParse(retry?.trim() ?? '') ?? 120).clamp(1, 86400),
+      ),
+    ),
+    HttpStatus.requestEntityTooLarge => as(VpsFeedbackOutcome.tooLarge),
+    HttpStatus.badRequest => as(VpsFeedbackOutcome.rejected),
+    HttpStatus.notFound => as(VpsFeedbackOutcome.linkWrong),
+    HttpStatus.serviceUnavailable when body['code'] == 'feature_off' => as(
+      VpsFeedbackOutcome.featureOff,
+    ),
+    _ => as(VpsFeedbackOutcome.unreachable),
+  };
+}
+
+/// Direct first, then through our own proxy: the panel may answer only one
+/// way while the line is down. Whatever answer comes back first stands.
+Future<VpsFeedbackAnswer> vpsPostFeedback(
+  Uri base,
+  Map<String, Object?> body, {
+  int? proxyPort,
+  String? proxyAuth,
+  Set<String> pinnedSha256 = const {},
+}) async {
+  for (final port in [null, ?proxyPort]) {
+    try {
+      String? retry;
+      final (code, text) = await _send(
+        base.resolve('feedback'),
+        body: body,
+        proxyPort: port,
+        proxyAuth: port == null ? null : proxyAuth,
+        pinnedSha256: pinnedSha256,
+        onHeaders: (h) => retry = h.value('retry-after'),
+      );
+      final answer = vpsFeedbackAnswer(code, text, retry: retry);
+      if (answer.outcome != VpsFeedbackOutcome.unreachable) return answer;
+    } catch (_) {}
+  }
+  return (outcome: VpsFeedbackOutcome.unreachable, id: null, retryAfter: null);
+}
+
+class VpsFeedbackItem {
+  const VpsFeedbackItem({
+    required this.id,
+    required this.text,
+    this.at,
+    this.done = false,
+    this.answer = '',
+    this.answeredAt,
+  });
+
+  final int id;
+  final String text;
+  final DateTime? at;
+  final bool done;
+  final String answer;
+  final DateTime? answeredAt;
+
+  static List<VpsFeedbackItem>? listFromJson(Object? json) {
+    if (json is! Map || json['items'] is! List) return null;
+    return [
+      for (final item in json['items'] as List)
+        if (item is Map && item['id'] is int)
+          VpsFeedbackItem(
+            id: item['id'] as int,
+            text: '${item['text'] ?? ''}',
+            at: _panelTimestamp(item['created_at']),
+            done: item['status'] == 'done',
+            answer: '${item['answer'] ?? ''}',
+            answeredAt: _panelTimestamp(item['answered_at']),
+          ),
+    ];
+  }
+}
+
+Future<List<VpsFeedbackItem>?> vpsFetchFeedback(
+  Uri base, {
+  int? proxyPort,
+  String? proxyAuth,
+  Set<String> pinnedSha256 = const {},
+}) async {
+  for (final port in [null, ?proxyPort]) {
+    try {
+      final (code, text) = await _send(
+        base.resolve('feedback'),
+        proxyPort: port,
+        proxyAuth: port == null ? null : proxyAuth,
+        pinnedSha256: pinnedSha256,
+      );
+      if (code != HttpStatus.ok) return null;
+      return VpsFeedbackItem.listFromJson(jsonDecode(text));
+    } on FormatException {
+      return null;
+    } catch (_) {}
+  }
+  return null;
+}
+
+/// The certificate pins and the route for a panel request made outside the
+/// member provider.
+Future<({Set<String> pins, int? port, String? auth})> vpsPanelRoute(
+  Ref ref,
+  Uri base,
+) async {
+  final on = ref.read(isStartProvider) && !ref.read(suspendProvider);
+  final profile = ref.read(currentProfileProvider);
+  final pins = await _pinnedSha256ForProfile(
+    ref,
+    profile?.id,
+    profile?.lastUpdateDate,
+    base.host,
+  );
+  return (
+    pins: pins,
+    port: on ? ref.read(patchClashConfigProvider).mixedPort : null,
+    auth: on
+        ? vpsLocalProxyAuth(ref.read(networkSettingProvider).authentication)
+        : null,
+  );
 }
 
 /// user:pass for our own mixed port, as typed, when it asks for one. The

@@ -13,6 +13,7 @@ import 'package:fl_clash/providers/route_state.dart';
 import 'package:fl_clash/providers/state.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/crash_restart.dart';
+import 'package:fl_clash/vps2vpn/feedback.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/stale_refresh.dart';
 import 'package:flutter/widgets.dart';
@@ -50,6 +51,7 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     ref.watch(vpsStaleRefreshProvider);
     ref.watch(vpsPanelSyncProvider);
     ref.watch(vpsNodeStatusSyncProvider);
+    ref.watch(vpsFeedbackSyncProvider);
     return widget.child;
   }
 

@@ -85,6 +85,10 @@ Future<bool> vpsReachesInternet({
   return answers.contains(true);
 }
 
+/// The last finished diagnosis, for a note to the admin.
+final vpsLastDiagnosis =
+    ValueNotifier<({DateTime at, Map<VpsLeg, VpsLegState> legs})?>(null);
+
 class VpsDiagnoseCard extends ConsumerStatefulWidget {
   const VpsDiagnoseCard({super.key});
 
@@ -156,7 +160,10 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
         break;
       }
     }
-    if (mounted && run == _run) setState(() => _running = false);
+    if (mounted && run == _run) {
+      setState(() => _running = false);
+      vpsLastDiagnosis.value = (at: DateTime.now(), legs: Map.of(_states));
+    }
   }
 
   @override
