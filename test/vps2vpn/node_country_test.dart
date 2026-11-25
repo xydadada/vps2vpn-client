@@ -1,3 +1,6 @@
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -33,6 +36,8 @@ void main() {
     expect(vpsNodeName('香港 [0.5x]'), (name: '香港', rate: 0.5));
     expect(vpsNodeName('日本 x2'), (name: '日本', rate: 2.0));
     expect(vpsNodeName('美国 3倍'), (name: '美国', rate: 3.0));
+    expect(vpsNodeName('韩国 倍率:1.5'), (name: '韩国', rate: 1.5));
+    expect(vpsNodeName('🇹🇼 台湾 ×5'), (name: '台湾', rate: 5.0));
     expect(vpsNodeName('新加坡2'), (name: '新加坡2', rate: null));
     expect(vpsNodeName('Box2'), (name: 'Box2', rate: null));
     expect(vpsNodeName('🇯🇵'), (name: '🇯🇵', rate: null));
@@ -44,6 +49,18 @@ void main() {
         vpsNodeName(n).name,
     };
     expect(names, hasLength(3));
+  });
+
+  test("the smart line's server, past its hidden rate tiers", () {
+    Group group(String name, String now) =>
+        Group(type: GroupType.URLTest, name: name, now: now);
+    final groups = [
+      group(vpsSmartGroupName, vpsDearGroupName),
+      group(vpsDearGroupName, 'TW · 5.0x'),
+    ];
+    expect(vpsServerNow(groups, groups.first), 'TW · 5.0x');
+    expect(vpsServerNow(groups, group('Proxy', 'SG')), 'SG');
+    expect(vpsServerNow(groups, null), isNull);
   });
 
   test('a flag emoji names the country first', () {

@@ -218,10 +218,13 @@ func applyConfig(params *SetupParams) error {
 	// SmartLines participates in profile parsing. Other global options must
 	// only become active after the replacement config has passed validation.
 	previousSmart := vpsSmartEnabled.Load()
+	previousHighRate := vpsSmartHighRate.Load()
 	vpsSmartEnabled.Store(params.Options.SmartLines)
+	vpsSmartHighRate.Store(params.Options.SmartHighRate)
 	cfg, raw, err := loadSetupConfigWithRaw(params)
 	if err != nil {
 		vpsSmartEnabled.Store(previousSmart)
+		vpsSmartHighRate.Store(previousHighRate)
 		if currentConfig != nil {
 			// An invalid replacement must not discard the last working route
 			// graph or change the active TLS verification and probe options.
@@ -332,6 +335,7 @@ func applyOptions(options CoreOptions) {
 	provider.SetDefaultTestTimeout(timeoutFromMillis(options.DelayTestTimeout, 0))
 	skipCertVerify.Store(options.SkipCertVerify)
 	vpsSmartEnabled.Store(options.SmartLines)
+	vpsSmartHighRate.Store(options.SmartHighRate)
 }
 
 func patchTun(target *LC.Tun, params *tunSchema) {

@@ -63,7 +63,8 @@ final _flagPair = RegExp(r'[\u{1F1E6}-\u{1F1FF}]{2}', unicode: true);
 // A billing rate at the end of a node name: "· 5.0x", "[2x]", "x0.5", "2倍".
 final _rateTail = RegExp(
   r'(?:[\s·|_,，-]+|(?=[\[(（【]))[\[(（【]?\s*'
-  r'(?:[x×]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:[x×]|倍率?))'
+  r'(?:[x×]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:[x×]|倍率?)'
+  r'|倍率\s*[:：]?\s*(\d+(?:\.\d+)?))'
   r'\s*[\])）】]?\s*$',
   caseSensitive: false,
 );
@@ -73,7 +74,7 @@ final _rateTail = RegExp(
   double? rate;
   final m = _rateTail.firstMatch(name);
   if (m != null && m.start > 0) {
-    rate = double.tryParse(m[1] ?? m[2]!);
+    rate = double.tryParse(m[1] ?? m[2] ?? m[3]!);
     name = name.substring(0, m.start);
   }
   name = name.replaceAll(_flagPair, '').trim();
@@ -109,6 +110,21 @@ String countryName(BuildContext context, String code) {
   return vpsZh(context) ? (_countryZh[c] ?? c) : c;
 }
 
+/// What [group] uses now, past the smart line's hidden rate tiers.
+String? vpsServerNow(List<Group> groups, Group? group) {
+  var now = group?.now;
+  for (var hops = 0; hops < 4; hops++) {
+    if (now == null ||
+        !(now.startsWith(vpsCheapGroupName) ||
+            now.startsWith(vpsDearGroupName))) {
+      break;
+    }
+    final name = now;
+    now = groups.where((g) => g.name == name).firstOrNull?.now;
+  }
+  return now == null || now.isEmpty ? null : now;
+}
+
 String friendlyLineName(BuildContext context, String name) => switch (name) {
   vpsSmartGroupName => tr(context, '智能线路', 'Smart line'),
   vpsAIGroupName => tr(context, 'AI 专线', 'AI line'),
@@ -125,6 +141,9 @@ const _builtinOutbounds = {
 
 bool vpsBuiltinOutbound(String name) =>
     _builtinOutbounds.contains(name.trim().toUpperCase());
+
+String _rateText(double rate) =>
+    rate == rate.roundToDouble() ? '${rate.round()}' : '$rate';
 
 /// The first selectable group whose first choice is a proxy, as the Core's
 /// smart line picks it: what "the server you use" means here.
@@ -376,11 +395,18 @@ class _HeroState extends ConsumerState<_Hero> {
         : ref.watch(selectedProxyNameProvider(group.name));
     final groups = ref.watch(currentGroupsStateProvider).value;
     final pickedGroup = groups.where((g) => g.name == picked).firstOrNull;
+    final server = vpsServerNow(groups, pickedGroup);
     final line = picked == null
         ? null
-        : pickedGroup?.now?.isNotEmpty == true && on
-        ? '${friendlyLineName(context, picked)} · ${pickedGroup!.now}'
+        : server != null && on
+        ? '${friendlyLineName(context, picked)} · $server'
         : friendlyLineName(context, picked);
+    final dearRate =
+        on &&
+            picked == vpsSmartGroupName &&
+            (pickedGroup?.now ?? '').startsWith(vpsDearGroupName)
+        ? vpsNodeName(server ?? '').rate
+        : null;
 
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     // What the panel says about the account outranks what the Core says:
@@ -487,6 +513,14 @@ class _HeroState extends ConsumerState<_Hero> {
                       context,
                       '当前线路没有响应。到「节点」换一条，或到「检测」看看原因。',
                       'The line is not answering. Pick another in Nodes, or see Check.',
+                    )
+                  : dearRate != null
+                  ? tr(
+                      context,
+                      '当前用的是 ×${_rateText(dearRate)} 计费线路（低倍率线路都连不上），流量按 ${_rateText(dearRate)} 倍扣',
+                      'On a line billed at ${_rateText(dearRate)}x (none of the '
+                          'cheaper lines answers); traffic counts '
+                          '${_rateText(dearRate)} times',
                     )
                   : on && mode == Mode.global
                   ? tr(

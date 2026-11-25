@@ -375,3 +375,97 @@ func TestVps2vpnSmartReusesTheSubscriptionsServerGroups(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 }
+
+func TestVpsLineRate(t *testing.T) {
+	for name, want := range map[string]float64{
+		"🇹🇼 台湾 ×5":            5,
+		"🇹🇼 台湾 · 5.0x":        5,
+		"🇸🇬 新加坡(移动优化) · 2.0x": 2,
+		"HK [2x]":                   2,
+		"HK[1.5X]":                  1.5,
+		"JP 倍率:1.5":                 1.5,
+		"KR x0.5":                   0.5,
+		"US 2倍":                     2,
+		"US1 · 1.0x · TUIC-v5-IPv6": 1,
+		"US · 3x · Hysteria2":       3,
+		"SG-REALITY":                1,
+		"新加坡2":                      1,
+	} {
+		if got := vpsLineRate(name); got != want {
+			t.Errorf("vpsLineRate(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func vpsRatedRaw() *config.RawConfig {
+	raw := config.DefaultRawConfig()
+	raw.Proxy = []map[string]any{
+		vpsReality("TW · 5.0x · Reality", "192.0.2.1"),
+		vpsHy2("TW · 5.0x · Hysteria2", "192.0.2.1"),
+		vpsReality("SG · Reality", "192.0.2.2"),
+		vpsReality("JP · 1.0x · Reality", "192.0.2.3"),
+	}
+	raw.ProxyGroup = []map[string]any{
+		{"name": "Proxy", "type": "select", "proxies": []any{"TW · 5.0x · Reality", "SG · Reality", "JP · 1.0x · Reality"}},
+	}
+	raw.Rule = []string{"MATCH,Proxy"}
+	return raw
+}
+
+// A 5x line is fast but costs five times the traffic: it stands by until
+// every line at 1x or less is down.
+func TestVps2vpnSmartPrefersLinesAtOneX(t *testing.T) {
+	vpsOn(t)
+	raw := vpsRatedRaw()
+	vps2vpnEnhance(raw, 0)
+
+	smart := vpsGroup(raw, vpsSmartGroup)
+	if smart["type"] != "fallback" {
+		t.Fatalf("smart = %v, want a fallback", smart)
+	}
+	if got := smart["proxies"].([]string); !slices.Equal(got, []string{vpsCheapGroup, "TW · 5.0x"}) {
+		t.Fatalf("smart members = %v", got)
+	}
+	cheap := vpsGroup(raw, vpsCheapGroup)
+	if cheap["type"] != "url-test" || cheap["hidden"] != true {
+		t.Fatalf("cheap = %v", cheap)
+	}
+	if got := cheap["proxies"].([]string); !slices.Equal(got, []string{"SG · Reality", "JP · 1.0x · Reality"}) {
+		t.Fatalf("cheap members = %v", got)
+	}
+	if got := vpsGroup(raw, vpsAIGroup)["proxies"].([]string); got[0] != "SG · Reality" || got[len(got)-1] == "SG · Reality" {
+		t.Fatalf("ai = %v, want the 1x lines first", got)
+	}
+	// A line picked by hand stays picked: the selector still lists it.
+	if got := vpsGroup(raw, "Proxy")["proxies"].([]any); !slices.Contains(got, any("TW · 5.0x · Reality")) {
+		t.Fatalf("proxy = %v", got)
+	}
+	if _, err := vpsParse(t, raw); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+}
+
+func TestVps2vpnSmartUsesDearLinesWhenAllowedOrAlone(t *testing.T) {
+	vpsOn(t)
+	vpsSmartHighRate.Store(true)
+	raw := vpsRatedRaw()
+	vps2vpnEnhance(raw, 0)
+	vpsSmartHighRate.Store(false)
+	if smart := vpsGroup(raw, vpsSmartGroup); smart["type"] != "url-test" || len(smart["proxies"].([]string)) != 3 {
+		t.Fatalf("allowed: smart = %v, want all three servers in one url-test", smart)
+	}
+
+	raw = config.DefaultRawConfig()
+	raw.Proxy = []map[string]any{
+		vpsReality("TW · 5.0x · Reality", "192.0.2.1"),
+		vpsReality("HK · 2x · Reality", "192.0.2.4"),
+	}
+	raw.ProxyGroup = []map[string]any{
+		{"name": "Proxy", "type": "select", "proxies": []any{"TW · 5.0x · Reality", "HK · 2x · Reality"}},
+	}
+	raw.Rule = []string{"MATCH,Proxy"}
+	vps2vpnEnhance(raw, 0)
+	if smart := vpsGroup(raw, vpsSmartGroup); smart["type"] != "url-test" || len(smart["proxies"].([]string)) != 2 {
+		t.Fatalf("all dear: smart = %v, want both in one url-test", smart)
+	}
+}

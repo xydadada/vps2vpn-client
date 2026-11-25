@@ -913,10 +913,17 @@ Future<List<VpsWatchedLine>?> vpsCollectWatchedLines(
           .firstOrNull ??
       groups.first;
   final head = smart ?? fallback;
-  final listed = [
-    for (final g in groups)
-      if (g.name != head.name && head.all.any((p) => p.name == g.name)) g,
-  ];
+  final listed = <Group>[];
+  for (var i = -1; i < listed.length; i++) {
+    final from = i < 0 ? head : listed[i];
+    for (final g in groups) {
+      if (g.name != head.name &&
+          !listed.contains(g) &&
+          from.all.any((p) => p.name == g.name)) {
+        listed.add(g);
+      }
+    }
+  }
   final candidates = [
     head,
     ...listed,

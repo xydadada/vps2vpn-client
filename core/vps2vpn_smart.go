@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"unicode/utf8"
@@ -15,6 +16,8 @@ import (
 
 const (
 	vpsSmartGroup = "⚡ 智能线路"
+	vpsCheapGroup = "⚡ 低倍率线路"
+	vpsDearGroup  = "⚡ 高倍率线路"
 	vpsAIGroup    = "🤖 AI 专线"
 	vpsProbeURL   = "https://www.gstatic.com/generate_204"
 	vpsAIProbeURL = vpsProbeURL + "#vps2vpn-ai"
@@ -22,6 +25,25 @@ const (
 
 // Set from CoreOptions.SmartLines before each config load.
 var vpsSmartEnabled atomic.Bool
+
+// Set from CoreOptions.SmartHighRate; off, lines above 1x only stand by.
+var vpsSmartHighRate atomic.Bool
+
+// A rate ending a name: "×5", "· 5.0x", "[2x]", "倍率:1.5", "x0.5", "2倍".
+var vpsRateTail = regexp.MustCompile(`(?i)(?:^|[\s·|_,，\-\[(（【])[\[(（【]?\s*(?:[x×]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:[x×]|倍率?)|倍率\s*[:：]?\s*(\d+(?:\.\d+)?))\s*[\])）】]?\s*$`)
+
+func vpsLineRate(name string) float64 {
+	m := vpsRateTail.FindStringSubmatch(vpsLineStem(name))
+	if m == nil {
+		return 1
+	}
+	for _, s := range m[1:] {
+		if r, err := strconv.ParseFloat(s, 64); err == nil && r > 0 {
+			return r
+		}
+	}
+	return 1
+}
 
 var vpsAIDomains = []string{
 	"anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com", "clau.de",
@@ -453,6 +475,7 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 		addr   string
 		server int
 		rank   int
+		dear   bool
 	}
 	var lines []line
 	servers := map[string]int{}
@@ -506,7 +529,26 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 			g.addrs = append(g.addrs, lines[i].addr)
 		}
 	}
+	serverRate := map[int]float64{}
+	for _, l := range lines {
+		serverRate[l.server] = max(serverRate[l.server], vpsLineRate(l.name))
+	}
+	cheap, dear := 0, 0
+	for _, rate := range serverRate {
+		if rate > 1 {
+			dear++
+		} else {
+			cheap++
+		}
+	}
+	tiered := !vpsSmartHighRate.Load() && cheap > 0 && dear > 0
+	for i := range lines {
+		lines[i].dear = tiered && serverRate[lines[i].server] > 1
+	}
 	sort.SliceStable(lines, func(i, j int) bool {
+		if lines[i].dear != lines[j].dear {
+			return !lines[i].dear
+		}
 		if lines[i].server != lines[j].server {
 			return lines[i].server < lines[j].server
 		}
@@ -514,10 +556,12 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	})
 	smart := make([]string, len(lines))
 	var perServer [][]string
+	var perServerDear []bool
 	for i, l := range lines {
 		smart[i] = l.name
 		if i == 0 || l.server != lines[i-1].server {
 			perServer = append(perServer, nil)
+			perServerDear = append(perServerDear, l.dear)
 		}
 		perServer[len(perServer)-1] = append(perServer[len(perServer)-1], l.name)
 	}
@@ -528,6 +572,28 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 			"name":             vpsSmartGroup,
 			"type":             "fallback",
 			"proxies":          smart,
+			"url":              vpsProbeURL,
+			"interval":         60,
+			"timeout":          2500,
+			"max-failed-times": 2,
+			"lazy":             false,
+		})
+	} else if tiered {
+		var cheapMembers, dearMembers []string
+		for i, names := range perServer {
+			if perServerDear[i] {
+				dearMembers = append(dearMembers, vpsServerGroup(raw, names))
+			} else {
+				cheapMembers = append(cheapMembers, vpsServerGroup(raw, names))
+			}
+		}
+		raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
+			"name": vpsSmartGroup,
+			"type": "fallback",
+			"proxies": []string{
+				vpsFastestOf(raw, vpsCheapGroup, cheapMembers),
+				vpsFastestOf(raw, vpsDearGroup, dearMembers),
+			},
 			"url":              vpsProbeURL,
 			"interval":         60,
 			"timeout":          2500,
@@ -717,6 +783,29 @@ func vpsServerGroup(raw *config.RawConfig, names []string) string {
 		"proxies":          slices.Clone(names),
 		"url":              vpsProbeURL,
 		"interval":         60,
+		"timeout":          2500,
+		"max-failed-times": 2,
+		"lazy":             false,
+		"hidden":           true,
+	})
+	return name
+}
+
+func vpsFastestOf(raw *config.RawConfig, name string, members []string) string {
+	if len(members) == 1 {
+		return members[0]
+	}
+	stem := name
+	for i := 2; vpsNameTaken(raw, name); i++ {
+		name = fmt.Sprintf("%s (%d)", stem, i)
+	}
+	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
+		"name":             name,
+		"type":             "url-test",
+		"proxies":          members,
+		"url":              vpsProbeURL,
+		"interval":         120,
+		"tolerance":        vpsSmartTolerance,
 		"timeout":          2500,
 		"max-failed-times": 2,
 		"lazy":             false,

@@ -23,12 +23,18 @@ CoreOptions coreOptions(Ref ref) {
       (state) => (testUrl: state.testUrl, mitmCapture: state.mitm.capture),
     ),
   );
-  final (:checkCertificate, :delayTestTimeout, :smartLines) = ref.watch(
+  final (
+    :checkCertificate,
+    :delayTestTimeout,
+    :smartLines,
+    :smartHighRate,
+  ) = ref.watch(
     appSettingProvider.select(
       (state) => (
         checkCertificate: state.checkCertificate,
         delayTestTimeout: state.delayTestTimeout,
         smartLines: state.smartLines,
+        smartHighRate: state.smartHighRate,
       ),
     ),
   );
@@ -38,6 +44,7 @@ CoreOptions coreOptions(Ref ref) {
     delayTestTimeout: delayTestTimeout,
     mitmCapture: rsFeature && mitmCapture,
     smartLines: smartLines,
+    smartHighRate: smartHighRate,
   );
 }
 

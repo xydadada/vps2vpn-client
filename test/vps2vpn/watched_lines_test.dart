@@ -30,6 +30,17 @@ void main() {
     expect(lines.map((l) => l.kind), ['hy2', 'tuic', 'hy2']);
   });
 
+  test("the servers behind the smart line's rate tiers are watched", () async {
+    final lines = await vpsCollectWatchedLines([
+      _group(vpsSmartGroupName, [vpsCheapGroupName, 'US']),
+      _group(vpsCheapGroupName, ['SG', 'sg-tuic']),
+      _group('SG', ['sg-hy2']),
+      _group('US', ['us-hy2']),
+    ], define: (name) async => _define(name));
+
+    expect(lines!.map((l) => l.name), ['sg-tuic', 'us-hy2', 'sg-hy2']);
+  });
+
   test('without the smart line the main selector is enough', () async {
     final lines = await vpsCollectWatchedLines([
       _group('Proxy', ['sg-hy2']),

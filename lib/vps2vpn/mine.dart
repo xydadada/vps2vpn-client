@@ -311,6 +311,37 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   },
                 ),
               ),
+              if (smart) ...[
+                Container(height: 1, color: p.line),
+                VpsRow(
+                  icon: VpsIcon.bolt,
+                  title: tr(
+                    context,
+                    '智能线路可以用高倍率节点',
+                    'Smart line may use dearer nodes',
+                  ),
+                  subtitle: tr(
+                    context,
+                    '默认只在 1 倍及以下的节点里挑，都连不上才用高倍率的；打开后谁快用谁，可能多扣流量',
+                    'Off, it picks among nodes billed at 1x or less and uses '
+                        'dearer ones only when none answers; on, the fastest '
+                        'wins, which may use up more data',
+                  ),
+                  trailing: VpsSwitch(
+                    value: ref.watch(
+                      appSettingProvider.select((s) => s.smartHighRate),
+                    ),
+                    onChanged: (v) {
+                      ref
+                          .read(appSettingProvider.notifier)
+                          .update((s) => s.copyWith(smartHighRate: v));
+                      ref
+                          .read(setupActionProvider.notifier)
+                          .applyProfileDebounce(force: true);
+                    },
+                  ),
+                ),
+              ],
               if (system.isDesktop) ...[
                 Container(height: 1, color: p.line),
                 VpsRow(
