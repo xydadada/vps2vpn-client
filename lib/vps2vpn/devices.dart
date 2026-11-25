@@ -382,9 +382,7 @@ final vpsDeviceSyncProvider = Provider.autoDispose<void>((ref) {
   Future<void> beat() async {
     final last = _beatAt[profileId];
     final now = DateTime.now();
-    if (last != null &&
-        now.difference(last) < const Duration(minutes: 1) &&
-        !ref.read(vpsRemovedProvider).contains(profileId)) {
+    if (last != null && now.difference(last) < const Duration(seconds: 10)) {
       return;
     }
     _beatAt[profileId] = now;
