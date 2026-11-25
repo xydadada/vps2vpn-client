@@ -386,7 +386,7 @@ bool vpsFeedbackOpen(WidgetRef ref) {
   return vpsApiBase(url) != null && (member == null || member.feedback);
 }
 
-Future<void> vpsShowFeedback(WidgetRef ref) =>
+Future<void> vpsShowFeedback() =>
     dialogs.showCommonDialog<void>(child: const _FeedbackDialog());
 
 class _FeedbackDialog extends ConsumerStatefulWidget {
@@ -728,7 +728,7 @@ class VpsFeedbackNotice extends ConsumerWidget {
             VpsButton(
               label: tr(context, '查看', 'View'),
               filled: true,
-              onTap: () => unawaited(vpsShowFeedback(ref)),
+              onTap: () => unawaited(vpsShowFeedback()),
             ),
           ],
         ),
@@ -774,7 +774,7 @@ class VpsFeedbackRow extends ConsumerWidget {
           VpsIconView(VpsIcon.chevron, size: 16, color: p.muted),
         ],
       ),
-      onTap: () => unawaited(vpsShowFeedback(ref)),
+      onTap: () => unawaited(vpsShowFeedback()),
     );
   }
 }

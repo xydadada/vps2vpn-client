@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:fl_clash/common/constant.dart' show defaultPrimaryColor;
 import 'package:fl_clash/common/dialog.dart' show dialogs;
+import 'package:prism_ui/banner.dart' show BannerLevel;
 import 'package:prism_ui/navigator.dart' show rootNavigatorKey;
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/vps2vpn/devices.dart';
+import 'package:fl_clash/vps2vpn/feedback.dart';
 import 'package:fl_clash/vps2vpn/mine.dart' show vpsThemeColors;
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/takeover_notice.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +37,7 @@ const _sizes = {
   'min': ui.Size(380, 400),
   'wide': ui.Size(1100, 720),
 };
+const _zh = ['zh'];
 const _tabs = {
   vpsTabHome: 'home',
   vpsTabServers: 'nodes',
@@ -61,6 +67,7 @@ class _ShotRun {
       await dir.create(recursive: true);
       await _settle(4000);
       await _round('empty', tabs: const [vpsTabHome], sizes: const ['default']);
+      await _round('audit-empty', tabs: _tabs.keys.toList(), locales: _zh);
 
       final sub = vpsLoopbackLink(Platform.environment['VPS2VPN_SHOT_SUB']);
       if (sub != null && container.read(profilesProvider).isEmpty) {
@@ -71,6 +78,7 @@ class _ShotRun {
       await _until(() => container.read(profilesProvider).isNotEmpty, 60);
       await _settle(5000);
       await _round('ready', tabs: const [vpsTabHome]);
+      await _round('audit-ready', tabs: _tabs.keys.toList(), locales: _zh);
 
       await _keyframes('connect');
       await _until(() => container.read(isStartProvider), 60);
@@ -79,6 +87,9 @@ class _ShotRun {
       await _round('connected', tabs: _tabs.keys.toList());
       await _scaled();
       await _alert('connected');
+      await _pages('audit-connected');
+      await _loading();
+      await _dialogs();
       for (final (color, _, en) in vpsThemeColors.skip(1)) {
         container
             .read(themeSettingProvider.notifier)
@@ -186,6 +197,136 @@ class _ShotRun {
       }
     }
   }
+
+  /// Long pages a screen at a time, top to bottom.
+  Future<void> _pages(String state) async {
+    _locale('zh');
+    for (final size in const ['default', 'wide']) {
+      await desktopWindow.setSize(_sizes[size]!);
+      await _settle(800);
+      for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+        _theme(theme);
+        for (final tab in _tabs.keys) {
+          vpsTab.value = tab;
+          await _settle(1200);
+          final scroll = _scroller();
+          if (scroll == null) continue;
+          final end = scroll.position.maxScrollExtent;
+          final step = scroll.position.viewportDimension * 0.85;
+          for (var i = 0; ; i++) {
+            final at = math.min(step * i, end);
+            scroll.position.jumpTo(at);
+            await _settle(500);
+            await _shoot(
+              '$state-${_tabs[tab]}-$size-${theme.name}-zh-p${i + 1}',
+            );
+            if (at >= end) break;
+          }
+          scroll.position.jumpTo(0);
+        }
+      }
+    }
+  }
+
+  ScrollableState? _scroller() {
+    ScrollableState? best;
+    void visit(Element e) {
+      if (e is StatefulElement && e.state is ScrollableState) {
+        final s = e.state as ScrollableState;
+        final p = s.position;
+        if (p.axis == Axis.vertical &&
+            p.hasContentDimensions &&
+            p.maxScrollExtent > (best?.position.maxScrollExtent ?? 0)) {
+          best = s;
+        }
+      }
+      e.visitChildren(visit);
+    }
+
+    _boundary.currentContext?.visitChildElements(visit);
+    return best;
+  }
+
+  Future<void> _loading() async {
+    await desktopWindow.setSize(_sizes['default']!);
+    _locale('zh');
+    for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+      _theme(theme);
+      for (final tab in const [vpsTabServers, vpsTabCheck, vpsTabClaude]) {
+        vpsTab.value = vpsTabHome;
+        await _settle(1500);
+        vpsTab.value = tab;
+        await _settle(500);
+        await _shoot('audit-loading-${_tabs[tab]}-default-${theme.name}-zh');
+      }
+    }
+  }
+
+  Future<void> _dialogs() async {
+    _locale('zh');
+    for (final size in const ['default', 'wide']) {
+      await desktopWindow.setSize(_sizes[size]!);
+      for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+        _theme(theme);
+        vpsTab.value = vpsTabHome;
+        await _settle(1200);
+        final tag = '$size-${theme.name}-zh';
+        Future<void> shot(String name, Future<Object?> Function() open) async {
+          unawaited(open());
+          await _settle(1800);
+          await _shoot('audit-dialog-$name-$tag');
+        }
+
+        Future<void> close() async {
+          rootNavigatorKey.currentState?.pop();
+          await _settle(800);
+        }
+
+        BuildContext here() => rootNavigatorKey.currentContext!;
+        await shot(
+          'takeover',
+          () => vpsShowTakeoverAsk(const ['Clash Verge', 'FlClash']),
+        );
+        await close();
+        await shot('feedback', vpsShowFeedback);
+        await close();
+        await shot('devices', vpsShowDevices);
+        await shot('kick', () => vpsAskKick(here()));
+        await close();
+        await close();
+        await shot('remove-subscription', () => vpsAskRemoveProfile(here()));
+        await close();
+        await shot(
+          'whats-new',
+          () => dialogs.showMessage(
+            title: '1.0.33 更新内容',
+            message: const TextSpan(
+              text: '首页标题在智能线路切换时不再来回跳；导航栏、标题栏和侧边栏的细节修整。',
+            ),
+          ),
+        );
+        await close();
+        dialogs.showBanner(
+          '订阅内容读不懂，可能链接不完整或服务器返回了错误页面。请向管理员确认链接。',
+          level: BannerLevel.error,
+        );
+        await _settle(1200);
+        await _shoot('audit-banner-error-$tag');
+        dialogs.showBanner(vpsRemovedText(here()));
+        await _settle(1200);
+        await _shoot('audit-banner-removed-$tag');
+        await _settle(6000);
+      }
+    }
+  }
+
+  void _locale(String locale) => container
+      .read(appSettingProvider.notifier)
+      .update((s) => s.copyWith(locale: locale));
+
+  void _theme(ThemeMode theme) => container
+      .read(themeSettingProvider.notifier)
+      .update((s) => s.copyWith(themeMode: theme));
 
   Future<void> _alert(String state) async {
     await desktopWindow.setSize(_sizes['default']!);

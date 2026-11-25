@@ -733,22 +733,44 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
 
 Future<void> _removeProfile(WidgetRef ref, int profileId) async {
   final context = globalState.navigatorKey.currentContext;
-  if (context == null) return;
-  final yes = await dialogs.showMessage(
-    title: tr(context, '移除这个订阅', 'Remove this subscription'),
-    message: TextSpan(
-      text: tr(
-        context,
-        '只从本机删掉这个订阅，账号本身不受影响。',
-        'Only this device forgets the subscription; the account stays.',
-      ),
-    ),
-    destructive: true,
-  );
-  if (yes != true) return;
+  if (context == null || !await vpsAskRemoveProfile(context)) return;
   await ref.read(profilesActionProvider.notifier).deleteProfile(profileId);
   ref.read(vpsRemovedProvider.notifier).mark(profileId, false);
 }
+
+Future<bool> vpsAskRemoveProfile(BuildContext context) async =>
+    await dialogs.showMessage(
+      title: tr(context, '移除这个订阅', 'Remove this subscription'),
+      message: TextSpan(
+        text: tr(
+          context,
+          '只从本机删掉这个订阅，账号本身不受影响。',
+          'Only this device forgets the subscription; the account stays.',
+        ),
+      ),
+      destructive: true,
+    ) ==
+    true;
+
+Future<void> vpsShowDevices() =>
+    dialogs.showCommonDialog<void>(child: const _DevicesDialog());
+
+Future<bool> vpsAskKick(BuildContext context) async =>
+    await dialogs.showMessage(
+      context: context,
+      title: tr(context, '踢掉其他所有设备', 'Sign out every other device'),
+      message: TextSpan(
+        text: tr(
+          context,
+          '你的其他所有设备（包括手机上用别的软件的）都会立刻断开，要用的话得重新导入新链接。',
+          'Every other device (phones using other apps too) disconnects at '
+              'once, and has to import the new link to come back.',
+        ),
+      ),
+      confirmText: tr(context, '踢掉', 'Sign them out'),
+      destructive: true,
+    ) ==
+    true;
 
 class VpsDevicesRow extends ConsumerWidget {
   const VpsDevicesRow({super.key});
@@ -776,9 +798,7 @@ class VpsDevicesRow extends ConsumerWidget {
                   'See which devices use this account; remove strangers',
                 ),
           trailing: VpsIconView(VpsIcon.chevron, size: 16, color: p.muted),
-          onTap: () => unawaited(
-            dialogs.showCommonDialog<void>(child: const _DevicesDialog()),
-          ),
+          onTap: () => unawaited(vpsShowDevices()),
         ),
       ),
     );
@@ -843,21 +863,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   });
 
   Future<void> _kick() async {
-    final yes = await dialogs.showMessage(
-      context: context,
-      title: tr(context, '踢掉其他所有设备', 'Sign out every other device'),
-      message: TextSpan(
-        text: tr(
-          context,
-          '你的其他所有设备（包括手机上用别的软件的）都会立刻断开，要用的话得重新导入新链接。',
-          'Every other device (phones using other apps too) disconnects at '
-              'once, and has to import the new link to come back.',
-        ),
-      ),
-      confirmText: tr(context, '踢掉', 'Sign them out'),
-      destructive: true,
-    );
-    if (yes != true || !mounted) return;
+    if (!await vpsAskKick(context) || !mounted) return;
     await _run(() async {
       final profile = ref.read(currentProfileProvider);
       final base = vpsApiBase(profile?.url ?? '');
