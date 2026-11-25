@@ -98,6 +98,16 @@ class Preferences {
     await preferences?.setString('vpsFeedback$key', value);
   }
 
+  Future<String?> getVpsConfigVersion(int profileId) async {
+    final preferences = await _store.value;
+    return preferences?.getString('vpsConfigVersion$profileId');
+  }
+
+  Future<void> setVpsConfigVersion(int profileId, String value) async {
+    final preferences = await _store.value;
+    await preferences?.setString('vpsConfigVersion$profileId', value);
+  }
+
   Future<void> saveShareState(SharedState shareState) async {
     final preferences = await _store.value;
     await preferences?.setString('sharedState', json.encode(shareState));

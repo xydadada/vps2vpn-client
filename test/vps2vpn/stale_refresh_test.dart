@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/stale_refresh.dart';
@@ -71,5 +73,57 @@ void main() {
     );
     const unlimited = VpsMember(name: 'Bo', enabled: true);
     expect(vpsHeaderBehindPanel(const SubscriptionInfo(), unlimited), isFalse);
+  });
+
+  group('config_version', () {
+    test('the panel field is read only when it looks like one', () {
+      expect(
+        VpsMember.fromJson({
+          'config_version': '0A1b2c3d4e5f6789',
+        }).configVersion,
+        '0a1b2c3d4e5f6789',
+      );
+      for (final bad in [null, '', 'not hex', 12, 'f' * 65]) {
+        expect(
+          VpsMember.fromJson({'config_version': bad}).configVersion,
+          isNull,
+        );
+      }
+    });
+
+    test('a new version fetches once and is kept after the fetch', () async {
+      String? stored = '1111111111111111';
+      var fetched = 0;
+      Future<bool> follow(String v) => vpsFollowConfigVersion(
+        version: v,
+        load: () async => stored,
+        save: (value) async => stored = value,
+        update: () async => fetched++,
+      );
+      expect(await follow('1111111111111111'), isFalse);
+      expect(fetched, 0);
+      expect(await follow('2222222222222222'), isTrue);
+      expect(fetched, 1);
+      expect(stored, '2222222222222222');
+      expect(await follow('2222222222222222'), isFalse);
+      expect(fetched, 1);
+    });
+
+    test(
+      'a failed fetch keeps the old version, so it is tried again',
+      () async {
+        String? stored = '1111111111111111';
+        await expectLater(
+          vpsFollowConfigVersion(
+            version: '2222222222222222',
+            load: () async => stored,
+            save: (value) async => stored = value,
+            update: () async => throw const SocketException('down'),
+          ),
+          throwsA(isA<SocketException>()),
+        );
+        expect(stored, '1111111111111111');
+      },
+    );
   });
 }

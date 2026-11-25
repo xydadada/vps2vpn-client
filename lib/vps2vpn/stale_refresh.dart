@@ -109,6 +109,57 @@ final vpsPanelSyncProvider = Provider.autoDispose<void>((ref) {
   );
 });
 
+/// Fetches the subscription when the panel's [version] is not the one the
+/// last fetch went with, and remembers it only once that fetch succeeded.
+Future<bool> vpsFollowConfigVersion({
+  required String version,
+  required Future<String?> Function() load,
+  required Future<void> Function(String) save,
+  required Future<void> Function() update,
+}) async {
+  if (await load() == version) return false;
+  await update();
+  await save(version);
+  return true;
+}
+
+final _configBusy = <int>{};
+final _configTriedAt = <int, DateTime>{};
+
+final vpsConfigVersionSyncProvider = Provider.autoDispose<void>((ref) {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+  final version = ref.watch(
+    vpsMemberProvider.select((s) => s.value?.member?.configVersion),
+  );
+  final profile = ref.watch(currentProfileProvider);
+  if (version == null ||
+      profile == null ||
+      profile.type != ProfileType.url ||
+      _configBusy.contains(profile.id)) {
+    return;
+  }
+  final now = DateTime.now();
+  final tried = _configTriedAt[profile.id];
+  if (tried != null && now.difference(tried) < const Duration(minutes: 1)) {
+    return;
+  }
+  _configBusy.add(profile.id);
+  final action = ref.read(profilesActionProvider.notifier);
+  unawaited(
+    vpsFollowConfigVersion(
+          version: version,
+          load: () => preferences.getVpsConfigVersion(profile.id),
+          save: (v) => preferences.setVpsConfigVersion(profile.id, v),
+          update: () async {
+            _configTriedAt[profile.id] = DateTime.now();
+            await action.updateProfile(profile);
+          },
+        )
+        .catchError((Object _) => false)
+        .whenComplete(() => _configBusy.remove(profile.id)),
+  );
+});
+
 final _toldDown = <String>{};
 
 /// The panel's word on its servers reaches the Core, and the smart line is

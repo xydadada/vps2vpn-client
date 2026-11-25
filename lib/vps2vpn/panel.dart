@@ -307,6 +307,7 @@ class VpsMember {
     this.nodes,
     this.feedback = false,
     this.feedbackUnread = 0,
+    this.configVersion,
     this.ai,
     this.client,
     this.throttled = false,
@@ -334,6 +335,9 @@ class VpsMember {
   final List<VpsNodeStatus>? nodes;
   final bool feedback;
   final int feedbackUnread;
+
+  /// Changes whenever this account's subscription would; null on other panels.
+  final String? configVersion;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
@@ -381,6 +385,11 @@ class VpsMember {
         _ => false,
       },
       feedbackUnread: _int(json['feedback_unread']),
+      configVersion: switch (json['config_version']) {
+        final String v when RegExp(r'^[0-9a-fA-F]{1,64}$').hasMatch(v) =>
+          v.toLowerCase(),
+        _ => null,
+      },
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
       throttled: json['throttled'] == true,
