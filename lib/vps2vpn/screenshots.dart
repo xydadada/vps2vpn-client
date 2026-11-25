@@ -132,12 +132,12 @@ class _ShotRun {
     }
   }
 
-  /// Connecting to connected, a frame every 250 ms, to review the motion.
+  /// Connecting to connected, back to back at first, to review the motion.
   Future<void> _keyframes() async {
     await _darkHome();
     container.read(commonActionProvider.notifier).toggleRunning();
-    for (var i = 0; i < 12; i++) {
-      await _settle(250);
+    for (var i = 0; i < 16; i++) {
+      await _settle(i < 10 ? 0 : 250);
       await _shoot('keyframe-connect$i-home-default-dark-zh');
     }
   }
