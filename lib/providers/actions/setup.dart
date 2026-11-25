@@ -287,6 +287,7 @@ class SetupAction extends _$SetupAction {
 
   Future<bool> _stop(_RunRequest request) async {
     vpsCancelTakeover();
+    vpsForgetForeignProxy();
     (Object, StackTrace)? unanswered;
     try {
       await _setCoreRunning(request);

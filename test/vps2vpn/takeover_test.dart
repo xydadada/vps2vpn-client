@@ -163,6 +163,27 @@ void main() {
       expect(p.isOurs(7897), isTrue);
     });
 
+    test('a replaced proxy port is kept on disk, never our own', () async {
+      String? stored = '[7897]';
+      vpsForeignPortsLoad = () async => stored;
+      vpsForeignPortsSave = (v) async => stored = v;
+      vpsReloadForeignPorts();
+      const theirs = VpsSystemProxy(enabled: true, server: '127.0.0.1:7891');
+      const ours = VpsSystemProxy(enabled: true, server: '127.0.0.1:7890');
+      expect(await vpsRememberForeignPorts([theirs, ours], 7890), {
+        7890,
+        7891,
+        7897,
+      });
+      expect(stored, contains('7891'));
+      expect(stored, isNot(contains('7890')));
+      vpsReloadForeignPorts();
+      expect(await vpsRememberForeignPorts([ours], 7890), {7890, 7891, 7897});
+      vpsForgetForeignProxy();
+      expect(stored, '[]');
+      expect(await vpsRememberForeignPorts([ours], 7890), {7890});
+    });
+
     test('reads the LAN connection record WinINet writes', () {
       const key =
           'HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections\r\n';

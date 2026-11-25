@@ -78,6 +78,16 @@ class Preferences {
     await preferences?.setString('vpsProfileHealth', json);
   }
 
+  Future<String?> getVpsForeignProxyPorts() async {
+    final preferences = await _store.value;
+    return preferences?.getString('vpsForeignProxyPorts');
+  }
+
+  Future<void> setVpsForeignProxyPorts(String value) async {
+    final preferences = await _store.value;
+    await preferences?.setString('vpsForeignProxyPorts', value);
+  }
+
   Future<bool> getVpsTakeoverAsked() async {
     final preferences = await _store.value;
     return preferences?.getBool('vpsTakeoverAsked') ?? false;

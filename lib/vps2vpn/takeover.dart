@@ -152,8 +152,59 @@ Map<int, int> parseParents(String lines) => {
     int.parse(m[1]!): int.parse(m[2]!),
 };
 
-/// Every local proxy port seen as the system proxy this run, not only now.
+/// Kept on disk: after a crash the system proxy is our own dead port.
 final _foreignProxyPorts = <int>{};
+var _foreignLoaded = false;
+
+Future<String?> Function() vpsForeignPortsLoad =
+    preferences.getVpsForeignProxyPorts;
+Future<void> Function(String) vpsForeignPortsSave =
+    preferences.setVpsForeignProxyPorts;
+
+Future<void> _loadForeignPorts() async {
+  if (_foreignLoaded) return;
+  _foreignLoaded = true;
+  try {
+    final list = jsonDecode(await vpsForeignPortsLoad() ?? '[]');
+    if (list is List) {
+      _foreignProxyPorts.addAll(
+        list.whereType<int>().where((p) => p > 0 && p < 65536),
+      );
+    }
+  } catch (_) {}
+}
+
+@visibleForTesting
+Future<Set<int>> vpsRememberForeignPorts(
+  Iterable<VpsSystemProxy?> proxies,
+  int ourPort,
+) async {
+  await _loadForeignPorts();
+  final before = _foreignProxyPorts.length;
+  for (final proxy in proxies) {
+    final port = loopbackProxyPort(proxy);
+    if (port != null && port != ourPort) _foreignProxyPorts.add(port);
+  }
+  if (_foreignProxyPorts.length != before) {
+    try {
+      await vpsForeignPortsSave(jsonEncode(_foreignProxyPorts.toList()));
+    } catch (_) {}
+  }
+  return {ourPort, ..._foreignProxyPorts.where((p) => p != ourPort)};
+}
+
+@visibleForTesting
+void vpsReloadForeignPorts() {
+  _foreignLoaded = false;
+  _foreignProxyPorts.clear();
+}
+
+void vpsForgetForeignProxy() {
+  _foreignLoaded = true;
+  if (_foreignProxyPorts.isEmpty) return;
+  _foreignProxyPorts.clear();
+  unawaited(vpsForeignPortsSave('[]').catchError((Object _) {}));
+}
 
 final _tracePath = Platform.environment['VPS2VPN_TAKEOVER_TRACE'];
 
@@ -175,11 +226,7 @@ String _proxyText(VpsSystemProxy? p) =>
 Future<Set<int>> _guardedPorts(int ourPort) async {
   final system = await readSystemProxy();
   final connection = await readConnectionProxy();
-  for (final proxy in [system, connection]) {
-    final port = loopbackProxyPort(proxy);
-    if (port != null && port != ourPort) _foreignProxyPorts.add(port);
-  }
-  final guarded = {ourPort, ..._foreignProxyPorts};
+  final guarded = await vpsRememberForeignPorts([system, connection], ourPort);
   _trace(
     'guarded $guarded; system ${_proxyText(system)}; '
     'connection ${_proxyText(connection)}',
