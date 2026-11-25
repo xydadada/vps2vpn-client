@@ -421,10 +421,13 @@ class _HeroState extends ConsumerState<_Hero> {
     final lineDown = on && delay != null && delay < 0;
     final onSince = _onSince;
     final tunReady = ref.watch(vpsTunReadyProvider).value;
+    final lineUp = on && delay != null && delay > 0;
+    final tunWaiting = lineUp && tunReady == null;
+    final tunStuck = lineUp && tunReady == false;
     final connecting =
         on &&
         block == null &&
-        (delay == null || delay == 0 || tunReady == null) &&
+        (delay == null || delay == 0 || tunWaiting) &&
         onSince != null &&
         DateTime.now().difference(onSince) < _connectWindow;
     final failure = isStart || !hasProfile ? null : _failure;
@@ -440,6 +443,8 @@ class _HeroState extends ConsumerState<_Hero> {
         ? (tr(context, '已暂停', 'Paused'), p.warn)
         : lineDown
         ? (tr(context, '已连接 · 线路无响应', 'Connected · line not answering'), p.warn)
+        : tunStuck
+        ? (tr(context, '已连接 · 网络还没通', 'Connected · not through yet'), p.warn)
         : on
         ? (tr(context, '已连接', 'Connected'), p.good)
         : (tr(context, '未连接', 'Not connected'), p.muted);
@@ -466,7 +471,7 @@ class _HeroState extends ConsumerState<_Hero> {
         ? p.bad
         : connecting
         ? null
-        : suspended || lineDown
+        : suspended || lineDown || tunStuck
         ? p.warn
         : on
         ? p.good
@@ -516,6 +521,15 @@ class _HeroState extends ConsumerState<_Hero> {
                       '当前线路没有响应。到「节点」换一条，或到「检测」看看原因。',
                       'The line is not answering. Pick another in Nodes, or see Check.',
                     )
+                  : tunStuck
+                  ? tr(
+                      context,
+                      '线路能连上，但本机的网页还打不开（虚拟网卡的路由或 DNS 没生效）。到「检测」看原因，或到「节点」换一条；还不行就把下方的「接管方式」改成系统代理。',
+                      'The line answers but pages do not load yet (the virtual '
+                          "adapter's routes or DNS are not working). See Check, "
+                          'or pick another node in Nodes; if that fails, set '
+                          'Takeover below to System proxy.',
+                    )
                   : dearRate != null
                   ? tr(
                       context,
@@ -553,7 +567,7 @@ class _HeroState extends ConsumerState<_Hero> {
           size: wide ? 148 : 132,
           label: !hasProfile
               ? tr(context, '导入', 'Import')
-              : connecting
+              : connecting && !tunWaiting
               ? tr(context, '连接中…', 'Connecting…')
               : isStart
               ? tr(context, '断开', 'Disconnect')
@@ -562,7 +576,7 @@ class _HeroState extends ConsumerState<_Hero> {
               : tr(context, '连接', 'Connect'),
           onTap: !hasProfile
               ? () => _importField.currentState?.submitOrFill()
-              : connecting
+              : connecting && !tunWaiting
               ? null
               : _toggle,
         );
