@@ -413,6 +413,7 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
       height: kHeaderHeight,
       backdropOpacity: simple ? null : backdropOpacity,
       fill: simple ? VpsPalette.of(context).bg : null,
+      backdrop: simple ? VpsBackdrop.above(lift: kHeaderHeight) : null,
       onDragStart: desktopWindow.startDragging,
       // rust_api answers title-bar double clicks on macOS by the system setting.
       onDoubleTap: system.isMacOS ? null : caption.toggleMaximized,
@@ -442,6 +443,7 @@ class WindowHeaderBar extends StatelessWidget {
     this.title,
     this.actions,
     this.fill,
+    this.backdrop,
   });
 
   final double height;
@@ -453,6 +455,9 @@ class WindowHeaderBar extends StatelessWidget {
 
   /// A flat color with no divider (vps2vpn simple mode).
   final Color? fill;
+
+  /// Painted in place of the bar's colour, under the title and buttons.
+  final Widget? backdrop;
 
   @override
   Widget build(BuildContext context) {
@@ -477,15 +482,17 @@ class WindowHeaderBar extends StatelessWidget {
                   onDragStart();
                 },
                 onDoubleTap: onDoubleTap,
-                child: ColoredBox(
-                  color:
-                      fill ??
-                      (backdropOpacity != null
-                          ? colorScheme.chromeSurface.withValues(
-                              alpha: backdropOpacity,
-                            )
-                          : colorScheme.chromeSurface),
-                ),
+                child:
+                    backdrop ??
+                    ColoredBox(
+                      color:
+                          fill ??
+                          (backdropOpacity != null
+                              ? colorScheme.chromeSurface.withValues(
+                                  alpha: backdropOpacity,
+                                )
+                              : colorScheme.chromeSurface),
+                    ),
               ),
             ),
             if (title != null)

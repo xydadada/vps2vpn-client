@@ -1503,9 +1503,14 @@ class _IconPainter extends CustomPainter {
 
 /// The background: deep night with two soft glows (dark) or warm paper (light).
 class VpsBackdrop extends StatelessWidget {
-  const VpsBackdrop({super.key, required this.child});
+  const VpsBackdrop({super.key, required Widget this.child}) : lift = 0;
 
-  final Widget child;
+  /// The strip [lift] tall right above a [VpsBackdrop]: the title bar paints
+  /// it, so the glow and grain run on under the window buttons.
+  const VpsBackdrop.above({super.key, required this.lift}) : child = null;
+
+  final Widget? child;
+  final double lift;
 
   @override
   Widget build(BuildContext context) {
@@ -1526,23 +1531,24 @@ class VpsBackdrop extends StatelessWidget {
             return Stack(
               children: [
                 Positioned(
-                  top: -360,
+                  top: -360 + lift,
                   right: -260,
                   child: _Glow(
                     color: color.withValues(alpha: p.dark ? 0.13 : 0.10),
                     size: 820,
                   ),
                 ),
-                Positioned(
-                  bottom: -380,
-                  left: -260,
-                  child: _Glow(
-                    color: color.withValues(alpha: p.dark ? 0.09 : 0.07),
-                    size: 720,
+                if (lift == 0)
+                  Positioned(
+                    bottom: -380,
+                    left: -260,
+                    child: _Glow(
+                      color: color.withValues(alpha: p.dark ? 0.09 : 0.07),
+                      size: 720,
+                    ),
                   ),
-                ),
-                const Positioned.fill(child: _Grain()),
-                Positioned.fill(child: child!),
+                Positioned.fill(child: _Grain(dy: lift)),
+                if (child != null) Positioned.fill(child: child),
               ],
             );
           },
@@ -1574,7 +1580,9 @@ Uint8List vpsGrainPixels(int side) {
 
 /// A faint film grain over the glows, so their gradients do not band.
 class _Grain extends StatefulWidget {
-  const _Grain();
+  const _Grain({this.dy = 0});
+
+  final double dy;
 
   @override
   State<_Grain> createState() => _GrainState();
@@ -1612,15 +1620,18 @@ class _GrainState extends State<_Grain> {
     final image = _image;
     if (image == null) return const SizedBox.shrink();
     return IgnorePointer(
-      child: RepaintBoundary(child: CustomPaint(painter: _GrainPainter(image))),
+      child: RepaintBoundary(
+        child: CustomPaint(painter: _GrainPainter(image, widget.dy)),
+      ),
     );
   }
 }
 
 class _GrainPainter extends CustomPainter {
-  _GrainPainter(this.image);
+  _GrainPainter(this.image, this.dy);
 
   final ui.Image image;
+  final double dy;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1631,13 +1642,13 @@ class _GrainPainter extends CustomPainter {
           image,
           TileMode.repeated,
           TileMode.repeated,
-          Matrix4.identity().storage,
+          Matrix4.translationValues(0, dy, 0).storage,
         ),
     );
   }
 
   @override
-  bool shouldRepaint(_GrainPainter old) => old.image != image;
+  bool shouldRepaint(_GrainPainter old) => old.image != image || old.dy != dy;
 }
 
 class _Glow extends StatelessWidget {
