@@ -70,6 +70,23 @@ jobs:
           path: out
           if-no-files-found: ignore
 
+  background:
+    needs: shots
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: shots-after
+          path: after
+      - name: The background is smooth, not static
+        run: |
+          python3 -m venv "$RUNNER_TEMP/pil"
+          "$RUNNER_TEMP/pil/bin/pip" install --quiet 'pillow==11.3.0'
+          "$RUNNER_TEMP/pil/bin/python" -I .github/scripts/shots_noise.py after/pages "$RUNNER_TEMP/noise.txt"
+
   compare:
     needs: shots
     if: inputs.before != ''
