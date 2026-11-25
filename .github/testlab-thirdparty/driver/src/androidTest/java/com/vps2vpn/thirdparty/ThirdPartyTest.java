@@ -161,6 +161,11 @@ public class ThirdPartyTest {
 
         context.startActivity(launch.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
         sleep(4_000);
+        // Karing opens on its "Add Profile" menu while it has none, and stays there after the import: go back home.
+        for (int i = 0; i < 3 && device.findObject(By.desc(Pattern.compile("^Add Profile Link$"))) != null; i++) {
+            device.pressBack();
+            sleep(2_500);
+        }
         note(name + " before connecting");
         boolean tapped = tap(CONNECT, 15_000);
         if (!tapped && device.findObject(By.desc(WIZARD_BAR)) == null) {   // a bare switch or round button
