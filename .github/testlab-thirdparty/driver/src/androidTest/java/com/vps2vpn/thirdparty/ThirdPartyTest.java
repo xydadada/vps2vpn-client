@@ -248,7 +248,8 @@ public class ThirdPartyTest {
 
     private boolean tap(String regex, long timeoutMs) {
         // Flutter puts a button's words in content-desc, sometimes with a second line under them.
-        Pattern pattern = Pattern.compile("^\\s*(?:" + regex + ")\\s*(?:\\n.*)?$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        // Karing's language page reads "Language\nNext", so one line above the words is allowed too.
+        Pattern pattern = Pattern.compile("^(?:[^\\n]*\\n)?\\s*(?:" + regex + ")\\s*(?:\\n.*)?$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         long end = System.currentTimeMillis() + timeoutMs;
         do {
             for (BySelector selector : new BySelector[]{By.text(pattern), By.desc(pattern)}) {

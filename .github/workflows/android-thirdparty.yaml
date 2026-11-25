@@ -18,7 +18,7 @@ permissions:
   id-token: write
 
 env:
-  DEVICES: 'model=MediumPhone.arm,version=34'
+  DEVICES: 'model=CPH2449,version=34'
   PROBE: '0'
   HIDDIFY_TAG: v5.9.15
   KARING_TAG: v1.2.26.2934
@@ -58,9 +58,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release download "$HIDDIFY_TAG" -R hiddify/hiddify-app -p 'Hiddify-Android-arm64.apk' -D apk
-          gh release download "$KARING_TAG" -R KaringX/karing -p '*_android_arm64-v8a.apk' -D apk
+          gh release download "$KARING_TAG" -R KaringX/karing -p 'karing_1.2.26.2934_android_arm64-v8a.apk' -D apk
           ls -l apk
-          sha256sum apk/*.apk
+          # pinned: the same values GitHub publishes as each release asset's digest
+          sha256sum -c - <<'SUMS'
+          d769cc01418df7b3871f4930b57527c00b4bc58ea10522d674b30c35e37f8bd9  apk/Hiddify-Android-arm64.apk
+          1f6a52d28dde180fef0bd052fc5b1eb9537c4aa3f54ccdf848601d94bba2e75e  apk/karing_1.2.26.2934_android_arm64-v8a.apk
+          SUMS
           aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
           echo "PKG_HIDDIFY=$("$aapt2" dump packagename apk/Hiddify-Android-arm64.apk)" >> "$GITHUB_ENV"
           echo "PKG_KARING=$("$aapt2" dump packagename apk/karing_*_android_arm64-v8a.apk)" >> "$GITHUB_ENV"
