@@ -165,22 +165,24 @@ class _ShotRun {
   /// Windows display scaling: the same scene rasterised at 125% and 150%,
   /// where a tile drawn in logical pixels could beat against the pixel grid.
   Future<void> _scaled() async {
-    await desktopWindow.setSize(_sizes['default']!);
-    await _settle(800);
     vpsTab.value = vpsTabHome;
     container
         .read(appSettingProvider.notifier)
         .update((s) => s.copyWith(locale: 'zh'));
-    for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
-      container
-          .read(themeSettingProvider.notifier)
-          .update((s) => s.copyWith(themeMode: theme));
-      await _settle(1200);
-      for (final (ratio, tag) in const [(1.25, '125'), (1.5, '150')]) {
-        await _shoot(
-          'scaled$tag-home-default-${theme.name}-zh',
-          pixelRatio: ratio,
-        );
+    for (final size in const ['default', 'wide']) {
+      await desktopWindow.setSize(_sizes[size]!);
+      await _settle(800);
+      for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+        container
+            .read(themeSettingProvider.notifier)
+            .update((s) => s.copyWith(themeMode: theme));
+        await _settle(1200);
+        for (final (ratio, tag) in const [(1.25, '125'), (1.5, '150')]) {
+          await _shoot(
+            'scaled$tag-home-$size-${theme.name}-zh',
+            pixelRatio: ratio,
+          );
+        }
       }
     }
   }
