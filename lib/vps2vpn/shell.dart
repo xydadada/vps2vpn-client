@@ -13,6 +13,7 @@ import 'package:fl_clash/vps2vpn/claude_check.dart';
 import 'package:fl_clash/vps2vpn/check.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/local_network.dart';
 import 'package:fl_clash/vps2vpn/mine.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
@@ -249,12 +250,17 @@ class _SideStatus extends ConsumerWidget {
             delayProvider(proxyName: group.name, testUrl: group.testUrl),
           );
     final lineDown = on && delay != null && delay < 0;
+    final localNet = lineDown ? ref.watch(vpsLocalNetProvider).value : null;
     final (title, dotColor) = !hasProfile
         ? (tr(context, '未导入订阅', 'No subscription'), p.muted)
         : block != null
         ? (vpsAccountBlockReason(context, block), p.bad)
         : suspended
         ? (tr(context, '已暂停', 'Paused'), p.warn)
+        : localNet == VpsLocalNet.offline
+        ? (tr(context, '本机没有联网', 'This computer is offline'), p.warn)
+        : localNet == VpsLocalNet.portal
+        ? (tr(context, '网络需要先登录', 'This network wants a login'), p.warn)
         : lineDown
         ? (tr(context, '线路无响应', 'Line not responding'), p.warn)
         : on

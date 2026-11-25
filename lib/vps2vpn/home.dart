@@ -17,6 +17,7 @@ import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/local_network.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/screenshots.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
@@ -28,6 +29,7 @@ import 'package:fl_clash/vps2vpn/tray_menu.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 export 'package:fl_clash/vps2vpn/flags.dart'
     show vpsSmartGroupName, vpsAIGroupName;
@@ -310,6 +312,15 @@ class _HeroState extends ConsumerState<_Hero> {
     ref.read(commonActionProvider.notifier).toggleRunning();
   }
 
+  /// A login page cannot load through a line that is down, so off first.
+  Future<void> _openLogin() async {
+    if (ref.read(isStartProvider)) _toggle();
+    for (var i = 0; i < 30 && ref.read(isStartProvider); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    await launchUrl(vpsPortalPage, mode: LaunchMode.externalApplication);
+  }
+
   /// "Connected" waits for the line to answer once; a start the app rolled
   /// back by itself says why, in place.
   void _onStartChanged(bool? was, bool now) {
@@ -419,6 +430,11 @@ class _HeroState extends ConsumerState<_Hero> {
             delayProvider(proxyName: group.name, testUrl: group.testUrl),
           );
     final lineDown = on && delay != null && delay < 0;
+    final localNet = lineDown ? ref.watch(vpsLocalNetProvider) : null;
+    final netChecking = localNet != null && !localNet.hasValue;
+    final netOff = localNet?.value == VpsLocalNet.offline;
+    final portal = localNet?.value == VpsLocalNet.portal;
+    final netFine = localNet?.value == VpsLocalNet.online;
     final onSince = _onSince;
     final tunReady = ref.watch(vpsTunReadyProvider).value;
     final lineUp = on && delay != null && delay > 0;
@@ -441,6 +457,12 @@ class _HeroState extends ConsumerState<_Hero> {
         ? (tr(context, '连接中…', 'Connecting…'), p.muted)
         : suspended
         ? (tr(context, '已暂停', 'Paused'), p.warn)
+        : netOff
+        ? (tr(context, '本机没有联网', 'This computer is offline'), p.warn)
+        : portal
+        ? (tr(context, '网络需要先登录', 'This network wants a login'), p.warn)
+        : netChecking
+        ? (tr(context, '已连接 · 正在查原因', 'Connected · finding out why'), p.warn)
         : lineDown
         ? (tr(context, '已连接 · 线路无响应', 'Connected · line not answering'), p.warn)
         : tunStuck
@@ -514,6 +536,35 @@ class _HeroState extends ConsumerState<_Hero> {
                       context,
                       '连接已暂停，恢复后自动继续，也可点击"断开"停止',
                       'Connection paused; resumes automatically, or tap Disconnect',
+                    )
+                  : netOff
+                  ? tr(
+                      context,
+                      '本机没有联网，请检查网线或 Wi‑Fi。联网后线路会自己恢复。',
+                      'This computer is offline: check the cable or Wi-Fi. The '
+                          'line comes back by itself once it is online.',
+                    )
+                  : portal
+                  ? tr(
+                      context,
+                      '当前网络需要先登录（酒店、机场、公司常见）。点下方按钮会先断开，再打开登录页；登录后再连接。',
+                      'This network wants a login first (hotels, airports, '
+                          'offices). The button below disconnects and opens '
+                          'the login page; connect again once logged in.',
+                    )
+                  : netChecking
+                  ? tr(
+                      context,
+                      '线路没有响应，正在看是本机网络还是线路的问题…',
+                      'The line is not answering; checking whether it is this '
+                          "computer's network or the line…",
+                    )
+                  : lineDown && netFine
+                  ? tr(
+                      context,
+                      '本机网络正常，但当前线路没有响应。到「节点」换一条，或到「检测」看看原因。',
+                      'Your network is fine but the line is not answering. Pick '
+                          'another in Nodes, or see Check.',
                     )
                   : lineDown
                   ? tr(
@@ -636,6 +687,14 @@ class _HeroState extends ConsumerState<_Hero> {
               textAlign: wide ? TextAlign.start : TextAlign.center,
               style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
             ),
+            if (portal) ...[
+              const SizedBox(height: 12),
+              VpsButton(
+                label: tr(context, '断开并打开登录页', 'Disconnect and log in'),
+                filled: true,
+                onTap: _openLogin,
+              ),
+            ],
           ],
         );
         // The details as quiet capsules: latency coloured by how fast it is,
