@@ -6,15 +6,16 @@
 
 | 项目 | 值 |
 |---|---|
-| 最新正式版（Latest） | **v1.0.31**，commit `4120430e73cd5d3ff39cea40f595e6d5050c23d5`（2026-11-25 发布；1.0.29、1.0.30 没有单独发，并进了 1.0.31；等服务端核对 SHA256 和 `.sig` 并同步 clientsync） |
-| 上一版 | v1.0.28，commit `36606e0e2d0e727d11d4bbca677319312875c0d2` |
-| `vps2vpn` 分支头 | `4120430e`（= v1.0.31） |
+| 最新正式版（Latest） | **v1.0.32**，commit `3439ae243eb79de536a9bacabc6f9ca29bc8d083`（2026-11-25 发布；修 1.0.31 背景雪花噪点，其余同 1.0.31；等服务端核对 SHA256 和 `.sig` 并同步 clientsync） |
+| 上一版 | v1.0.28，commit `36606e0e2d0e727d11d4bbca677319312875c0d2`（v1.0.31 因背景雪花已撤回为预发布，不再当正式版） |
+| `vps2vpn` 分支头 | `77f7274c`（v1.0.32 之后只加了截图背景粗糙度检查） |
 | 安卓 | 还没有正式 APK，服务端 `files.android` 仍未配置。模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试结果见第 5 节"Firebase Test Lab"。预发布 `test-android-1.0.26` 只当预发布，不转正 |
 
-**English summary.** Latest client is v1.0.31 (upgrade test from v1.0.28 66 PASS, coexist 94 PASS, every harsh scenario passes on both runners; the server still has to re-check SHA256 and `.sig`). 1.0.29 and 1.0.30 were never released on their own: harsh dirty caught a takeover regression in 1.0.30 (a bare core on the system proxy port could be spared when the takeover read the system proxy after ours was on), and the fix shipped in 1.0.31 with the smart line by billing rate, node status, config_version refetch, expiry days, local-network checks, feedback and device management. Android has no release: the emulator freezes about a second after connecting; real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
+**English summary.** Latest client is v1.0.32 (upgrade test from v1.0.28 66 PASS, coexist 94 PASS, every harsh scenario passes on both runners, background roughness 2.8 dark and light; the server still has to re-check SHA256 and `.sig`). v1.0.31 was pulled back to a prerelease because the page background was covered in static (grain pixels not premultiplied); 1.0.32 fixes that and `screenshots.yaml` now fails when the background outside the cards is rough. 1.0.29 and 1.0.30 were never released on their own: harsh dirty caught a takeover regression in 1.0.30 (a bare core on the system proxy port could be spared when the takeover read the system proxy after ours was on), and the fix shipped in 1.0.31 with the smart line by billing rate, node status, config_version refetch, expiry days, local-network checks, feedback and device management. Android has no release: the emulator freezes about a second after connecting; real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
 
 | 版本 | 内容 | 构建 | 升级测试 | 共存测试 | 源码检查 |
 |---|---|---|---|---|---|
+| 1.0.32 | 1.0.31 的全部改动 + 背景颗粒按预乘像素生成（1.0.31 背景满屏雪花）；截图背景粗糙度深色 2.8、浅色 2.8（上限 6） | 45590862883 | 45593469152，66 PASS（含从 v1.0.28 升级） | 45593475198，94 PASS；harsh 45593487887 全部通过；截图 45593495191 | 45584491830 |
 | 1.0.31 | 1.0.29/1.0.30 的全部改动 + 节点状态、config_version、到期日、本机网络判断、一键反馈、设备管理、takeover 修复（被替换的系统代理端口存盘） | 45577426961 | 45579327115，66 PASS（含从 v1.0.28 升级） | 45579336511，94 PASS；harsh 45579344370 全部通过 | 45575835875 |
 | 1.0.28 | "另一个 VPN 开着"提醒 + harsh 脚本修复（chaos、soak 的网卡选择；users 第二账户只停自己的进程） | 45166822301 | 45334152519，66 PASS（含从 v1.0.27 升级） | 45168676856，94 PASS | 45166802653 |
 | 1.0.27 | 系统代理断开时还原原设置（88c8c522）+ 核心崩溃后自动拉起（3 次/5 分钟）+ harsh 脚本修复 | 45142883757 | 45144760127，66 PASS（含从 v1.0.26 升级） | 45144767934，94 PASS | 45142874060 |
