@@ -109,7 +109,13 @@ class VpsShell extends StatelessWidget {
                   }
                   return Stack(
                     children: [
-                      Positioned.fill(child: body),
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        right: 0,
+                        bottom: _barClearance,
+                        child: body,
+                      ),
                       Positioned(
                         left: 16,
                         right: 16,
@@ -131,6 +137,10 @@ class VpsShell extends StatelessWidget {
     );
   }
 }
+
+/// The floating bar (66 tall, 16 off the bottom) and a gap above it: pages
+/// end here, so no card is cut off under the bar.
+const _barClearance = 90.0;
 
 List<(VpsIcon, String)> _tabs(BuildContext context) => [
   (VpsIcon.home, tr(context, '概览', 'Overview')),
@@ -532,8 +542,8 @@ class VpsPage extends StatelessWidget {
             side,
             wide ? 30 : 18,
             side,
-            // The shell floats its bottom bar below 760 window width.
-            MediaQuery.sizeOf(context).width < 760 ? 100 : 36,
+            // Below 760 the page already ends above the floating bar.
+            MediaQuery.sizeOf(context).width < 760 ? 10 : 36,
           ),
           child: Center(
             child: ConstrainedBox(
