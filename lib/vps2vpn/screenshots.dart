@@ -72,9 +72,10 @@ class _ShotRun {
       await _settle(5000);
       await _round('ready', tabs: const [vpsTabHome]);
 
-      container.read(commonActionProvider.notifier).toggleRunning();
+      await _keyframes();
       await _until(() => container.read(isStartProvider), 60);
       await _settle(15000);
+      await _breath();
       await _round('connected', tabs: _tabs.keys.toList());
       await _scaled();
       await _alert('connected');
@@ -129,6 +130,36 @@ class _ShotRun {
         }
       }
     }
+  }
+
+  /// Connecting to connected, a frame every 250 ms, to review the motion.
+  Future<void> _keyframes() async {
+    await _darkHome();
+    container.read(commonActionProvider.notifier).toggleRunning();
+    for (var i = 0; i < 12; i++) {
+      await _settle(250);
+      await _shoot('keyframe-connect$i-home-default-dark-zh');
+    }
+  }
+
+  Future<void> _breath() async {
+    await _darkHome();
+    for (var i = 0; i < 8; i++) {
+      await _shoot('keyframe-breath$i-home-default-dark-zh');
+      await _settle(500);
+    }
+  }
+
+  Future<void> _darkHome() async {
+    await desktopWindow.setSize(_sizes['default']!);
+    vpsTab.value = vpsTabHome;
+    container
+        .read(appSettingProvider.notifier)
+        .update((s) => s.copyWith(locale: 'zh'));
+    container
+        .read(themeSettingProvider.notifier)
+        .update((s) => s.copyWith(themeMode: ThemeMode.dark));
+    await _settle(1200);
   }
 
   /// Windows display scaling: the same scene rasterised at 125% and 150%,
