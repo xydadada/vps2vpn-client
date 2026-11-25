@@ -96,6 +96,46 @@ void main() {
     }
   });
 
+  testWidgets('grey and status text read at AA on a card, hue kept', (
+    tester,
+  ) async {
+    for (final brightness in Brightness.values) {
+      for (final seed in [null, ...seeds]) {
+        final p = await _paletteUnder(
+          tester,
+          seed: seed,
+          brightness: brightness,
+        );
+        for (final role in [p.soft, p.muted, p.accent, p.good, p.warn, p.bad]) {
+          final body = p.ink(role);
+          final large = p.ink(role, large: true);
+          final why = '$brightness $seed $role';
+          expect(
+            _contrast(body, p.card),
+            greaterThanOrEqualTo(4.5),
+            reason: why,
+          );
+          expect(
+            _contrast(large, p.card),
+            greaterThanOrEqualTo(3),
+            reason: why,
+          );
+          if (_contrast(role, p.card) >= 4.5) expect(body, role, reason: why);
+          final hue = HSLColor.fromColor(role);
+          if (hue.saturation > 0.2) {
+            expect(
+              HSLColor.fromColor(body).hue,
+              closeTo(hue.hue, 3),
+              reason: why,
+            );
+          }
+        }
+        expect(p.ink(p.text), p.text);
+        expect(p.ink(p.line), p.line);
+      }
+    }
+  });
+
   test('the lightness search lands inside the asked luminance', () {
     for (final seed in seeds) {
       final lum = vpsAtLuminance(

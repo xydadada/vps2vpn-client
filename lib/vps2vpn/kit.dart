@@ -65,6 +65,19 @@ HSLColor vpsAtLuminance(HSLColor c, double min, double max) {
   return c.withLightness(lum < min ? hi : lo);
 }
 
+Color vpsReadable(Color c, Color on, double ratio) {
+  final l = on.computeLuminance();
+  final up = l < 0.18;
+  final edge = up ? ratio * (l + 0.05) - 0.05 : (l + 0.05) / ratio - 0.05;
+  final now = c.computeLuminance();
+  if (up ? now >= edge : now <= edge) return c;
+  return vpsAtLuminance(
+    HSLColor.fromColor(c),
+    up ? edge : 0,
+    up ? 1 : edge,
+  ).toColor();
+}
+
 class VpsPalette {
   const VpsPalette._({
     required this.dark,
@@ -182,6 +195,24 @@ class VpsPalette {
   );
 
   static final _tinted = <(int, bool), VpsPalette>{};
+  static final _inks = <(int, int, bool), Color>{};
+
+  /// Grey and status text toned to read at AA on a card; dots and fills keep [c].
+  Color ink(Color c, {bool large = false}) {
+    if (c != soft &&
+        c != muted &&
+        c != accent &&
+        c != good &&
+        c != warn &&
+        c != bad) {
+      return c;
+    }
+    return _inks.putIfAbsent((
+      c.toARGB32(),
+      card.toARGB32(),
+      large,
+    ), () => vpsReadable(c, card, large ? 3 : 4.5));
+  }
 
   static VpsPalette of(BuildContext context) {
     final base = context.colorScheme.brightness == Brightness.dark
@@ -302,7 +333,10 @@ TextStyle vpsText(
   fontFamilyFallback: vpsFontFallback,
   fontSize: size,
   fontWeight: weight,
-  color: color ?? p.text,
+  color: p.ink(
+    color ?? p.text,
+    large: size >= 24 || size >= 18.66 && weight.value >= 700,
+  ),
   height: height,
   letterSpacing: spacing,
   fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
