@@ -275,7 +275,7 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
             onTap: () => vpsTab.value = vpsTabHome,
             child: Text(
               tr(context, '先连接，再来这里检查', 'Connect first, then check here'),
-              style: vpsText(p, size: 14, color: p.warn),
+              style: vpsText(p, type: VpsType.body, color: p.warn),
             ),
           )
         else

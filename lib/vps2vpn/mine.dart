@@ -178,7 +178,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                             : tr(context, '全部更新', 'Update all'),
                         style: vpsText(
                           p,
-                          size: 13,
+                          type: VpsType.subhead,
                           weight: FontWeight.w600,
                           color: p.accent,
                         ),
@@ -210,7 +210,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 profiles.isEmpty
                     ? tr(context, '导入订阅', 'Import a subscription')
                     : tr(context, '导入更多订阅', 'Import another'),
-                style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                style: vpsText(
+                  p,
+                  type: VpsType.callout,
+                  weight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -219,7 +223,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   '粘贴或输入订阅链接后点"导入"，也可以导入本地配置文件',
                   'Paste or type the link, then tap Import; or import a local config file',
                 ),
-                style: vpsText(p, size: 13, color: p.soft),
+                style: vpsText(p, type: VpsType.subhead, color: p.soft),
               ),
               const SizedBox(height: 14),
               // Added: the next step is connecting, which lives on Home.
@@ -420,17 +424,24 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(() {
-                      try {
-                        return 'vps2vpn  v${globalState.packageInfo.version}';
-                      } catch (_) {
-                        return 'vps2vpn';
-                      }
-                    }(), style: vpsText(p, size: 15, weight: FontWeight.w600)),
+                    Text(
+                      () {
+                        try {
+                          return 'vps2vpn  v${globalState.packageInfo.version}';
+                        } catch (_) {
+                          return 'vps2vpn';
+                        }
+                      }(),
+                      style: vpsText(
+                        p,
+                        type: VpsType.callout,
+                        weight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       tr(context, '你的私有网络客户端', 'Your private network client'),
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(p, type: VpsType.footnote, color: p.soft),
                     ),
                   ],
                 ),
@@ -459,7 +470,12 @@ class _LegalLineState extends State<_LegalLine> {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final style = vpsText(p, size: 11, color: p.muted, height: 1.6);
+    final style = vpsText(
+      p,
+      type: VpsType.caption,
+      color: p.muted,
+      height: 1.6,
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 8),
       child: Column(
@@ -751,7 +767,7 @@ class _ChoiceRow extends StatelessWidget {
           child: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+            style: vpsText(p, type: VpsType.callout, weight: FontWeight.w500),
           ),
         ),
       ],
@@ -863,7 +879,11 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                       profile.realLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(
+                        p,
+                        type: VpsType.callout,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     Text(
                       [
@@ -891,7 +911,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                       ].join(' · '),
                       style: vpsText(
                         p,
-                        size: 12.5,
+                        type: VpsType.footnote,
                         color: selected ? p.accent : p.soft,
                       ),
                     ),
@@ -917,7 +937,12 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
             const SizedBox(height: 10),
             Text(
               failing,
-              style: vpsText(p, size: 12.5, color: p.warn, height: 1.45),
+              style: vpsText(
+                p,
+                type: VpsType.footnote,
+                color: p.warn,
+                height: 1.45,
+              ),
             ),
           ],
           if (profile.url.isNotEmpty &&
@@ -969,11 +994,14 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                       '已用 ${used.traffic.show} / ${total.traffic.show}',
                       '${used.traffic.show} of ${total.traffic.show} used',
                     ),
-                    style: vpsText(p, size: 12.5, color: p.soft),
+                    style: vpsText(p, type: VpsType.footnote, color: p.soft),
                   ),
                 const Spacer(),
                 if (expire != null)
-                  Text(expire, style: vpsText(p, size: 12.5, color: p.soft)),
+                  Text(
+                    expire,
+                    style: vpsText(p, type: VpsType.footnote, color: p.soft),
+                  ),
               ],
             ),
           ],

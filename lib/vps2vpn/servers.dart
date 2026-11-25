@@ -229,7 +229,11 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                   hasProfile
                       ? tr(context, '暂无可选节点', 'No nodes to choose')
                       : tr(context, '尚未导入订阅', 'No subscription yet'),
-                  style: vpsText(p, size: 17, weight: FontWeight.w600),
+                  style: vpsText(
+                    p,
+                    type: VpsType.headline,
+                    weight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -239,7 +243,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                     'Import a subscription in Settings and its nodes appear here',
                   ),
                   textAlign: TextAlign.center,
-                  style: vpsText(p, size: 13.5, color: p.soft),
+                  style: vpsText(p, type: VpsType.subhead, color: p.soft),
                 ),
                 if (!hasProfile) ...[
                   const SizedBox(height: 18),
@@ -459,7 +463,7 @@ class _GroupTab extends StatelessWidget {
           label,
           style: vpsText(
             p,
-            size: 13.5,
+            type: VpsType.subhead,
             weight: selected ? FontWeight.w600 : FontWeight.w500,
             color: selected ? p.text : p.soft,
           ),
@@ -553,7 +557,11 @@ class _ProxyCard extends ConsumerWidget {
                           shown.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: vpsText(p, size: 14, weight: FontWeight.w600),
+                          style: vpsText(
+                            p,
+                            type: VpsType.body,
+                            weight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       if (rate != null && rate != 1) ...[
@@ -620,7 +628,7 @@ class _ProxyCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: vpsText(
                       p,
-                      size: 12,
+                      type: VpsType.footnote,
                       color: busy
                           ? p.warn
                           : proxy.name == vpsSmartGroupName
@@ -701,7 +709,7 @@ class _DelayCellState extends State<_DelayCell> {
             textAlign: TextAlign.right,
             style: vpsText(
               p,
-              size: 12.5,
+              type: VpsType.footnote,
               weight: FontWeight.w600,
               color: widget.color,
             ),
@@ -744,7 +752,12 @@ class _Tag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: vpsText(p, size: 10.5, weight: FontWeight.w600, color: color),
+        style: vpsText(
+          p,
+          type: VpsType.caption,
+          weight: FontWeight.w600,
+          color: color,
+        ),
       ),
     );
   }

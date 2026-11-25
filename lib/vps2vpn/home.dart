@@ -204,7 +204,11 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '代理模式', 'Proxy mode'),
-                        style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(
+                          p,
+                          type: VpsType.callout,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -241,7 +245,11 @@ class VpsHomePage extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Text(
                         tr(context, '接管方式', 'Takeover'),
-                        style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(
+                          p,
+                          type: VpsType.callout,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       VpsInfoTip(
@@ -690,7 +698,7 @@ class _HeroState extends ConsumerState<_Hero> {
                       overflow: TextOverflow.ellipsis,
                       style: vpsText(
                         p,
-                        size: wide ? 36 : 28,
+                        type: wide ? VpsType.hero : VpsType.largeTitle,
                         weight: FontWeight.w600,
                         spacing: -0.8,
                         height: 1.15,
@@ -704,7 +712,12 @@ class _HeroState extends ConsumerState<_Hero> {
             Text(
               sub,
               textAlign: wide ? TextAlign.start : TextAlign.center,
-              style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
+              style: vpsText(
+                p,
+                type: VpsType.subhead,
+                color: p.soft,
+                height: 1.5,
+              ),
             ),
             if (portal) ...[
               const SizedBox(height: 12),
@@ -1026,7 +1039,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                     widget.label,
                     style: vpsText(
                       p,
-                      size: 13,
+                      type: VpsType.subhead,
                       weight: FontWeight.w600,
                       color: widget.on ? p.text : p.accentInk,
                     ),
@@ -1345,7 +1358,7 @@ class _Stat extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: vpsText(
                   p,
-                  size: 12,
+                  type: VpsType.footnote,
                   color: p.soft,
                   weight: FontWeight.w500,
                 ),
@@ -1363,7 +1376,7 @@ class _Stat extends StatelessWidget {
                 value,
                 style: vpsText(
                   p,
-                  size: 22,
+                  type: VpsType.title,
                   weight: FontWeight.w600,
                   spacing: -0.5,
                 ),
@@ -1375,7 +1388,7 @@ class _Stat extends StatelessWidget {
                 unit,
                 style: vpsText(
                   p,
-                  size: 13,
+                  type: VpsType.subhead,
                   weight: FontWeight.w500,
                   color: p.soft,
                 ),
@@ -1390,7 +1403,12 @@ class _Stat extends StatelessWidget {
               foot!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: vpsText(p, size: 11.5, color: p.muted, tabular: true),
+              style: vpsText(
+                p,
+                type: VpsType.caption,
+                color: p.muted,
+                tabular: true,
+              ),
             ),
           ),
       ],
@@ -1570,7 +1588,11 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                   children: [
                     Text(
                       tr(context, 'AI 服务可用性', 'AI availability'),
-                      style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                      style: vpsText(
+                        p,
+                        type: VpsType.callout,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     Text(
                       ref.watch(isStartProvider)
@@ -1580,7 +1602,7 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                               '未连接 · 当前为直连结果',
                               'Not connected · direct results',
                             ),
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(p, type: VpsType.footnote, color: p.soft),
                     ),
                   ],
                 ),

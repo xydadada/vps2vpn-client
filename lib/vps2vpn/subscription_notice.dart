@@ -61,7 +61,7 @@ class VpsSubscriptionExtras extends StatelessWidget {
                     announce,
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
-                    style: vpsText(p, size: 13, height: 1.45),
+                    style: vpsText(p, type: VpsType.subhead, height: 1.45),
                   ),
                 ),
               ),

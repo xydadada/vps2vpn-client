@@ -203,7 +203,7 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
                         ),
                   style: vpsText(
                     p,
-                    size: 15,
+                    type: VpsType.callout,
                     weight: FontWeight.w600,
                     color: failed != null
                         ? p.bad
@@ -231,7 +231,12 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
                 on: on,
                 subscriptionDown: subscriptionDown,
               ),
-              style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
+              style: vpsText(
+                p,
+                type: VpsType.subhead,
+                color: p.soft,
+                height: 1.5,
+              ),
             ),
           ],
           const SizedBox(height: 8),
@@ -244,7 +249,11 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
                   Expanded(
                     child: Text(
                       _legTitle(context, leg),
-                      style: vpsText(p, size: 14, weight: FontWeight.w500),
+                      style: vpsText(
+                        p,
+                        type: VpsType.body,
+                        weight: FontWeight.w500,
+                      ),
                     ),
                   ),
                   VpsBreathe(

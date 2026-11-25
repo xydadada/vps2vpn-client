@@ -540,7 +540,9 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
     ValueChanged<bool> on,
   ) => Row(
     children: [
-      Expanded(child: Text(label, style: vpsText(p, size: 13))),
+      Expanded(
+        child: Text(label, style: vpsText(p, type: VpsType.subhead)),
+      ),
       VpsSwitch(value: value, onChanged: on),
     ],
   );
@@ -599,7 +601,12 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
                             'passwords and full IPs are masked first; '
                             'everything that goes is shown below.',
                       ),
-                style: vpsText(p, size: 13, color: p.soft, height: 1.5),
+                style: vpsText(
+                  p,
+                  type: VpsType.subhead,
+                  color: p.soft,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -638,7 +645,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
                     _preview
                         ? tr(context, '收起要发送的内容', 'Hide what goes')
                         : tr(context, '查看要发送的内容', 'Show what goes'),
-                    style: vpsText(p, size: 13, color: p.accent),
+                    style: vpsText(p, type: VpsType.subhead, color: p.accent),
                   ),
                 ),
               ),
@@ -650,7 +657,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
                       vpsFeedbackText(_body()),
                       style: vpsText(
                         p,
-                        size: 11.5,
+                        type: VpsType.caption,
                         color: p.soft,
                         tabular: true,
                       ),
@@ -669,7 +676,11 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
                         const SizedBox(height: 12),
                         Text(
                           tr(context, '最近的反馈', 'Recent notes'),
-                          style: vpsText(p, size: 13, weight: FontWeight.w600),
+                          style: vpsText(
+                            p,
+                            type: VpsType.subhead,
+                            weight: FontWeight.w600,
+                          ),
                         ),
                         for (final item in items)
                           Padding(
@@ -680,7 +691,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
                                   : '${item.text}\n${tr(context, '回复', 'Answer')}：${item.answer}',
                               style: vpsText(
                                 p,
-                                size: 12.5,
+                                type: VpsType.footnote,
                                 color: item.answer.isEmpty ? p.soft : p.text,
                                 height: 1.45,
                               ),
@@ -721,7 +732,7 @@ class VpsFeedbackNotice extends ConsumerWidget {
             Expanded(
               child: Text(
                 tr(context, '管理员回复了你的反馈', 'The admin answered your note'),
-                style: vpsText(p, size: 14, weight: FontWeight.w600),
+                style: vpsText(p, type: VpsType.body, weight: FontWeight.w600),
               ),
             ),
             const SizedBox(width: 12),

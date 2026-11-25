@@ -693,7 +693,11 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     vpsRemovedText(context),
-                    style: vpsText(p, size: 14, weight: FontWeight.w600),
+                    style: vpsText(
+                      p,
+                      type: VpsType.body,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -706,7 +710,12 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
                 'This subscription is off on this device until the owner '
                     'restores it; then connect again.',
               ),
-              style: vpsText(p, size: 13, color: p.soft, height: 1.5),
+              style: vpsText(
+                p,
+                type: VpsType.subhead,
+                color: p.soft,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -928,7 +937,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                       'link, but the new subscription has not downloaded yet '
                       '(no network). Tap Retry.',
                 ),
-          style: vpsText(p, size: 13, color: p.soft, height: 1.5),
+          style: vpsText(p, type: VpsType.subhead, color: p.soft, height: 1.5),
         ),
         if (QrCodeView.fits(link)) ...[
           const SizedBox(height: 12),
@@ -991,10 +1000,17 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                       if (d.thisDevice) tr(context, '（本机）', ' (this device)'),
                       if (d.revoked) tr(context, '（已移除）', ' (removed)'),
                     ].join(),
-                    style: vpsText(p, size: 14, weight: FontWeight.w600),
+                    style: vpsText(
+                      p,
+                      type: VpsType.body,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 2),
-                  Text(meta, style: vpsText(p, size: 12, color: p.muted)),
+                  Text(
+                    meta,
+                    style: vpsText(p, type: VpsType.footnote, color: p.muted),
+                  ),
                 ],
               ),
             ),
@@ -1036,7 +1052,10 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_error != null) ...[
-                Text(_error!, style: vpsText(p, size: 13, color: p.bad)),
+                Text(
+                  _error!,
+                  style: vpsText(p, type: VpsType.subhead, color: p.bad),
+                ),
                 const SizedBox(height: 8),
               ],
               if (kicked != null)
@@ -1051,14 +1070,18 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         child: Text(
                           tr(context, '正在读取…', 'Loading…'),
-                          style: vpsText(p, size: 13, color: p.muted),
+                          style: vpsText(
+                            p,
+                            type: VpsType.subhead,
+                            color: p.muted,
+                          ),
                         ),
                       );
                     }
                     if (list.outcome != VpsDeviceOutcome.ok) {
                       return Text(
                         _outcomeText(context, list.outcome),
-                        style: vpsText(p, size: 13, color: p.soft),
+                        style: vpsText(p, type: VpsType.subhead, color: p.soft),
                       );
                     }
                     return Column(
@@ -1072,11 +1095,16 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                               '在线 IP ${list.onlineIps} / 最多 ${list.maxIps}',
                               'Online IPs ${list.onlineIps} of ${list.maxIps}',
                             ),
-                            style: vpsText(p, size: 13, color: p.soft).copyWith(
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
+                            style:
+                                vpsText(
+                                  p,
+                                  type: VpsType.subhead,
+                                  color: p.soft,
+                                ).copyWith(
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
                           ),
                         for (final d in list.devices) _deviceRow(p, d),
                       ],

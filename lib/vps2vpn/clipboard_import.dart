@@ -177,14 +177,18 @@ class _VpsClipboardOfferState extends ConsumerState<VpsClipboardOffer> {
                                 '剪贴板里有一个新的订阅链接',
                                 'There is a new subscription link on your clipboard',
                               ),
-                        style: vpsText(p, size: 14, weight: FontWeight.w600),
+                        style: vpsText(
+                          p,
+                          type: VpsType.body,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         _note ?? tr(context, '要导入它吗？', 'Add it?'),
                         style: vpsText(
                           p,
-                          size: 12.5,
+                          type: VpsType.footnote,
                           color: _note == null ? p.soft : p.warn,
                         ),
                       ),

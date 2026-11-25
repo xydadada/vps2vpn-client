@@ -46,7 +46,7 @@ Future<VpsTakeoverAnswer?> vpsShowTakeoverAsk(List<String> names) async {
                       'Connecting without closing works too, but they may '
                       'get in each other\'s way.',
                 ),
-                style: vpsText(p, size: 13.5, height: 1.5),
+                style: vpsText(p, type: VpsType.subhead, height: 1.5),
               ),
               const SizedBox(height: 8),
               Row(
@@ -63,7 +63,7 @@ Future<VpsTakeoverAnswer?> vpsShowTakeoverAsk(List<String> names) async {
                         'Remember my choice (change it under Take over on '
                             'Connect in Settings)',
                       ),
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(p, type: VpsType.footnote, color: p.soft),
                     ),
                   ),
                 ],
@@ -257,7 +257,7 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                             tr(context, line, en[i]),
                             style: vpsText(
                               p,
-                              size: 13,
+                              type: VpsType.subhead,
                               color: i == 0 ? p.text : p.soft,
                               height: 1.45,
                             ),
@@ -279,7 +279,11 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                       padding: const EdgeInsets.all(6),
                       child: Text(
                         '×',
-                        style: vpsText(p, size: 16, color: p.muted),
+                        style: vpsText(
+                          p,
+                          type: VpsType.headline,
+                          color: p.muted,
+                        ),
                       ),
                     ),
                   ),

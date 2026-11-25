@@ -148,7 +148,7 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
                           'Latency to these sites through your node',
                         )
                       : tr(context, '连接后可以测试', 'Connect to test'),
-                  style: vpsText(p, size: 13.5, color: p.soft),
+                  style: vpsText(p, type: VpsType.subhead, color: p.soft),
                 ),
               ),
               const SizedBox(width: 12),
@@ -172,7 +172,11 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
                       site.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(p, size: 14, weight: FontWeight.w500),
+                      style: vpsText(
+                        p,
+                        type: VpsType.body,
+                        weight: FontWeight.w500,
+                      ),
                     ),
                   ),
                   if (picked != null) _Delay(proxyName: picked, url: site.url),
@@ -182,7 +186,7 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
                         _save([..._sites.where((s) => s.url != site.url)]),
                     child: Text(
                       tr(context, '删除', 'Remove'),
-                      style: vpsText(p, size: 12.5, color: p.muted),
+                      style: vpsText(p, type: VpsType.footnote, color: p.muted),
                     ),
                   ),
                 ],

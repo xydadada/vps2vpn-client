@@ -479,7 +479,7 @@ class VpsFindingCard extends StatelessWidget {
                         : tr(context, '体检中…', 'Checking…'),
                     style: vpsText(
                       p,
-                      size: 15,
+                      type: VpsType.callout,
                       weight: FontWeight.w600,
                       color: !settled
                           ? p.soft
@@ -520,7 +520,11 @@ class VpsFindingCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       r.title,
-                      style: vpsText(p, size: 14, weight: FontWeight.w500),
+                      style: vpsText(
+                        p,
+                        type: VpsType.body,
+                        weight: FontWeight.w500,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),

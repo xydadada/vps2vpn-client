@@ -150,7 +150,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                         '未连接 · 以下为直连检测结果',
                         'Not connected · results below are direct',
                       ),
-                      style: vpsText(p, size: 13.5),
+                      style: vpsText(p, type: VpsType.subhead),
                     ),
                   ),
                 ],
@@ -169,7 +169,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                     tr(context, '出口', 'Exit'),
                     style: vpsText(
                       p,
-                      size: 13,
+                      type: VpsType.subhead,
                       color: p.soft,
                       weight: FontWeight.w600,
                     ),
@@ -189,7 +189,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                             key: ValueKey(info?.countryCode),
                             style: vpsText(
                               p,
-                              size: 26,
+                              type: VpsType.largeTitle,
                               weight: FontWeight.w600,
                               spacing: -0.5,
                             ),
@@ -206,7 +206,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                             _showIp ? info.ip : _mask(info.ip),
                             style: vpsText(
                               p,
-                              size: 14,
+                              type: VpsType.body,
                               weight: FontWeight.w600,
                               color: p.soft,
                             ),
@@ -218,7 +218,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                                 : tr(context, '显示', 'Show'),
                             style: vpsText(
                               p,
-                              size: 13,
+                              type: VpsType.subhead,
                               weight: FontWeight.w600,
                               color: p.accent,
                             ),
@@ -239,7 +239,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                         : tr(context, '可访问', 'Reachable'),
                     style: vpsText(
                       p,
-                      size: 13,
+                      type: VpsType.subhead,
                       color: p.soft,
                       weight: FontWeight.w600,
                     ),
@@ -252,7 +252,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                           text: '$working',
                           style: vpsText(
                             p,
-                            size: 26,
+                            type: VpsType.largeTitle,
                             weight: FontWeight.w600,
                             color: p.text,
                             tabular: true,
@@ -262,7 +262,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                           text: ' / ${_all.length}',
                           style: vpsText(
                             p,
-                            size: 18,
+                            type: VpsType.headline,
                             weight: FontWeight.w600,
                             color: p.soft,
                           ),
@@ -392,7 +392,7 @@ class _ServiceLine extends StatelessWidget {
           Expanded(
             child: Text(
               target.label,
-              style: vpsText(p, size: 14, weight: FontWeight.w500),
+              style: vpsText(p, type: VpsType.body, weight: FontWeight.w500),
             ),
           ),
           if (region != null && region.isNotEmpty)
@@ -400,7 +400,7 @@ class _ServiceLine extends StatelessWidget {
               padding: const EdgeInsets.only(right: 10),
               child: Text(
                 region.toUpperCase(),
-                style: vpsText(p, size: 12.5, color: p.soft),
+                style: vpsText(p, type: VpsType.footnote, color: p.soft),
               ),
             ),
           AnimatedSwitcher(

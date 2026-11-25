@@ -289,9 +289,45 @@ const vpsFontFallback = [
   'PingFang SC',
 ];
 
+/// The type scale: a text picks the role it plays, so every page draws from
+/// the same nine sizes.
+enum VpsType {
+  hero(36),
+  largeTitle(28),
+  title(22),
+  headline(17),
+  callout(15),
+  body(14),
+  subhead(13),
+  footnote(12),
+  caption(11);
+
+  const VpsType(this.size);
+
+  final double size;
+}
+
 TextStyle vpsText(
   VpsPalette p, {
-  double size = 14,
+  VpsType type = VpsType.body,
+  FontWeight weight = FontWeight.w400,
+  Color? color,
+  double? height,
+  double? spacing,
+  bool tabular = true,
+}) => _vpsStyle(
+  p,
+  size: type.size,
+  weight: weight,
+  color: color,
+  height: height,
+  spacing: spacing,
+  tabular: tabular,
+);
+
+TextStyle _vpsStyle(
+  VpsPalette p, {
+  required double size,
   FontWeight weight = FontWeight.w400,
   Color? color,
   double? height,
@@ -750,7 +786,7 @@ class VpsFlag extends StatelessWidget {
     if (flag == null) {
       return Text(
         code.toUpperCase(),
-        style: vpsText(p, size: size * 0.55, weight: FontWeight.w600),
+        style: _vpsStyle(p, size: size * 0.55, weight: FontWeight.w600),
       );
     }
     return Semantics(
@@ -867,7 +903,12 @@ class VpsButton extends StatelessWidget {
             ],
             Text(
               label,
-              style: vpsText(p, size: 13.5, weight: FontWeight.w600, color: fg),
+              style: vpsText(
+                p,
+                type: VpsType.subhead,
+                weight: FontWeight.w600,
+                color: fg,
+              ),
             ),
           ],
         ),
@@ -1011,7 +1052,7 @@ class VpsSegmented<T> extends StatelessWidget {
                             labelOf(item),
                             style: vpsText(
                               p,
-                              size: 13.5,
+                              type: VpsType.subhead,
                               weight: item == value
                                   ? FontWeight.w600
                                   : FontWeight.w500,
@@ -1132,7 +1173,12 @@ class VpsChip extends StatelessWidget {
             const SizedBox(width: 7),
             Text(
               label,
-              style: vpsText(p, size: 12.5, weight: FontWeight.w600, color: c),
+              style: vpsText(
+                p,
+                type: VpsType.footnote,
+                weight: FontWeight.w600,
+                color: c,
+              ),
             ),
           ],
         ),
@@ -1158,7 +1204,12 @@ class VpsChip extends StatelessWidget {
           const SizedBox(width: 7),
           Text(
             label,
-            style: vpsText(p, size: 12, weight: FontWeight.w500, color: p.text),
+            style: vpsText(
+              p,
+              type: VpsType.footnote,
+              weight: FontWeight.w500,
+              color: p.text,
+            ),
           ),
         ],
       ),
@@ -1679,7 +1730,7 @@ class VpsSectionTitle extends StatelessWidget {
               text,
               style: vpsText(
                 p,
-                size: 12.5,
+                type: VpsType.footnote,
                 weight: FontWeight.w500,
                 color: p.soft,
                 spacing: 0.4,
@@ -1737,14 +1788,18 @@ class VpsRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+                  style: vpsText(
+                    p,
+                    type: VpsType.callout,
+                    weight: FontWeight.w500,
+                  ),
                 ),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       subtitle!,
-                      style: vpsText(p, size: 12.5, color: p.soft),
+                      style: vpsText(p, type: VpsType.footnote, color: p.soft),
                     ),
                   ),
               ],
@@ -1809,12 +1864,21 @@ class VpsInfoTip extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
                       title!,
-                      style: vpsText(p, size: 13, weight: FontWeight.w600),
+                      style: vpsText(
+                        p,
+                        type: VpsType.subhead,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 Text(
                   message,
-                  style: vpsText(p, size: 12.5, color: p.soft, height: 1.5),
+                  style: vpsText(
+                    p,
+                    type: VpsType.footnote,
+                    color: p.soft,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
@@ -1843,7 +1907,7 @@ class VpsInfoTip extends StatelessWidget {
             '?',
             style: vpsText(
               p,
-              size: 10.5,
+              type: VpsType.caption,
               weight: FontWeight.w600,
               color: p.soft,
               height: 1,

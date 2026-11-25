@@ -30,7 +30,7 @@ class VpsQrCode extends StatelessWidget {
           '链接太长，放不进二维码：请直接复制链接',
           'The link is too long for a QR code; copy the link instead',
         ),
-        style: vpsText(p, size: 13, color: p.soft),
+        style: vpsText(p, type: VpsType.subhead, color: p.soft),
       );
     }
     return SizedBox.square(
@@ -105,7 +105,7 @@ class _VpsQrToggleState extends State<VpsQrToggle> {
                   : tr(context, '二维码（手机扫码导入）', 'QR code (scan with a phone)'),
               style: vpsText(
                 p,
-                size: 12.5,
+                type: VpsType.footnote,
                 weight: FontWeight.w600,
                 color: p.accent,
               ),
@@ -122,7 +122,7 @@ class _VpsQrToggleState extends State<VpsQrToggle> {
               '二维码就是你的订阅链接，别截图发给别人。',
               'This code is your subscription link; do not share a picture of it.',
             ),
-            style: vpsText(p, size: 12, color: p.warn),
+            style: vpsText(p, type: VpsType.footnote, color: p.warn),
           ),
         ],
       ],

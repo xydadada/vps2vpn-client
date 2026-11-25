@@ -62,7 +62,11 @@ class VpsServerAiCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     tr(context, '服务器视角', 'Seen from your server'),
-                    style: vpsText(p, size: 13.5, weight: FontWeight.w600),
+                    style: vpsText(
+                      p,
+                      type: VpsType.subhead,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (meta.isNotEmpty)
@@ -70,7 +74,7 @@ class VpsServerAiCard extends ConsumerWidget {
                     child: Text(
                       meta,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(p, size: 12.5, color: p.muted),
+                      style: vpsText(p, type: VpsType.footnote, color: p.muted),
                     ),
                   ),
               ],
@@ -79,7 +83,12 @@ class VpsServerAiCard extends ConsumerWidget {
               const SizedBox(height: 8),
               Text(
                 ai.summary,
-                style: vpsText(p, size: 13, color: p.soft, height: 1.45),
+                style: vpsText(
+                  p,
+                  type: VpsType.subhead,
+                  color: p.soft,
+                  height: 1.45,
+                ),
               ),
             ],
             const SizedBox(height: 12),
@@ -397,7 +406,11 @@ class VpsAccountCard extends ConsumerWidget {
                   child: Text(
                     title,
                     overflow: TextOverflow.ellipsis,
-                    style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                    style: vpsText(
+                      p,
+                      type: VpsType.callout,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (status != null) VpsChip(label: status, color: color),
@@ -405,7 +418,10 @@ class VpsAccountCard extends ConsumerWidget {
             ),
             for (final line in lines) ...[
               const SizedBox(height: 6),
-              Text(line, style: vpsText(p, size: 13, color: p.soft)),
+              Text(
+                line,
+                style: vpsText(p, type: VpsType.subhead, color: p.soft),
+              ),
             ],
             if (action != null) ...[const SizedBox(height: 10), action],
             if (progress != null) ...[
@@ -472,7 +488,11 @@ class VpsUpdateNotice extends ConsumerWidget {
                       '新版本 $version 已下载并校验签名',
                       'Version $version is downloaded and checked',
                     ),
-                    style: vpsText(p, size: 14, weight: FontWeight.w600),
+                    style: vpsText(
+                      p,
+                      type: VpsType.body,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                   if (summary != null) ...[
                     const SizedBox(height: 3),
@@ -480,7 +500,12 @@ class VpsUpdateNotice extends ConsumerWidget {
                       summary,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: vpsText(p, size: 12.5, color: p.soft, height: 1.4),
+                      style: vpsText(
+                        p,
+                        type: VpsType.footnote,
+                        color: p.soft,
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ],
@@ -678,14 +703,18 @@ class VpsUpdateCard extends ConsumerWidget {
                     children: [
                       Text(
                         title,
-                        style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                        style: vpsText(
+                          p,
+                          type: VpsType.callout,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         detail,
                         style: vpsText(
                           p,
-                          size: 13,
+                          type: VpsType.subhead,
                           color:
                               check.status == VpsUpdateStatus.failed &&
                                   release == null
@@ -730,7 +759,12 @@ class VpsUpdateCard extends ConsumerWidget {
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: vpsText(p, size: 13, color: p.soft, height: 1.45),
+                    style: vpsText(
+                      p,
+                      type: VpsType.subhead,
+                      color: p.soft,
+                      height: 1.45,
+                    ),
                   ),
                 ),
               ),
@@ -743,7 +777,7 @@ class VpsUpdateCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     tr(context, '自动检查更新', 'Check for updates automatically'),
-                    style: vpsText(p, size: 13, color: p.soft),
+                    style: vpsText(p, type: VpsType.subhead, color: p.soft),
                   ),
                 ),
                 VpsSwitch(
