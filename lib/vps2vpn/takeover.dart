@@ -152,6 +152,17 @@ Map<int, int> parseParents(String lines) => {
     int.parse(m[1]!): int.parse(m[2]!),
 };
 
+/// Every local proxy port seen as the system proxy this run, not only now.
+final _foreignProxyPorts = <int>{};
+
+Future<Set<int>> _guardedPorts(int ourPort) async {
+  for (final proxy in [await readSystemProxy(), await readConnectionProxy()]) {
+    final port = loopbackProxyPort(proxy);
+    if (port != null && port != ourPort) _foreignProxyPorts.add(port);
+  }
+  return {ourPort, ..._foreignProxyPorts};
+}
+
 Future<({List<VpsRival> close, List<VpsRival> spare})> _sortRivals(
   List<VpsRival> rivals, {
   required int ourPort,
@@ -163,7 +174,7 @@ Future<({List<VpsRival> close, List<VpsRival> spare})> _sortRivals(
   ];
   var listening = const <int, Set<int>>{};
   var parents = const <int, int>{};
-  final guarded = {ourPort, ?loopbackProxyPort(await readSystemProxy())};
+  final guarded = await _guardedPorts(ourPort);
   if (bare.isNotEmpty) {
     try {
       final netstat = await run('netstat', ['-ano', '-p', 'TCP']);
@@ -349,6 +360,61 @@ Future<VpsSystemProxy?> readSystemProxy({VpsRun run = _run}) async {
     ]);
     if (r.exitCode != 0) return null;
     return parseInternetSettings('${r.stdout}');
+  } catch (_) {
+    return null;
+  }
+}
+
+/// The LAN connection's own record, which WinINet's per-connection API
+/// writes; the flat ProxyEnable and ProxyServer values may not follow it.
+VpsSystemProxy? parseConnectionSettings(String regOutput) {
+  final m = RegExp(
+    r'DefaultConnectionSettings\s+REG_BINARY\s+([0-9A-Fa-f]+)',
+  ).firstMatch(regOutput);
+  if (m == null || m[1]!.length.isOdd) return null;
+  final hex = m[1]!;
+  final bytes = [
+    for (var i = 0; i < hex.length; i += 2)
+      int.parse(hex.substring(i, i + 2), radix: 16),
+  ];
+  int dword(int at) => at + 4 > bytes.length
+      ? -1
+      : bytes[at] |
+            bytes[at + 1] << 8 |
+            bytes[at + 2] << 16 |
+            bytes[at + 3] << 24;
+  var at = 12;
+  String? text() {
+    final length = dword(at);
+    if (length < 0 || at + 4 + length > bytes.length) return null;
+    final value = String.fromCharCodes(bytes.sublist(at + 4, at + 4 + length));
+    at += 4 + length;
+    return value;
+  }
+
+  final flags = dword(8);
+  if (flags < 0) return null;
+  final server = text();
+  text();
+  final pac = text();
+  return VpsSystemProxy(
+    enabled: flags & 2 != 0,
+    server: server,
+    pac: flags & 4 != 0 ? pac : null,
+  );
+}
+
+Future<VpsSystemProxy?> readConnectionProxy({VpsRun run = _run}) async {
+  if (!Platform.isWindows) return null;
+  try {
+    final r = await run('reg', [
+      'query',
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Connections',
+      '/v',
+      'DefaultConnectionSettings',
+    ]);
+    if (r.exitCode != 0) return null;
+    return parseConnectionSettings('${r.stdout}');
   } catch (_) {
     return null;
   }

@@ -136,6 +136,8 @@ try {
 
   # --- takeover on: the other proxy apps close; VPN clients and drivers stay ---
   Set-AppPrefs @{ takeover = $true }
+  $flat = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+  Write-Host "registry before takeover on: ProxyEnable=$($flat.ProxyEnable) ProxyServer=$($flat.ProxyServer)"
   $port = Start-App 'takeover on'
   Start-Sleep 15
   $left = @(Get-Process clash-verge, verge-mihomo, FlClash, FlClashCore, v2rayN, Hiddify, nekoray, Shadowsocks, sing-box -ErrorAction SilentlyContinue | ForEach-Object Name | Sort-Object -Unique)

@@ -163,6 +163,29 @@ void main() {
       expect(p.isOurs(7897), isTrue);
     });
 
+    test('reads the LAN connection record WinINet writes', () {
+      const key =
+          'HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections\r\n';
+      final p = parseConnectionSettings(
+        '$key    DefaultConnectionSettings    REG_BINARY    4600000007000000030000000E0000003132372E302E302E313A37383931070000003C6C6F63616C3E000000000000000000000000000000000000000000000000000000000000000000000000\r\n',
+      )!;
+      expect(p.enabled, isTrue);
+      expect(p.server, '127.0.0.1:7891');
+      expect(loopbackProxyPort(p), 7891);
+      final off = parseConnectionSettings(
+        '$key    DefaultConnectionSettings    REG_BINARY    4600000007000000010000000E0000003132372E302E302E313A37383931070000003C6C6F63616C3E000000000000000000000000000000000000000000000000000000000000000000000000\r\n',
+      )!;
+      expect(off.enabled, isFalse);
+      expect(loopbackProxyPort(off), isNull);
+      expect(parseConnectionSettings(key), isNull);
+      expect(
+        parseConnectionSettings(
+          '    DefaultConnectionSettings    REG_BINARY    4600000007',
+        ),
+        isNull,
+      );
+    });
+
     test('a switched-off proxy is not active', () {
       final p = parseInternetSettings(
         '$base    ProxyEnable    REG_DWORD    0x0\r\n'
