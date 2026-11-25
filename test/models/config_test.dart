@@ -126,6 +126,7 @@ void main() {
         'delay-test-timeout': 5000,
         'mitm-capture': true,
         'vps2vpn-smart': true,
+        'vps2vpn-smart-high-rate': false,
       });
       expect(json, isNot(contains('mitm')));
     });

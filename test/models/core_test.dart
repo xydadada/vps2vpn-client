@@ -31,6 +31,7 @@ void main() {
         'delay-test-timeout': defaultDelayTestTimeout,
         'mitm-capture': false,
         'vps2vpn-smart': true,
+        'vps2vpn-smart-high-rate': false,
       });
     });
   });

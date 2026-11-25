@@ -1,5 +1,6 @@
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/tray_menu.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +34,9 @@ void main() {
 
   List<TrayMenuItem> menu(TrayState state) => vpsTrayMenu(
     state: state,
-    read: <T>(_) => throw UnimplementedError(),
+    read: <T>(p) => identical(p, updateDownloadStateProvider)
+        ? null as T
+        : throw UnimplementedError(),
     onShow: () {},
     onExit: () {},
   )!;
