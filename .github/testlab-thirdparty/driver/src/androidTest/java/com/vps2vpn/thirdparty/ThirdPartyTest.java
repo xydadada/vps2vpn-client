@@ -205,12 +205,39 @@ public class ThirdPartyTest {
         }
         english.click();
         sleep(1_500);
+        // "Next" has no node of its own: try where it can be, until the page goes away.
         bar = device.findObject(By.desc(LANGUAGE_BAR));
-        if (bar != null) {
-            android.graphics.Rect r = bar.getVisibleBounds();
-            device.click(r.right - Math.max(40, r.height() / 2), r.centerY());   // the "Next" action
+        if (bar == null) {
+            return true;
         }
-        sleep(2_500);
+        android.graphics.Rect r = bar.getVisibleBounds();
+        int w = device.getDisplayWidth();
+        List<int[]> spots = new ArrayList<>();
+        UiObject2 rightmost = null;
+        for (UiObject2 child : bar.findObjects(By.clickable(true))) {
+            if (child != bar && (rightmost == null || child.getVisibleBounds().right > rightmost.getVisibleBounds().right)) {
+                rightmost = child;
+            }
+        }
+        if (rightmost != null) {
+            android.graphics.Rect c = rightmost.getVisibleBounds();
+            spots.add(new int[]{c.centerX(), c.centerY()});
+        }
+        int top = r.top + Math.min(r.height(), 160) / 2;           // the bar's first row, if it is a tall node
+        spots.add(new int[]{r.right - 40, top});
+        spots.add(new int[]{w - 60, top});
+        spots.add(new int[]{r.right - 40, r.centerY()});
+        spots.add(new int[]{r.right - r.width() / 8, top});
+        report("NOTE  " + name + " language bar " + r.toShortString() + " display " + w + "x" + device.getDisplayHeight()
+                + " clickable children " + bar.findObjects(By.clickable(true)).size());
+        for (int[] spot : spots) {
+            device.click(spot[0], spot[1]);
+            sleep(2_000);
+            if (device.findObject(By.desc(LANGUAGE_BAR)) == null) {
+                report("NOTE  " + name + " language page left by a tap at " + spot[0] + "," + spot[1]);
+                break;
+            }
+        }
         note(name + " after choosing English");
         return true;
     }
