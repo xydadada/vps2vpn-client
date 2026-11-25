@@ -959,10 +959,11 @@ Future<(int, String, String?)> vpsPanelCall(
   int? proxyPort,
   String? proxyAuth,
   Set<String> pinnedSha256 = const {},
+  bool oneRoute = false,
 }) async {
   (int, String, String?)? answer;
   Object? error;
-  for (final port in [null, ?proxyPort]) {
+  for (final port in oneRoute ? [proxyPort] : [null, ?proxyPort]) {
     try {
       String? retry;
       final (code, text) = await _send(

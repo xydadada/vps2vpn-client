@@ -347,6 +347,8 @@ VpsDeviceCall vpsDeviceCallFor(Ref ref, Uri base) =>
         proxyPort: route.port,
         proxyAuth: route.auth,
         pinnedSha256: route.pins,
+        // Sent twice it would fail on the link the first one already killed.
+        oneRoute: path == 'devices/kick-others',
       );
     };
 
@@ -696,6 +698,14 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
       if (result.link != null) {
         setState(() => _kicked = result);
         return null;
+      }
+      if (result.outcome == VpsDeviceOutcome.unreachable) {
+        return tr(
+          context,
+          '没收到服务器的回答，可能已经生效，请到会员页查看新链接',
+          'No answer from the server; it may have gone through. Look for '
+              'the new link on the member page',
+        );
       }
       return _outcomeText(context, result.outcome);
     });

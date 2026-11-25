@@ -194,6 +194,22 @@ void main() {
   });
 
   group('sign out every other device', () {
+    test('no answer is sent once and changes nothing', () async {
+      var tries = 0;
+      final r = await vpsKickOthers(
+        call: (path, {body, headers = const {}}) async {
+          tries++;
+          throw const SocketException('timed out');
+        },
+        base: base,
+        ownId: 'me',
+        adopt: (_) => fail('no new link'),
+        refetch: () async => fail('nothing to fetch'),
+      );
+      expect(tries, 1);
+      expect(r.outcome, VpsDeviceOutcome.unreachable);
+      expect(r.link, isNull);
+    });
     const fresh = 'https://panel.example.com:8443/s/NewToken0123456789/';
 
     test('the new link is taken on and fetched', () async {
@@ -281,6 +297,7 @@ void main() {
           (_off, VpsDeviceOutcome.featureOff),
           ((429, ''), VpsDeviceOutcome.rateLimited),
           ((404, '{"code":"not_found"}'), VpsDeviceOutcome.notFound),
+          ((502, 'Bad Gateway'), VpsDeviceOutcome.unreachable),
         ]) {
           final r = await vpsKickOthers(
             call: _panel([], (_) => answer),
