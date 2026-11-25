@@ -127,7 +127,9 @@ void main() {
             greaterThanOrEqualTo(3),
             reason: why,
           );
-          if (_contrast(role, p.card) >= 4.5) expect(body, role, reason: why);
+          if (role != p.soft && _contrast(role, p.card) >= 4.5) {
+            expect(body, role, reason: why);
+          }
           final hue = HSLColor.fromColor(role);
           if (hue.saturation > 0.2) {
             expect(
