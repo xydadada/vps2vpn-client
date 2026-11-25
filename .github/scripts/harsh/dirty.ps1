@@ -138,7 +138,17 @@ try {
   Set-AppPrefs @{ takeover = $true }
   $flat = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
   Write-Host "registry before takeover on: ProxyEnable=$($flat.ProxyEnable) ProxyServer=$($flat.ProxyServer)"
+  function Show-SingBox($when) {
+    foreach ($p in @(Get-CimInstance Win32_Process -Filter "Name='sing-box.exe'" -ErrorAction SilentlyContinue)) {
+      Write-Host "sing-box $when`: pid=$($p.ProcessId) parent=$($p.ParentProcessId)"
+    }
+    & netstat.exe -ano -p TCP | Select-String ':7891\s' | ForEach-Object { Write-Host "netstat $when`: $($_.Line.Trim())" }
+    $w = Get-WinInetProxy
+    Write-Host "wininet $when`: flags=$($w.Flags) server=$($w.Server)"
+  }
+  Show-SingBox 'before takeover on'
   $port = Start-App 'takeover on'
+  Show-SingBox 'after takeover on'
   Start-Sleep 15
   $left = @(Get-Process clash-verge, verge-mihomo, FlClash, FlClashCore, v2rayN, Hiddify, nekoray, Shadowsocks, sing-box -ErrorAction SilentlyContinue | ForEach-Object Name | Sort-Object -Unique)
   Check ($left.Count -eq 0) "takeover on: the other proxy apps closed (left: $($left -join ', '))"
