@@ -1554,6 +1554,24 @@ class VpsBackdrop extends StatelessWidget {
   }
 }
 
+/// Premultiplied: a colour above its alpha is read as light added, which
+/// turned the grain into full-strength static.
+@visibleForTesting
+Uint8List vpsGrainPixels(int side) {
+  final random = math.Random(7);
+  final pixels = Uint8List(side * side * 4);
+  for (var i = 0; i < pixels.length; i += 4) {
+    final alpha = random.nextInt(9);
+    final light = random.nextBool() ? alpha : 0;
+    pixels
+      ..[i] = light
+      ..[i + 1] = light
+      ..[i + 2] = light
+      ..[i + 3] = alpha;
+  }
+  return pixels;
+}
+
 /// A faint film grain over the glows, so their gradients do not band.
 class _Grain extends StatefulWidget {
   const _Grain();
@@ -1567,16 +1585,7 @@ class _GrainState extends State<_Grain> {
 
   static Future<ui.Image> _make() {
     const side = 128;
-    final random = math.Random(7);
-    final pixels = Uint8List(side * side * 4);
-    for (var i = 0; i < pixels.length; i += 4) {
-      final light = random.nextBool() ? 255 : 0;
-      pixels
-        ..[i] = light
-        ..[i + 1] = light
-        ..[i + 2] = light
-        ..[i + 3] = random.nextInt(9);
-    }
+    final pixels = vpsGrainPixels(side);
     final done = Completer<ui.Image>();
     ui.decodeImageFromPixels(
       pixels,
