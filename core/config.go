@@ -221,10 +221,12 @@ func applyConfig(params *SetupParams) error {
 	previousHighRate := vpsSmartHighRate.Load()
 	vpsSmartEnabled.Store(params.Options.SmartLines)
 	vpsSmartHighRate.Store(params.Options.SmartHighRate)
+	previousStatus := vpsStoreLineStatus(params.Options.DownLines, params.Options.BusyLines)
 	cfg, raw, err := loadSetupConfigWithRaw(params)
 	if err != nil {
 		vpsSmartEnabled.Store(previousSmart)
 		vpsSmartHighRate.Store(previousHighRate)
+		vpsLineStatus.Store(previousStatus)
 		if currentConfig != nil {
 			// An invalid replacement must not discard the last working route
 			// graph or change the active TLS verification and probe options.
@@ -336,6 +338,7 @@ func applyOptions(options CoreOptions) {
 	skipCertVerify.Store(options.SkipCertVerify)
 	vpsSmartEnabled.Store(options.SmartLines)
 	vpsSmartHighRate.Store(options.SmartHighRate)
+	vpsStoreLineStatus(options.DownLines, options.BusyLines)
 }
 
 func patchTun(target *LC.Tun, params *tunSchema) {

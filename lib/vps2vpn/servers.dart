@@ -7,6 +7,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/widgets.dart';
@@ -291,6 +292,19 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
       }
     }
     final proxies = [...group.all];
+    final status = vpsNodeStatusByName(ref.watch(vpsNodeStatusProvider));
+    int standing(String name) => switch (status[name]?.state) {
+      VpsNodeState.maintenance => 2,
+      VpsNodeState.congested => 1,
+      _ => 0,
+    };
+    if (status.isNotEmpty) {
+      final order = {for (final (i, x) in proxies.indexed) x.name: i};
+      proxies.sort((a, b) {
+        final c = standing(a.name).compareTo(standing(b.name));
+        return c != 0 ? c : order[a.name]!.compareTo(order[b.name]!);
+      });
+    }
     if (byLatency) {
       // Stable sort keeps the subscription order among equals; the smart and
       // AI lines stay on top because they are choices, not servers.
@@ -299,6 +313,8 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
         final pa = _isPinned(a.name) ? 0 : 1;
         final pb = _isPinned(b.name) ? 0 : 1;
         if (pa != pb) return pa - pb;
+        final s = standing(a.name).compareTo(standing(b.name));
+        if (s != 0) return s;
         final c = _rank(delays[a.name]).compareTo(_rank(delays[b.name]));
         return c != 0 ? c : order[a.name]!.compareTo(order[b.name]!);
       });
@@ -487,6 +503,15 @@ class _ProxyCard extends ConsumerWidget {
       ),
     );
     final pinned = _isPinned(proxy.name);
+    final status = pinned
+        ? null
+        : ref.watch(
+            vpsNodeStatusProvider.select(
+              (nodes) => vpsNodeStatusByName(nodes)[proxy.name],
+            ),
+          );
+    final down = status?.state == VpsNodeState.maintenance;
+    final busy = status?.state == VpsNodeState.congested;
     final shown = pinned
         ? (name: friendlyLineName(context, proxy.name), rate: null)
         : vpsNodeName(proxy.name);
@@ -505,109 +530,132 @@ class _ProxyCard extends ConsumerWidget {
       selected: selected,
       radius: VpsRadius.medium,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Row(
-        children: [
-          _NodeTile(
-            label: switch (proxy.name) {
-              vpsSmartGroupName || vpsAIGroupName => null,
-              _ => vpsGuessCountry(proxy.name),
-            },
-            selected: selected,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        shown.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: vpsText(p, size: 14, weight: FontWeight.w600),
-                      ),
-                    ),
-                    if (rate != null && rate != 1) ...[
-                      const SizedBox(width: 8),
-                      _Tag(
-                        '${rate == rate.truncateToDouble() ? rate.toInt() : rate}x',
-                        rate >= 2 ? p.warn : p.soft,
-                      ),
-                    ],
-                    if (fresh) ...[
-                      const SizedBox(width: 8),
-                      _Tag(tr(context, '新', 'New'), p.accent),
-                    ],
-                    if (fastest) ...[
-                      const SizedBox(width: 8),
-                      _Tag(tr(context, '最快', 'Fastest'), p.good),
-                    ],
-                    if (bestForAi) ...[
-                      const SizedBox(width: 8),
-                      _Tag(tr(context, '适合 AI', 'Best for AI'), p.accent),
-                    ] else if (ai != null) ...[
-                      const SizedBox(width: 8),
-                      _Tag(
-                        ai!
-                            ? tr(context, 'AI 可用', 'AI works')
-                            : tr(context, 'AI 不可用', 'No AI'),
-                        ai! ? p.accent : p.muted,
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  proxy.name == vpsSmartGroupName
-                      ? tr(
-                          context,
-                          '推荐 · 自动用最快的服务器',
-                          'Recommended · uses the fastest server',
-                        )
-                      : proxy.name == vpsAIGroupName
-                      ? tr(context, 'AI 服务固定出口', 'Steady exit for AI')
-                      : protocolLabel(context, proxy.type) +
-                            (proxy.name.toUpperCase().contains('REALITY') &&
-                                    proxy.type.toLowerCase() == 'vless'
-                                ? ' · REALITY'
-                                : ''),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: vpsText(
-                    p,
-                    size: 12,
-                    color: proxy.name == vpsSmartGroupName ? p.accent : p.soft,
-                  ),
-                ),
-              ],
+      child: Opacity(
+        opacity: down ? 0.55 : 1,
+        child: Row(
+          children: [
+            _NodeTile(
+              label: switch (proxy.name) {
+                vpsSmartGroupName || vpsAIGroupName => null,
+                _ => vpsGuessCountry(proxy.name),
+              },
+              selected: selected,
             ),
-          ),
-          const SizedBox(width: 8),
-          // Signal bars, as on a phone: three for fast, one for slow, none
-          // for no answer. Read before the number.
-          _Bars(
-            level: switch (delay) {
-              null || 0 => -1,
-              < 0 => 0,
-              < 200 => 3,
-              < 500 => 2,
-              _ => 1,
-            },
-            color: delayColor,
-            off: p.line,
-          ),
-          const SizedBox(width: 8),
-          _DelayCell(
-            testing: delay == 0,
-            text: delayText,
-            color: delayColor,
-            onRetest: () => ref.read(proxiesActionProvider.notifier).delayTest([
-              proxy,
-            ], testUrl),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          shown.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: vpsText(p, size: 14, weight: FontWeight.w600),
+                        ),
+                      ),
+                      if (rate != null && rate != 1) ...[
+                        const SizedBox(width: 8),
+                        _Tag(
+                          '${rate == rate.truncateToDouble() ? rate.toInt() : rate}x',
+                          rate >= 2 ? p.warn : p.soft,
+                        ),
+                      ],
+                      if (down) ...[
+                        const SizedBox(width: 8),
+                        _Tag(tr(context, '维护中', 'Maintenance'), p.muted),
+                      ] else if (busy) ...[
+                        const SizedBox(width: 8),
+                        _Tag(tr(context, '拥挤', 'Busy'), p.warn),
+                      ],
+                      if (fresh) ...[
+                        const SizedBox(width: 8),
+                        _Tag(tr(context, '新', 'New'), p.accent),
+                      ],
+                      if (fastest) ...[
+                        const SizedBox(width: 8),
+                        _Tag(tr(context, '最快', 'Fastest'), p.good),
+                      ],
+                      if (bestForAi) ...[
+                        const SizedBox(width: 8),
+                        _Tag(tr(context, '适合 AI', 'Best for AI'), p.accent),
+                      ] else if (ai != null) ...[
+                        const SizedBox(width: 8),
+                        _Tag(
+                          ai!
+                              ? tr(context, 'AI 可用', 'AI works')
+                              : tr(context, 'AI 不可用', 'No AI'),
+                          ai! ? p.accent : p.muted,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    status != null && status.note.isNotEmpty
+                        ? status.note +
+                              (status.until == null
+                                  ? ''
+                                  : tr(
+                                      context,
+                                      ' · 预计 ${vpsClock(status.until!)} 恢复',
+                                      ' · back about ${vpsClock(status.until!)}',
+                                    ))
+                        : proxy.name == vpsSmartGroupName
+                        ? tr(
+                            context,
+                            '推荐 · 自动用最快的服务器',
+                            'Recommended · uses the fastest server',
+                          )
+                        : proxy.name == vpsAIGroupName
+                        ? tr(context, 'AI 服务固定出口', 'Steady exit for AI')
+                        : protocolLabel(context, proxy.type) +
+                              (proxy.name.toUpperCase().contains('REALITY') &&
+                                      proxy.type.toLowerCase() == 'vless'
+                                  ? ' · REALITY'
+                                  : ''),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: vpsText(
+                      p,
+                      size: 12,
+                      color: busy
+                          ? p.warn
+                          : proxy.name == vpsSmartGroupName
+                          ? p.accent
+                          : p.soft,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Signal bars, as on a phone: three for fast, one for slow, none
+            // for no answer. Read before the number.
+            _Bars(
+              level: switch (delay) {
+                null || 0 => -1,
+                < 0 => 0,
+                < 200 => 3,
+                < 500 => 2,
+                _ => 1,
+              },
+              color: delayColor,
+              off: p.line,
+            ),
+            const SizedBox(width: 8),
+            _DelayCell(
+              testing: delay == 0,
+              text: delayText,
+              color: delayColor,
+              onRetest: () => ref
+                  .read(proxiesActionProvider.notifier)
+                  .delayTest([proxy], testUrl),
+            ),
+          ],
+        ),
       ),
     );
   }

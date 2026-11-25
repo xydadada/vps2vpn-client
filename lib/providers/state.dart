@@ -10,6 +10,7 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
+import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:flutter/foundation.dart' show compute;

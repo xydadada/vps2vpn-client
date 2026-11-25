@@ -18,10 +18,12 @@ import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/local_network.dart';
+import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/screenshots.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/stale_refresh.dart';
 import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:fl_clash/vps2vpn/takeover_notice.dart';
 import 'package:fl_clash/vps2vpn/tun_ready.dart';
@@ -435,6 +437,17 @@ class _HeroState extends ConsumerState<_Hero> {
     final netOff = localNet?.value == VpsLocalNet.offline;
     final portal = localNet?.value == VpsLocalNet.portal;
     final netFine = localNet?.value == VpsLocalNet.online;
+    final pickedStatus =
+        on && picked != vpsSmartGroupName && picked != vpsAIGroupName
+        ? ref.watch(
+            vpsNodeStatusProvider.select(
+              (nodes) => vpsNodeStatusByName(nodes)[picked],
+            ),
+          )
+        : null;
+    final pickedDown = pickedStatus?.state == VpsNodeState.maintenance
+        ? pickedStatus
+        : null;
     final onSince = _onSince;
     final tunReady = ref.watch(vpsTunReadyProvider).value;
     final lineUp = on && delay != null && delay > 0;
@@ -552,6 +565,8 @@ class _HeroState extends ConsumerState<_Hero> {
                           'offices). The button below disconnects and opens '
                           'the login page; connect again once logged in.',
                     )
+                  : pickedDown != null
+                  ? vpsMaintenanceText(context, picked!, pickedDown)
                   : netChecking
                   ? tr(
                       context,

@@ -18,6 +18,9 @@ const (
 	vpsSmartGroup = "⚡ 智能线路"
 	vpsCheapGroup = "⚡ 低倍率线路"
 	vpsDearGroup  = "⚡ 高倍率线路"
+	vpsFirstGroup = "⚡ 首选线路"
+	vpsBusyGroup  = "⚡ 拥挤线路"
+	vpsDownGroup  = "⚡ 维护中线路"
 	vpsAIGroup    = "🤖 AI 专线"
 	vpsProbeURL   = "https://www.gstatic.com/generate_204"
 	vpsAIProbeURL = vpsProbeURL + "#vps2vpn-ai"
@@ -28,6 +31,29 @@ var vpsSmartEnabled atomic.Bool
 
 // Set from CoreOptions.SmartHighRate; off, lines above 1x only stand by.
 var vpsSmartHighRate atomic.Bool
+
+// Our panel's maintenance and crowded lines, by exact name.
+var vpsLineStatus atomic.Pointer[vpsLineStates]
+
+type vpsLineStates struct{ down, busy map[string]bool }
+
+func vpsStoreLineStatus(down, busy []string) *vpsLineStates {
+	states := &vpsLineStates{down: map[string]bool{}, busy: map[string]bool{}}
+	for _, name := range down {
+		states.down[name] = true
+	}
+	for _, name := range busy {
+		states.busy[name] = true
+	}
+	return vpsLineStatus.Swap(states)
+}
+
+const (
+	vpsTierFirst = iota
+	vpsTierBusy
+	vpsTierDear
+	vpsTierDown
+)
 
 // A rate ending a name: "×5", "· 5.0x", "[2x]", "倍率:1.5", "x0.5", "2倍".
 var vpsRateTail = regexp.MustCompile(`(?i)(?:^|[\s·|_,，\-\[(（【])[\[(（【]?\s*(?:[x×]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:[x×]|倍率?)|倍率\s*[:：]?\s*(\d+(?:\.\d+)?))\s*[\])）】]?\s*$`)
@@ -475,7 +501,7 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 		addr   string
 		server int
 		rank   int
-		dear   bool
+		tier   int
 	}
 	var lines []line
 	servers := map[string]int{}
@@ -542,12 +568,30 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 		}
 	}
 	tiered := !vpsSmartHighRate.Load() && cheap > 0 && dear > 0
+	status := vpsLineStatus.Load()
+	serverTier := map[int]int{}
+	for _, l := range lines {
+		tier := vpsTierFirst
+		switch {
+		case status != nil && status.down[l.name]:
+			tier = vpsTierDown
+		case tiered && serverRate[l.server] > 1:
+			tier = vpsTierDear
+		case status != nil && status.busy[l.name]:
+			tier = vpsTierBusy
+		}
+		serverTier[l.server] = max(serverTier[l.server], tier)
+	}
 	for i := range lines {
-		lines[i].dear = tiered && serverRate[lines[i].server] > 1
+		lines[i].tier = serverTier[lines[i].server]
+	}
+	tierUsed := map[int]bool{}
+	for _, tier := range serverTier {
+		tierUsed[tier] = true
 	}
 	sort.SliceStable(lines, func(i, j int) bool {
-		if lines[i].dear != lines[j].dear {
-			return !lines[i].dear
+		if lines[i].tier != lines[j].tier {
+			return lines[i].tier < lines[j].tier
 		}
 		if lines[i].server != lines[j].server {
 			return lines[i].server < lines[j].server
@@ -556,12 +600,12 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	})
 	smart := make([]string, len(lines))
 	var perServer [][]string
-	var perServerDear []bool
+	var perServerTier []int
 	for i, l := range lines {
 		smart[i] = l.name
 		if i == 0 || l.server != lines[i-1].server {
 			perServer = append(perServer, nil)
-			perServerDear = append(perServerDear, l.dear)
+			perServerTier = append(perServerTier, l.tier)
 		}
 		perServer[len(perServer)-1] = append(perServer[len(perServer)-1], l.name)
 	}
@@ -578,22 +622,26 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 			"max-failed-times": 2,
 			"lazy":             false,
 		})
-	} else if tiered {
-		var cheapMembers, dearMembers []string
+	} else if len(tierUsed) > 1 {
+		members := map[int][]string{}
 		for i, names := range perServer {
-			if perServerDear[i] {
-				dearMembers = append(dearMembers, vpsServerGroup(raw, names))
-			} else {
-				cheapMembers = append(cheapMembers, vpsServerGroup(raw, names))
+			members[perServerTier[i]] = append(members[perServerTier[i]], vpsServerGroup(raw, names))
+		}
+		first := vpsFirstGroup
+		if tiered {
+			first = vpsCheapGroup
+		}
+		names := map[int]string{vpsTierFirst: first, vpsTierBusy: vpsBusyGroup, vpsTierDear: vpsDearGroup, vpsTierDown: vpsDownGroup}
+		var tiers []string
+		for tier := vpsTierFirst; tier <= vpsTierDown; tier++ {
+			if len(members[tier]) > 0 {
+				tiers = append(tiers, vpsFastestOf(raw, names[tier], members[tier]))
 			}
 		}
 		raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
-			"name": vpsSmartGroup,
-			"type": "fallback",
-			"proxies": []string{
-				vpsFastestOf(raw, vpsCheapGroup, cheapMembers),
-				vpsFastestOf(raw, vpsDearGroup, dearMembers),
-			},
+			"name":             vpsSmartGroup,
+			"type":             "fallback",
+			"proxies":          tiers,
 			"url":              vpsProbeURL,
 			"interval":         60,
 			"timeout":          2500,

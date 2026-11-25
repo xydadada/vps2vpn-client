@@ -2,6 +2,7 @@ package core
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/metacubex/mihomo/config"
@@ -467,5 +468,53 @@ func TestVps2vpnSmartUsesDearLinesWhenAllowedOrAlone(t *testing.T) {
 	vps2vpnEnhance(raw, 0)
 	if smart := vpsGroup(raw, vpsSmartGroup); smart["type"] != "url-test" || len(smart["proxies"].([]string)) != 2 {
 		t.Fatalf("all dear: smart = %v, want both in one url-test", smart)
+	}
+}
+
+// Our panel names lines down for maintenance or crowded: the smart line and
+// the AI line try them last, and a line picked by hand stays in the selector.
+func TestVps2vpnSmartPutsLinesUnderMaintenanceLast(t *testing.T) {
+	vpsOn(t)
+	vpsStoreLineStatus(
+		[]string{"Osaka Hysteria2", "Osaka Reality", "Osaka Reality IPv6"},
+		[]string{"Tokyo Reality"},
+	)
+	t.Cleanup(func() { vpsStoreLineStatus(nil, nil) })
+	raw := config.DefaultRawConfig()
+	raw.Proxy = []map[string]any{
+		vpsHy2("Osaka Hysteria2", "192.0.2.10"),
+		vpsReality("Osaka Reality", "192.0.2.10"),
+		vpsReality("Osaka Reality IPv6", "2001:db8::10"),
+		vpsReality("Tokyo Reality", "192.0.2.11"),
+		vpsReality("Seoul Reality", "192.0.2.12"),
+	}
+	all := []any{"Osaka Hysteria2", "Osaka Reality", "Osaka Reality IPv6", "Tokyo Reality", "Seoul Reality"}
+	raw.ProxyGroup = []map[string]any{{"name": "Proxy", "type": "select", "proxies": all}}
+	raw.Rule = []string{"MATCH,Proxy"}
+	vps2vpnEnhance(raw, 0)
+
+	smart := vpsGroup(raw, vpsSmartGroup)
+	if smart["type"] != "fallback" {
+		t.Fatalf("smart = %v, want a fallback", smart)
+	}
+	if got := smart["proxies"].([]string); !slices.Equal(got, []string{"Seoul Reality", "Tokyo Reality", vpsDownGroup}) {
+		t.Fatalf("smart members = %v", got)
+	}
+	ai := vpsGroup(raw, vpsAIGroup)["proxies"].([]string)
+	if ai[0] != "Seoul Reality" || ai[1] != "Tokyo Reality" || !strings.HasPrefix(ai[len(ai)-1], "Osaka") {
+		t.Fatalf("ai = %v, want Osaka last", ai)
+	}
+	if got := vpsGroup(raw, "Proxy")["proxies"].([]any); !slices.Contains(got, any("Osaka Reality")) {
+		t.Fatalf("proxy = %v", got)
+	}
+	if _, err := vpsParse(t, raw); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	vpsStoreLineStatus(nil, nil)
+	raw = vpsRatedRaw()
+	vps2vpnEnhance(raw, 0)
+	if got := vpsGroup(raw, vpsSmartGroup)["proxies"].([]string); !slices.Equal(got, []string{vpsCheapGroup, "TW · 5.0x"}) {
+		t.Fatalf("no status: smart members = %v", got)
 	}
 }

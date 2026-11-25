@@ -31,6 +31,10 @@ abstract class CoreOptions with _$CoreOptions {
     @Default(false)
     @JsonKey(name: 'vps2vpn-smart-high-rate')
     bool smartHighRate,
+    @JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false)
+    List<String>? downLines,
+    @JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false)
+    List<String>? busyLines,
   }) = _CoreOptions;
 
   factory CoreOptions.fromJson(Map<String, Object?> json) =>

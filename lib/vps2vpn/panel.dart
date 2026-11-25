@@ -21,6 +21,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/line_watch.dart';
+import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -302,6 +303,7 @@ class VpsMember {
     this.expireAt,
     this.expireDay,
     this.nextResetDay,
+    this.nodes,
     this.ai,
     this.client,
     this.throttled = false,
@@ -324,6 +326,9 @@ class VpsMember {
 
   final VpsDay? expireDay;
   final VpsDay? nextResetDay;
+
+  /// Null unless the panel has `features.node_status` on.
+  final List<VpsNodeStatus>? nodes;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
@@ -357,6 +362,15 @@ class VpsMember {
       expireAt: expire,
       expireDay: _panelDay(json['expire_day']),
       nextResetDay: _panelDay(json['next_reset_day']),
+      nodes: switch ((json['features'], json['nodes'])) {
+        (final Map features, final List nodes)
+            when features['node_status'] == true =>
+          [
+            for (final node in nodes)
+              ?VpsNodeStatus.fromJson(node, at: _panelTimestamp),
+          ],
+        _ => null,
+      },
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
       throttled: json['throttled'] == true,

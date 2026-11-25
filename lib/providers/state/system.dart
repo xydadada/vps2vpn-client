@@ -23,6 +23,7 @@ CoreOptions coreOptions(Ref ref) {
       (state) => (testUrl: state.testUrl, mitmCapture: state.mitm.capture),
     ),
   );
+  final avoid = vpsLinesToAvoid(ref.watch(vpsNodeStatusProvider));
   final (
     :checkCertificate,
     :delayTestTimeout,
@@ -45,6 +46,8 @@ CoreOptions coreOptions(Ref ref) {
     mitmCapture: rsFeature && mitmCapture,
     smartLines: smartLines,
     smartHighRate: smartHighRate,
+    downLines: avoid.down.isEmpty ? null : avoid.down,
+    busyLines: avoid.busy.isEmpty ? null : avoid.busy,
   );
 }
 

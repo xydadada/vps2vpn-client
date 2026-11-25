@@ -132,8 +132,10 @@ type CoreOptions struct {
 	DelayTestTimeout int64 `json:"delay-test-timeout"`
 	MITMCapture      bool  `json:"mitm-capture"`
 	// vps2vpn smart lines (see vps2vpn_smart.go).
-	SmartLines    bool `json:"vps2vpn-smart"`
-	SmartHighRate bool `json:"vps2vpn-smart-high-rate"`
+	SmartLines    bool     `json:"vps2vpn-smart"`
+	SmartHighRate bool     `json:"vps2vpn-smart-high-rate"`
+	DownLines     []string `json:"vps2vpn-down-lines"`
+	BusyLines     []string `json:"vps2vpn-busy-lines"`
 }
 
 type SetupBase struct {

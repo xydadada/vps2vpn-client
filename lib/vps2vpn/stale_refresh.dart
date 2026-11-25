@@ -11,9 +11,12 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/home.dart' show mainGroup;
+import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart' show tr;
+import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/profile_health.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _freshEnough = Duration(minutes: 10);
@@ -105,3 +108,52 @@ final vpsPanelSyncProvider = Provider.autoDispose<void>((ref) {
         .catchError((Object _) {}),
   );
 });
+
+final _toldDown = <String>{};
+
+/// The panel's word on its servers reaches the Core, and the smart line is
+/// rebuilt around a server going into or out of maintenance.
+final vpsNodeStatusSyncProvider = Provider.autoDispose<void>((ref) {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+  final member = ref.watch(vpsMemberProvider).value?.member;
+  if (member == null) return;
+  final nodes = member.nodes ?? const <VpsNodeStatus>[];
+  scheduleMicrotask(() {
+    if (!ref.mounted) return;
+    if (!ref.read(vpsNodeStatusProvider.notifier).set(nodes)) return;
+    if (!ref.read(isStartProvider)) return;
+    ref.read(setupActionProvider.notifier).applyProfileDebounce(force: true);
+    final group = mainGroup(ref.read(currentGroupsStateProvider).value);
+    final picked = group == null
+        ? null
+        : ref.read(selectedProxyNameProvider(group.name));
+    final down = vpsNodeStatusByName(ref.read(vpsNodeStatusProvider))[picked];
+    if (picked == null ||
+        picked == vpsSmartGroupName ||
+        down?.state != VpsNodeState.maintenance ||
+        !_toldDown.add('$picked|${down!.until}')) {
+      return;
+    }
+    final context = globalState.navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    dialogs.showBanner(vpsMaintenanceText(context, picked, down));
+  });
+});
+
+String vpsMaintenanceText(
+  BuildContext context,
+  String name,
+  VpsNodeStatus status,
+) {
+  final until = status.until;
+  final back = until == null ? '' : vpsClock(until);
+  final note = status.note.isEmpty ? '' : '：${status.note}';
+  return tr(
+    context,
+    '$name 在维护$note${back.isEmpty ? '' : '（预计 $back 恢复）'}。照样可以连，连不上就到「节点」换一条或改用智能线路。',
+    '$name is down for maintenance'
+        '${status.note.isEmpty ? '' : ': ${status.note}'}'
+        '${back.isEmpty ? '' : ' (back about $back)'}. You can still use it; '
+        'if it does not answer, pick another in Nodes or use the smart line.',
+  );
+}

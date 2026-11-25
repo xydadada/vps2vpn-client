@@ -29,6 +29,12 @@ _CoreOptions _$CoreOptionsFromJson(Map<String, dynamic> json) => _CoreOptions(
   mitmCapture: json['mitm-capture'] as bool? ?? false,
   smartLines: json['vps2vpn-smart'] as bool? ?? true,
   smartHighRate: json['vps2vpn-smart-high-rate'] as bool? ?? false,
+  downLines: (json['vps2vpn-down-lines'] as List<dynamic>?)
+      ?.map((e) => e as String)
+      .toList(),
+  busyLines: (json['vps2vpn-busy-lines'] as List<dynamic>?)
+      ?.map((e) => e as String)
+      .toList(),
 );
 
 Map<String, dynamic> _$CoreOptionsToJson(_CoreOptions instance) =>
@@ -39,6 +45,8 @@ Map<String, dynamic> _$CoreOptionsToJson(_CoreOptions instance) =>
       'mitm-capture': instance.mitmCapture,
       'vps2vpn-smart': instance.smartLines,
       'vps2vpn-smart-high-rate': instance.smartHighRate,
+      'vps2vpn-down-lines': ?instance.downLines,
+      'vps2vpn-busy-lines': ?instance.busyLines,
     };
 
 _SetupBase _$SetupBaseFromJson(Map<String, dynamic> json) => _SetupBase(

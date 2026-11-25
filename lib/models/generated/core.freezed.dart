@@ -340,7 +340,7 @@ $CoreOptionsCopyWith<$Res> get options {
 /// @nodoc
 mixin _$CoreOptions {
 
-@JsonKey(name: 'test-url') String get testUrl;@JsonKey(name: 'skip-cert-verify') bool get skipCertVerify;@JsonKey(name: 'delay-test-timeout') int get delayTestTimeout;@JsonKey(name: 'mitm-capture') bool get mitmCapture;@JsonKey(name: 'vps2vpn-smart') bool get smartLines;@JsonKey(name: 'vps2vpn-smart-high-rate') bool get smartHighRate;
+@JsonKey(name: 'test-url') String get testUrl;@JsonKey(name: 'skip-cert-verify') bool get skipCertVerify;@JsonKey(name: 'delay-test-timeout') int get delayTestTimeout;@JsonKey(name: 'mitm-capture') bool get mitmCapture;@JsonKey(name: 'vps2vpn-smart') bool get smartLines;@JsonKey(name: 'vps2vpn-smart-high-rate') bool get smartHighRate;@JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false) List<String>? get downLines;@JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false) List<String>? get busyLines;
 /// Create a copy of CoreOptions
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -354,20 +354,20 @@ $CoreOptionsCopyWith<CoreOptions> get copyWith => _$CoreOptionsCopyWithImpl<Core
 @override
 bool operator ==(Object other) {
   final _this = this as CoreOptions;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreOptions&&(identical(other.testUrl, _this.testUrl) || other.testUrl == _this.testUrl)&&(identical(other.skipCertVerify, _this.skipCertVerify) || other.skipCertVerify == _this.skipCertVerify)&&(identical(other.delayTestTimeout, _this.delayTestTimeout) || other.delayTestTimeout == _this.delayTestTimeout)&&(identical(other.mitmCapture, _this.mitmCapture) || other.mitmCapture == _this.mitmCapture)&&(identical(other.smartLines, _this.smartLines) || other.smartLines == _this.smartLines)&&(identical(other.smartHighRate, _this.smartHighRate) || other.smartHighRate == _this.smartHighRate));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreOptions&&(identical(other.testUrl, _this.testUrl) || other.testUrl == _this.testUrl)&&(identical(other.skipCertVerify, _this.skipCertVerify) || other.skipCertVerify == _this.skipCertVerify)&&(identical(other.delayTestTimeout, _this.delayTestTimeout) || other.delayTestTimeout == _this.delayTestTimeout)&&(identical(other.mitmCapture, _this.mitmCapture) || other.mitmCapture == _this.mitmCapture)&&(identical(other.smartLines, _this.smartLines) || other.smartLines == _this.smartLines)&&(identical(other.smartHighRate, _this.smartHighRate) || other.smartHighRate == _this.smartHighRate)&&const DeepCollectionEquality().equals(other.downLines, _this.downLines)&&const DeepCollectionEquality().equals(other.busyLines, _this.busyLines));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as CoreOptions;
-  return Object.hash(runtimeType,_this.testUrl,_this.skipCertVerify,_this.delayTestTimeout,_this.mitmCapture,_this.smartLines,_this.smartHighRate);
+  return Object.hash(runtimeType,_this.testUrl,_this.skipCertVerify,_this.delayTestTimeout,_this.mitmCapture,_this.smartLines,_this.smartHighRate,const DeepCollectionEquality().hash(_this.downLines),const DeepCollectionEquality().hash(_this.busyLines));
 }
 
 @override
 String toString() {
   final _this = this as CoreOptions;
-  return 'CoreOptions(testUrl: ${_this.testUrl}, skipCertVerify: ${_this.skipCertVerify}, delayTestTimeout: ${_this.delayTestTimeout}, mitmCapture: ${_this.mitmCapture}, smartLines: ${_this.smartLines}, smartHighRate: ${_this.smartHighRate})';
+  return 'CoreOptions(testUrl: ${_this.testUrl}, skipCertVerify: ${_this.skipCertVerify}, delayTestTimeout: ${_this.delayTestTimeout}, mitmCapture: ${_this.mitmCapture}, smartLines: ${_this.smartLines}, smartHighRate: ${_this.smartHighRate}, downLines: ${_this.downLines}, busyLines: ${_this.busyLines})';
 }
 
 
@@ -378,7 +378,7 @@ abstract mixin class $CoreOptionsCopyWith<$Res>  {
   factory $CoreOptionsCopyWith(CoreOptions value, $Res Function(CoreOptions) _then) = _$CoreOptionsCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: 'test-url') String testUrl,@JsonKey(name: 'skip-cert-verify') bool skipCertVerify,@JsonKey(name: 'delay-test-timeout') int delayTestTimeout,@JsonKey(name: 'mitm-capture') bool mitmCapture,@JsonKey(name: 'vps2vpn-smart') bool smartLines,@JsonKey(name: 'vps2vpn-smart-high-rate') bool smartHighRate
+@JsonKey(name: 'test-url') String testUrl,@JsonKey(name: 'skip-cert-verify') bool skipCertVerify,@JsonKey(name: 'delay-test-timeout') int delayTestTimeout,@JsonKey(name: 'mitm-capture') bool mitmCapture,@JsonKey(name: 'vps2vpn-smart') bool smartLines,@JsonKey(name: 'vps2vpn-smart-high-rate') bool smartHighRate,@JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false) List<String>? downLines,@JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false) List<String>? busyLines
 });
 
 
@@ -395,7 +395,7 @@ class _$CoreOptionsCopyWithImpl<$Res>
 
 /// Create a copy of CoreOptions
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? testUrl = null,Object? skipCertVerify = null,Object? delayTestTimeout = null,Object? mitmCapture = null,Object? smartLines = null,Object? smartHighRate = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? testUrl = null,Object? skipCertVerify = null,Object? delayTestTimeout = null,Object? mitmCapture = null,Object? smartLines = null,Object? smartHighRate = null,Object? downLines = freezed,Object? busyLines = freezed,}) {
   return _then(CoreOptions(
 testUrl: null == testUrl ? _self.testUrl : testUrl // ignore: cast_nullable_to_non_nullable
 as String,skipCertVerify: null == skipCertVerify ? _self.skipCertVerify : skipCertVerify // ignore: cast_nullable_to_non_nullable
@@ -403,7 +403,9 @@ as bool,delayTestTimeout: null == delayTestTimeout ? _self.delayTestTimeout : de
 as int,mitmCapture: null == mitmCapture ? _self.mitmCapture : mitmCapture // ignore: cast_nullable_to_non_nullable
 as bool,smartLines: null == smartLines ? _self.smartLines : smartLines // ignore: cast_nullable_to_non_nullable
 as bool,smartHighRate: null == smartHighRate ? _self.smartHighRate : smartHighRate // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,downLines: freezed == downLines ? _self.downLines : downLines // ignore: cast_nullable_to_non_nullable
+as List<String>?,busyLines: freezed == busyLines ? _self.busyLines : busyLines // ignore: cast_nullable_to_non_nullable
+as List<String>?,
   ));
 }
 
@@ -488,10 +490,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'test-url')  String testUrl, @JsonKey(name: 'skip-cert-verify')  bool skipCertVerify, @JsonKey(name: 'delay-test-timeout')  int delayTestTimeout, @JsonKey(name: 'mitm-capture')  bool mitmCapture, @JsonKey(name: 'vps2vpn-smart')  bool smartLines, @JsonKey(name: 'vps2vpn-smart-high-rate')  bool smartHighRate)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'test-url')  String testUrl, @JsonKey(name: 'skip-cert-verify')  bool skipCertVerify, @JsonKey(name: 'delay-test-timeout')  int delayTestTimeout, @JsonKey(name: 'mitm-capture')  bool mitmCapture, @JsonKey(name: 'vps2vpn-smart')  bool smartLines, @JsonKey(name: 'vps2vpn-smart-high-rate')  bool smartHighRate, @JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false)  List<String>? downLines, @JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false)  List<String>? busyLines)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _CoreOptions() when $default != null:
-return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.mitmCapture,_that.smartLines,_that.smartHighRate);case _:
+return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.mitmCapture,_that.smartLines,_that.smartHighRate,_that.downLines,_that.busyLines);case _:
   return orElse();
 
 }
@@ -509,10 +511,10 @@ return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'test-url')  String testUrl, @JsonKey(name: 'skip-cert-verify')  bool skipCertVerify, @JsonKey(name: 'delay-test-timeout')  int delayTestTimeout, @JsonKey(name: 'mitm-capture')  bool mitmCapture, @JsonKey(name: 'vps2vpn-smart')  bool smartLines, @JsonKey(name: 'vps2vpn-smart-high-rate')  bool smartHighRate)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'test-url')  String testUrl, @JsonKey(name: 'skip-cert-verify')  bool skipCertVerify, @JsonKey(name: 'delay-test-timeout')  int delayTestTimeout, @JsonKey(name: 'mitm-capture')  bool mitmCapture, @JsonKey(name: 'vps2vpn-smart')  bool smartLines, @JsonKey(name: 'vps2vpn-smart-high-rate')  bool smartHighRate, @JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false)  List<String>? downLines, @JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false)  List<String>? busyLines)  $default,) {final _that = this;
 switch (_that) {
 case _CoreOptions():
-return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.mitmCapture,_that.smartLines,_that.smartHighRate);case _:
+return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.mitmCapture,_that.smartLines,_that.smartHighRate,_that.downLines,_that.busyLines);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -529,10 +531,10 @@ return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'test-url')  String testUrl, @JsonKey(name: 'skip-cert-verify')  bool skipCertVerify, @JsonKey(name: 'delay-test-timeout')  int delayTestTimeout, @JsonKey(name: 'mitm-capture')  bool mitmCapture, @JsonKey(name: 'vps2vpn-smart')  bool smartLines, @JsonKey(name: 'vps2vpn-smart-high-rate')  bool smartHighRate)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'test-url')  String testUrl, @JsonKey(name: 'skip-cert-verify')  bool skipCertVerify, @JsonKey(name: 'delay-test-timeout')  int delayTestTimeout, @JsonKey(name: 'mitm-capture')  bool mitmCapture, @JsonKey(name: 'vps2vpn-smart')  bool smartLines, @JsonKey(name: 'vps2vpn-smart-high-rate')  bool smartHighRate, @JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false)  List<String>? downLines, @JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false)  List<String>? busyLines)?  $default,) {final _that = this;
 switch (_that) {
 case _CoreOptions() when $default != null:
-return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.mitmCapture,_that.smartLines,_that.smartHighRate);case _:
+return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.mitmCapture,_that.smartLines,_that.smartHighRate,_that.downLines,_that.busyLines);case _:
   return null;
 
 }
@@ -544,7 +546,7 @@ return $default(_that.testUrl,_that.skipCertVerify,_that.delayTestTimeout,_that.
 @JsonSerializable()
 
 class _CoreOptions implements CoreOptions {
-  const _CoreOptions({@JsonKey(name: 'test-url') required this.testUrl, @JsonKey(name: 'skip-cert-verify') this.skipCertVerify = false, @JsonKey(name: 'delay-test-timeout') this.delayTestTimeout = defaultDelayTestTimeout, @JsonKey(name: 'mitm-capture') this.mitmCapture = false, @JsonKey(name: 'vps2vpn-smart') this.smartLines = true, @JsonKey(name: 'vps2vpn-smart-high-rate') this.smartHighRate = false});
+  const _CoreOptions({@JsonKey(name: 'test-url') required this.testUrl, @JsonKey(name: 'skip-cert-verify') this.skipCertVerify = false, @JsonKey(name: 'delay-test-timeout') this.delayTestTimeout = defaultDelayTestTimeout, @JsonKey(name: 'mitm-capture') this.mitmCapture = false, @JsonKey(name: 'vps2vpn-smart') this.smartLines = true, @JsonKey(name: 'vps2vpn-smart-high-rate') this.smartHighRate = false, @JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false)  List<String>? downLines, @JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false)  List<String>? busyLines}): _downLines = downLines,_busyLines = busyLines;
   factory _CoreOptions.fromJson(Map<String, dynamic> json) => _$CoreOptionsFromJson(json);
 
 @override@JsonKey(name: 'test-url') final  String testUrl;
@@ -553,6 +555,24 @@ class _CoreOptions implements CoreOptions {
 @override@JsonKey(name: 'mitm-capture') final  bool mitmCapture;
 @override@JsonKey(name: 'vps2vpn-smart') final  bool smartLines;
 @override@JsonKey(name: 'vps2vpn-smart-high-rate') final  bool smartHighRate;
+ final  List<String>? _downLines;
+@override@JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false) List<String>? get downLines {
+  final value = _downLines;
+  if (value == null) return null;
+  if (_downLines is EqualUnmodifiableListView) return _downLines;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(value);
+}
+
+ final  List<String>? _busyLines;
+@override@JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false) List<String>? get busyLines {
+  final value = _busyLines;
+  if (value == null) return null;
+  if (_busyLines is EqualUnmodifiableListView) return _busyLines;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(value);
+}
+
 
 /// Create a copy of CoreOptions
 /// with the given fields replaced by the non-null parameter values.
@@ -567,18 +587,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _CoreOptions&&(identical(other.testUrl, testUrl) || other.testUrl == testUrl)&&(identical(other.skipCertVerify, skipCertVerify) || other.skipCertVerify == skipCertVerify)&&(identical(other.delayTestTimeout, delayTestTimeout) || other.delayTestTimeout == delayTestTimeout)&&(identical(other.mitmCapture, mitmCapture) || other.mitmCapture == mitmCapture)&&(identical(other.smartLines, smartLines) || other.smartLines == smartLines)&&(identical(other.smartHighRate, smartHighRate) || other.smartHighRate == smartHighRate));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _CoreOptions&&(identical(other.testUrl, testUrl) || other.testUrl == testUrl)&&(identical(other.skipCertVerify, skipCertVerify) || other.skipCertVerify == skipCertVerify)&&(identical(other.delayTestTimeout, delayTestTimeout) || other.delayTestTimeout == delayTestTimeout)&&(identical(other.mitmCapture, mitmCapture) || other.mitmCapture == mitmCapture)&&(identical(other.smartLines, smartLines) || other.smartLines == smartLines)&&(identical(other.smartHighRate, smartHighRate) || other.smartHighRate == smartHighRate)&&const DeepCollectionEquality().equals(other.downLines, _downLines)&&const DeepCollectionEquality().equals(other.busyLines, _busyLines));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,testUrl,skipCertVerify,delayTestTimeout,mitmCapture,smartLines,smartHighRate);
+    return Object.hash(runtimeType,testUrl,skipCertVerify,delayTestTimeout,mitmCapture,smartLines,smartHighRate,const DeepCollectionEquality().hash(_downLines),const DeepCollectionEquality().hash(_busyLines));
 }
 
 @override
 String toString() {
-    return 'CoreOptions(testUrl: $testUrl, skipCertVerify: $skipCertVerify, delayTestTimeout: $delayTestTimeout, mitmCapture: $mitmCapture, smartLines: $smartLines, smartHighRate: $smartHighRate)';
+    return 'CoreOptions(testUrl: $testUrl, skipCertVerify: $skipCertVerify, delayTestTimeout: $delayTestTimeout, mitmCapture: $mitmCapture, smartLines: $smartLines, smartHighRate: $smartHighRate, downLines: $downLines, busyLines: $busyLines)';
 }
 
 
@@ -589,7 +609,7 @@ abstract mixin class _$CoreOptionsCopyWith<$Res> implements $CoreOptionsCopyWith
   factory _$CoreOptionsCopyWith(_CoreOptions value, $Res Function(_CoreOptions) _then) = __$CoreOptionsCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: 'test-url') String testUrl,@JsonKey(name: 'skip-cert-verify') bool skipCertVerify,@JsonKey(name: 'delay-test-timeout') int delayTestTimeout,@JsonKey(name: 'mitm-capture') bool mitmCapture,@JsonKey(name: 'vps2vpn-smart') bool smartLines,@JsonKey(name: 'vps2vpn-smart-high-rate') bool smartHighRate
+@JsonKey(name: 'test-url') String testUrl,@JsonKey(name: 'skip-cert-verify') bool skipCertVerify,@JsonKey(name: 'delay-test-timeout') int delayTestTimeout,@JsonKey(name: 'mitm-capture') bool mitmCapture,@JsonKey(name: 'vps2vpn-smart') bool smartLines,@JsonKey(name: 'vps2vpn-smart-high-rate') bool smartHighRate,@JsonKey(name: 'vps2vpn-down-lines', includeIfNull: false) List<String>? downLines,@JsonKey(name: 'vps2vpn-busy-lines', includeIfNull: false) List<String>? busyLines
 });
 
 
@@ -606,7 +626,7 @@ class __$CoreOptionsCopyWithImpl<$Res>
 
 /// Create a copy of CoreOptions
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? testUrl = null,Object? skipCertVerify = null,Object? delayTestTimeout = null,Object? mitmCapture = null,Object? smartLines = null,Object? smartHighRate = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? testUrl = null,Object? skipCertVerify = null,Object? delayTestTimeout = null,Object? mitmCapture = null,Object? smartLines = null,Object? smartHighRate = null,Object? downLines = freezed,Object? busyLines = freezed,}) {
   return _then(_CoreOptions(
 testUrl: null == testUrl ? _self.testUrl : testUrl // ignore: cast_nullable_to_non_nullable
 as String,skipCertVerify: null == skipCertVerify ? _self.skipCertVerify : skipCertVerify // ignore: cast_nullable_to_non_nullable
@@ -614,7 +634,9 @@ as bool,delayTestTimeout: null == delayTestTimeout ? _self.delayTestTimeout : de
 as int,mitmCapture: null == mitmCapture ? _self.mitmCapture : mitmCapture // ignore: cast_nullable_to_non_nullable
 as bool,smartLines: null == smartLines ? _self.smartLines : smartLines // ignore: cast_nullable_to_non_nullable
 as bool,smartHighRate: null == smartHighRate ? _self.smartHighRate : smartHighRate // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,downLines: freezed == downLines ? _self._downLines : downLines // ignore: cast_nullable_to_non_nullable
+as List<String>?,busyLines: freezed == busyLines ? _self._busyLines : busyLines // ignore: cast_nullable_to_non_nullable
+as List<String>?,
   ));
 }
 
