@@ -98,6 +98,16 @@ class Preferences {
     await preferences?.setString('vpsFeedback$key', value);
   }
 
+  Future<String?> getVpsDevice(String key) async {
+    final preferences = await _store.value;
+    return preferences?.getString('vpsDevice$key');
+  }
+
+  Future<void> setVpsDevice(String key, String value) async {
+    final preferences = await _store.value;
+    await preferences?.setString('vpsDevice$key', value);
+  }
+
   Future<String?> getVpsConfigVersion(int profileId) async {
     final preferences = await _store.value;
     return preferences?.getString('vpsConfigVersion$profileId');

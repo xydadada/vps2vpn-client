@@ -113,6 +113,8 @@ String vpsSubscriptionLink(String link) {
 // optional timestamp must not make the entire member response unusable.
 const _maxPanelEpochSeconds = 8640000000000;
 
+DateTime? vpsPanelTime(Object? value) => _panelTimestamp(value);
+
 DateTime? _panelTimestamp(Object? value) {
   if (value is! num ||
       !value.isFinite ||
@@ -307,6 +309,7 @@ class VpsMember {
     this.nodes,
     this.feedback = false,
     this.feedbackUnread = 0,
+    this.devices = false,
     this.configVersion,
     this.ai,
     this.client,
@@ -335,6 +338,7 @@ class VpsMember {
   final List<VpsNodeStatus>? nodes;
   final bool feedback;
   final int feedbackUnread;
+  final bool devices;
 
   /// Changes whenever this account's subscription would; null on other panels.
   final String? configVersion;
@@ -385,6 +389,10 @@ class VpsMember {
         _ => false,
       },
       feedbackUnread: _int(json['feedback_unread']),
+      devices: switch (json['features']) {
+        final Map features => features['devices'] == true,
+        _ => false,
+      },
       configVersion: switch (json['config_version']) {
         final String v when RegExp(r'^[0-9a-fA-F]{1,64}$').hasMatch(v) =>
           v.toLowerCase(),
@@ -699,6 +707,7 @@ Future<(int, String)> _send(
   VpsRequestScope? scope,
   Set<String> pinnedSha256 = const {},
   void Function(HttpHeaders headers)? onHeaders,
+  Map<String, String> headers = const {},
 }) async {
   final client = _client(
     proxyPort: proxyPort,
@@ -712,6 +721,7 @@ Future<(int, String)> _send(
         ? await client.getUrl(url).timeout(const Duration(seconds: 10))
         : await client.postUrl(url).timeout(const Duration(seconds: 10));
     req.followRedirects = false;
+    headers.forEach(req.headers.set);
     if (body != null) {
       // A fixed length, not chunked: the panel's server cannot read chunks.
       final bytes = utf8.encode(jsonEncode(body));
@@ -938,6 +948,44 @@ Future<List<VpsFeedbackItem>?> vpsFetchFeedback(
     } catch (_) {}
   }
   return null;
+}
+
+/// Direct first, then through our own proxy; a gateway error tries the other
+/// route too. Throws when no route answered at all.
+Future<(int, String, String?)> vpsPanelCall(
+  Uri url, {
+  Map<String, Object?>? body,
+  Map<String, String> headers = const {},
+  int? proxyPort,
+  String? proxyAuth,
+  Set<String> pinnedSha256 = const {},
+}) async {
+  (int, String, String?)? answer;
+  Object? error;
+  for (final port in [null, ?proxyPort]) {
+    try {
+      String? retry;
+      final (code, text) = await _send(
+        url,
+        body: body,
+        headers: headers,
+        proxyPort: port,
+        proxyAuth: port == null ? null : proxyAuth,
+        pinnedSha256: pinnedSha256,
+        onHeaders: (h) => retry = h.value('retry-after'),
+      );
+      answer = (code, text, retry);
+      if (code != HttpStatus.badGateway && code != HttpStatus.gatewayTimeout) {
+        return answer;
+      }
+    } catch (e) {
+      error = e;
+    }
+  }
+  if (answer != null) return answer;
+  throw error is Exception
+      ? error
+      : const SocketException('the panel did not answer');
 }
 
 /// The certificate pins and the route for a panel request made outside the

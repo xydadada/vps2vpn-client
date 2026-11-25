@@ -11,6 +11,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/clipboard_import.dart';
+import 'package:fl_clash/vps2vpn/devices.dart';
 import 'package:fl_clash/vps2vpn/feedback.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
@@ -409,6 +410,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
         const SizedBox(height: 24),
         const VpsCard(child: VpsFeedbackRow()),
         const SizedBox(height: 24),
+        const VpsDevicesRow(),
         VpsCard(
           child: Row(
             children: [

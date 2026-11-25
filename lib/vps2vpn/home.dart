@@ -15,6 +15,7 @@ import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/clipboard_import.dart';
+import 'package:fl_clash/vps2vpn/devices.dart';
 import 'package:fl_clash/vps2vpn/feedback.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
@@ -181,6 +182,7 @@ class VpsHomePage extends ConsumerWidget {
       children: [
         const VpsTakeoverNotice(),
         const VpsUpdateNotice(),
+        const VpsDeviceRemovedNotice(),
         const VpsFeedbackNotice(),
         const VpsSubscriptionNotice(),
         // Android would announce every read of the clipboard.
