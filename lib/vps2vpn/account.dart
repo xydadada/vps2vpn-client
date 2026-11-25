@@ -198,6 +198,54 @@ String vpsExpiryText(BuildContext context, DateTime expire, {DateTime? now}) {
   return tr(context, '还剩 ${diff.inDays} 天', '${diff.inDays} days left');
 }
 
+String vpsDayExpiryText(
+  BuildContext context,
+  VpsDay day, {
+  bool withDate = false,
+  DateTime? now,
+}) {
+  final date = day.date;
+  if (date == null) return tr(context, '长期有效', 'Never expires');
+  final today = now ?? DateTime.now();
+  final days = DateTime.utc(
+    date.year,
+    date.month,
+    date.day,
+  ).difference(DateTime.utc(today.year, today.month, today.day)).inDays;
+  if (days < 0) return tr(context, '已到期', 'Expired');
+  if (days == 0) return tr(context, '今天到期', 'Expires today');
+  if (!withDate) return tr(context, '还剩 $days 天', '$days days left');
+  return tr(
+    context,
+    '还剩 $days 天 · ${date.month}月${date.day}日到期',
+    '$days days left · until ${_isoText(date)}',
+  );
+}
+
+String vpsResetText(BuildContext context, VpsDay day) => switch (day.date) {
+  null => tr(context, '不按月重置', 'No monthly reset'),
+  final d => tr(
+    context,
+    '${d.month}月${d.day}日重置流量',
+    'Data resets on ${_isoText(d)}',
+  ),
+};
+
+String _isoText(DateTime d) =>
+    '${d.year}-${'${d.month}'.padLeft(2, '0')}-${'${d.day}'.padLeft(2, '0')}';
+
+/// The panel's own calendar day first; a timestamp read in this computer's
+/// time zone may land a day early.
+String? vpsMemberExpiryText(
+  BuildContext context,
+  VpsMember m, {
+  bool withDate = false,
+}) => m.expireDay != null
+    ? vpsDayExpiryText(context, m.expireDay!, withDate: withDate)
+    : m.expireAt != null
+    ? vpsExpiryText(context, m.expireAt!)
+    : null;
+
 class VpsAccountCard extends ConsumerWidget {
   const VpsAccountCard({super.key});
 
@@ -256,9 +304,10 @@ class VpsAccountCard extends ConsumerWidget {
             '已用 ${m.used.traffic.show} / ${quota.traffic.show}',
             'Used ${m.used.traffic.show} of ${quota.traffic.show}',
           );
-    final expiry = m.expireAt == null
+    final expiry = vpsMemberExpiryText(context, m, withDate: true);
+    final reset = m.nextResetDay == null
         ? null
-        : vpsExpiryText(context, m.expireAt!);
+        : vpsResetText(context, m.nextResetDay!);
     final block = vpsAccountBlock(result);
     final slowed = block == null && m.throttled;
     final page = vpsMemberPage(
@@ -280,6 +329,7 @@ class VpsAccountCard extends ConsumerWidget {
       lines: [
         usage,
         ?expiry,
+        ?reset,
         if (block != null) vpsAccountBlockHint(context, block),
         if (slowed) _slowedHint(context, m.limitMbps),
       ],

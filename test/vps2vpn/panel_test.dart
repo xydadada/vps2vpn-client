@@ -151,6 +151,32 @@ void main() {
     expect(VpsMember.fromJson({'expire_at': 0}).expireAt, isNull);
   });
 
+  test("the panel's own expiry and reset days", () {
+    final m = VpsMember.fromJson({
+      'expire_at': 1893456000,
+      'expire_day': '2029-12-31',
+      'next_reset_day': '2029-12-01',
+    });
+    expect(m.expireDay!.date, DateTime(2029, 12, 31));
+    expect(m.nextResetDay!.date, DateTime(2029, 12, 1));
+    final forever = VpsMember.fromJson({
+      'expire_day': '',
+      'next_reset_day': '',
+    });
+    expect(forever.expireDay!.date, isNull);
+    expect(forever.nextResetDay!.date, isNull);
+    final old = VpsMember.fromJson({'expire_at': 1893456000});
+    expect(old.expireDay, isNull);
+    expect(old.nextResetDay, isNull);
+    for (final bad in [0, '2029-02-30', '2029-12-31T00:00:00', '31/12/2029']) {
+      expect(
+        VpsMember.fromJson({'expire_day': bad}).expireDay,
+        isNull,
+        reason: '$bad',
+      );
+    }
+  });
+
   test('a published client is offered only when it is newer', () {
     final r = VpsClientRelease.fromJson({
       'version': 'v1.4.0',

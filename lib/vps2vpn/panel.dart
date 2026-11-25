@@ -121,6 +121,25 @@ DateTime? _panelTimestamp(Object? value) {
   return DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000);
 }
 
+/// A day in the panel's time zone; a null [date] is "never".
+class VpsDay {
+  const VpsDay(this.date);
+
+  final DateTime? date;
+}
+
+final _isoDay = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
+
+VpsDay? _panelDay(Object? value) {
+  if (value is! String) return null;
+  if (value.isEmpty) return const VpsDay(null);
+  final m = _isoDay.firstMatch(value);
+  if (m == null) return null;
+  final (y, mo, d) = (int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!));
+  final date = DateTime(y, mo, d);
+  return date.month == mo && date.day == d ? VpsDay(date) : null;
+}
+
 /// What the server itself sees when it opens the AI sites.
 class VpsAiStatus {
   const VpsAiStatus({
@@ -281,6 +300,8 @@ class VpsMember {
     this.quotaGb = 0,
     bool? unlimited,
     this.expireAt,
+    this.expireDay,
+    this.nextResetDay,
     this.ai,
     this.client,
     this.throttled = false,
@@ -300,6 +321,9 @@ class VpsMember {
   final double quotaGb;
   final bool unlimited;
   final DateTime? expireAt;
+
+  final VpsDay? expireDay;
+  final VpsDay? nextResetDay;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
 
@@ -331,6 +355,8 @@ class VpsMember {
       quotaGb: quota is num && quota.isFinite ? quota.toDouble() : 0,
       unlimited: unlimited,
       expireAt: expire,
+      expireDay: _panelDay(json['expire_day']),
+      nextResetDay: _panelDay(json['next_reset_day']),
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
       throttled: json['throttled'] == true,

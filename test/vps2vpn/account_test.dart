@@ -109,6 +109,52 @@ void main() {
     expect(find.text('12 days left'), findsOneWidget);
   });
 
+  testWidgets("the panel's own day wins over the timestamp", (tester) async {
+    final now = DateTime.now();
+    final day = DateTime(now.year, now.month, now.day + 12);
+    await _pump(
+      tester,
+      const VpsAccountCard(),
+      VpsMemberResult(
+        member: VpsMember(
+          name: 'Ann',
+          enabled: true,
+          expireAt: now.add(const Duration(days: 30)),
+          expireDay: VpsDay(day),
+          nextResetDay: VpsDay(DateTime(day.year, day.month, day.day - 2)),
+        ),
+      ),
+    );
+    String iso(DateTime d) =>
+        '${d.year}-${'${d.month}'.padLeft(2, '0')}-${'${d.day}'.padLeft(2, '0')}';
+    expect(find.text('12 days left · until ${iso(day)}'), findsOneWidget);
+    expect(
+      find.text(
+        'Data resets on ${iso(DateTime(day.year, day.month, day.day - 2))}',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a plan with no end and no monthly reset says so', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const VpsAccountCard(),
+      const VpsMemberResult(
+        member: VpsMember(
+          name: 'Ann',
+          enabled: true,
+          expireDay: VpsDay(null),
+          nextResetDay: VpsDay(null),
+        ),
+      ),
+    );
+    expect(find.text('Never expires'), findsOneWidget);
+    expect(find.text('No monthly reset'), findsOneWidget);
+  });
+
   testWidgets('says why the account is off', (tester) async {
     await _pump(
       tester,

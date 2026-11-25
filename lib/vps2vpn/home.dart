@@ -1131,9 +1131,7 @@ class _Stats extends ConsumerWidget {
             .round();
         left = math.max(0, quota - member.used).traffic;
       }
-      if (member.expireAt != null) {
-        expire = vpsExpiryText(context, member.expireAt!);
-      }
+      expire = vpsMemberExpiryText(context, member);
     } else {
       if (sub != null && sub.total > 0) {
         final remain = math.max(0, sub.total - sub.upload - sub.download);
