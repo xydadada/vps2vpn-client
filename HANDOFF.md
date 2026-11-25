@@ -6,15 +6,16 @@
 
 | 项目 | 值 |
 |---|---|
-| 最新正式版（Latest） | **v1.0.28**，commit `36606e0e2d0e727d11d4bbca677319312875c0d2`（2026-11-24 发布；SHA256 和 `.sig` 同 1.0.27 的做法；等服务端核对并同步 clientsync） |
-| 上一版 | v1.0.27，commit `3fe07f6dc4cf9fed2ad97363222e91ccd7458a3a`（服务端已核对） |
-| `vps2vpn` 分支头 | `36606e0e` 之后：订阅输入框、只留中英文、出口体检、Claude 页、第六节几项（诊断、AI 节点、网站测试、二维码、托盘断开连接）、DESIGN.md 地基（圆角、动画、颜色角色、骨架），准备做 1.0.29 |
+| 最新正式版（Latest） | **v1.0.31**，commit `4120430e73cd5d3ff39cea40f595e6d5050c23d5`（2026-11-25 发布；1.0.29、1.0.30 没有单独发，并进了 1.0.31；等服务端核对 SHA256 和 `.sig` 并同步 clientsync） |
+| 上一版 | v1.0.28，commit `36606e0e2d0e727d11d4bbca677319312875c0d2` |
+| `vps2vpn` 分支头 | `4120430e`（= v1.0.31） |
 | 安卓 | 还没有正式 APK，服务端 `files.android` 仍未配置。模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试结果见第 5 节"Firebase Test Lab"。预发布 `test-android-1.0.26` 只当预发布，不转正 |
 
-**English summary.** Latest client is v1.0.28 (upgrade test from v1.0.27 66 PASS, coexist 94 PASS; the server still has to re-check SHA256 and `.sig`). The harsh Windows checks (`harsh.yaml`, section 6a) pass after four harness fixes; two TUNs at once is only a NOTE. The branch carries the 1.0.29 work: the subscription box, Chinese and English only, the exit report, the Claude page and the DESIGN.md groundwork. Android has no release: the emulator freezes about a second after connecting, whatever the stack, MTU, address range or GPU mode. Real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
+**English summary.** Latest client is v1.0.31 (upgrade test from v1.0.28 66 PASS, coexist 94 PASS, every harsh scenario passes on both runners; the server still has to re-check SHA256 and `.sig`). 1.0.29 and 1.0.30 were never released on their own: harsh dirty caught a takeover regression in 1.0.30 (a bare core on the system proxy port could be spared when the takeover read the system proxy after ours was on), and the fix shipped in 1.0.31 with the smart line by billing rate, node status, config_version refetch, expiry days, local-network checks, feedback and device management. Android has no release: the emulator freezes about a second after connecting; real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
 
 | 版本 | 内容 | 构建 | 升级测试 | 共存测试 | 源码检查 |
 |---|---|---|---|---|---|
+| 1.0.31 | 1.0.29/1.0.30 的全部改动 + 节点状态、config_version、到期日、本机网络判断、一键反馈、设备管理、takeover 修复（被替换的系统代理端口存盘） | 45577426961 | 45579327115，66 PASS（含从 v1.0.28 升级） | 45579336511，94 PASS；harsh 45579344370 全部通过 | 45575835875 |
 | 1.0.28 | "另一个 VPN 开着"提醒 + harsh 脚本修复（chaos、soak 的网卡选择；users 第二账户只停自己的进程） | 45166822301 | 45334152519，66 PASS（含从 v1.0.27 升级） | 45168676856，94 PASS | 45166802653 |
 | 1.0.27 | 系统代理断开时还原原设置（88c8c522）+ 核心崩溃后自动拉起（3 次/5 分钟）+ harsh 脚本修复 | 45142883757 | 45144760127，66 PASS（含从 v1.0.26 升级） | 45144767934，94 PASS | 45142874060 |
 | 1.0.26 | C-32 + 第 9 份审计 C9-01..05 + 安卓脚本修复 | 45116238235 | 45117446837，33 PASS | 45117687563，47 PASS（含 TUN） | 45116444649 |
