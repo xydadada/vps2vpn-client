@@ -55,7 +55,7 @@ public class ThirdPartyTest {
     private static final String CONFIRM_IMPORT = "(ok|add|import|install|save|confirm|yes|确定|添加|导入|安装|保存|确认|是)";
     private static final String CONNECT = "(connect|tap to connect|点击连接|连接|start|启动|disconnected|未连接|已断开)";
 
-    private static final Pattern WIZARD_BAR = Pattern.compile("(?s)^[^\\n]+\\n\\s*(?:Next|Done|Finish|Complete|Start)\\s*$");
+    private static final Pattern WIZARD_BAR = Pattern.compile("(?s)^[^\\n]+\\n\\s*(?:Next|Done|Finish|Complete|Start)\\s*(?:\\n.*)?$");
     private static final Pattern TUN_LINE = Pattern.compile("(?m)^\\d+: tun\\d*[:@]");
 
     private Instrumentation instrumentation;
@@ -85,7 +85,7 @@ public class ThirdPartyTest {
         context = instrumentation.getTargetContext();
         Bundle args = InstrumentationRegistry.getArguments();
         String pkg = args.getString(pkgArg);
-        assumeTrue(pkgArg + " not given: skipped", pkg != null && !pkg.isEmpty());
+        assumeTrue(pkgArg + " not given: skipped", pkg != null && !pkg.isEmpty() && !"none".equals(pkg));
         String hex = args.getString("sub");
         assertNotNull("no subscription argument", hex);
         sub = new String(fromHex(hex), StandardCharsets.UTF_8);
@@ -125,7 +125,7 @@ public class ThirdPartyTest {
         check(device.wait(Until.hasObject(By.pkg(pkg).depth(0)), 40_000), name + " did not open");
         sleep(6_000);
         note(name + " first screen");
-        onboard(name, 12);
+        onboard(name, 16);
 
         sleep(8_000);
         // Hiddify's core may still be starting ("Couldn't connect, Tap to try again"): give it a nudge first.

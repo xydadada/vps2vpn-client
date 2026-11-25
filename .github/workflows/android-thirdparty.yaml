@@ -20,6 +20,7 @@ permissions:
 env:
   DEVICES: 'model=a16x,version=35'
   PROBE: '0'
+  APPS: 'karing'          # which of hiddify,karing to run (Hiddify passed in run 45672627980)
   HIDDIFY_TAG: v5.9.15
   KARING_TAG: v1.2.26.2934
 
@@ -101,7 +102,7 @@ jobs:
             --app .github/testlab-thirdparty/driver/build/outputs/apk/debug/driver-debug.apk \
             --test .github/testlab-thirdparty/driver/build/outputs/apk/androidTest/debug/driver-debug-androidTest.apk \
             --additional-apks "apk/Hiddify-Android-arm64.apk,$(ls apk/karing_*.apk | head -1)" \
-            --environment-variables "sub=$hex,pkg_hiddify=$PKG_HIDDIFY,pkg_karing=$PKG_KARING,probe=$PROBE" \
+            --environment-variables "sub=$hex,pkg_hiddify=$(case ",$APPS," in *,hiddify,*) echo "$PKG_HIDDIFY";; *) echo none;; esac),pkg_karing=$(case ",$APPS," in *,karing,*) echo "$PKG_KARING";; *) echo none;; esac),probe=$PROBE" \
             --timeout 15m --num-flaky-test-attempts 0 --no-record-video --no-performance-metrics \
             --results-dir "vps2vpn-thirdparty/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
             --results-history-name vps2vpn-thirdparty "${args[@]}" 2>&1 | tee testlab.log
