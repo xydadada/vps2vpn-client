@@ -16,6 +16,7 @@ import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/devices.dart';
+import 'package:fl_clash/vps2vpn/exit_hold.dart';
 import 'package:fl_clash/vps2vpn/feedback.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
@@ -307,6 +308,11 @@ class _HeroState extends ConsumerState<_Hero> {
   bool _tappedConnect = false;
   bool _tappedStop = false;
   String? _failure;
+  late final _exit = VpsExitHold(
+    onExpire: () {
+      if (mounted) setState(() {});
+    },
+  );
 
   void _toggle() {
     final starting = !ref.read(isStartProvider);
@@ -388,6 +394,7 @@ class _HeroState extends ConsumerState<_Hero> {
   @override
   void dispose() {
     _settle?.cancel();
+    _exit.dispose();
     _probe.unwatch(routedOutbound);
     super.dispose();
   }
@@ -404,9 +411,14 @@ class _HeroState extends ConsumerState<_Hero> {
     final on = isStart && !suspended;
     final hasProfile = ref.watch(profilesProvider.select((s) => s.isNotEmpty));
     final runTime = ref.watch(runTimeProvider);
-    final info = ref
-        .watch(outboundIpProbeProvider.select((s) => s.entryOf(routedOutbound)))
-        .value;
+    final info = _exit.steady(
+      ref
+          .watch(
+            outboundIpProbeProvider.select((s) => s.entryOf(routedOutbound)),
+          )
+          .value,
+      on: on,
+    );
     final group = mainGroup(ref.watch(currentGroupsStateProvider).value);
     final picked = group == null
         ? null
