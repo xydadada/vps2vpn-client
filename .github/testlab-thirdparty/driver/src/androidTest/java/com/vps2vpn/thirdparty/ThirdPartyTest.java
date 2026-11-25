@@ -167,7 +167,15 @@ public class ThirdPartyTest {
             sleep(2_500);
         }
         note(name + " before connecting");
-        boolean tapped = tap(CONNECT, 15_000);
+        // Karing's on/off is a switch labelled "Disconnected"; its "Connect" button only opens connection settings.
+        UiObject2 onOff = device.findObject(By.pkg(pkg).checkable(true).desc(Pattern.compile("(?i)disconnected|未连接|已断开")));
+        boolean tapped = false;
+        if (onOff != null) {
+            onOff.click();
+            tapped = true;
+        } else {
+            tapped = tap(CONNECT, 15_000);
+        }
         if (!tapped && device.findObject(By.desc(WIZARD_BAR)) == null) {   // a bare switch or round button
             UiObject2 sw = device.findObject(By.pkg(pkg).checkable(true));
             if (sw != null) {
