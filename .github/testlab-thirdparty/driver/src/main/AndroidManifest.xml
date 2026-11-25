@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 11+ hides other apps: without this the launch intent of the app under test is null. -->
+    <queries>
+        <package android:name="app.hiddify.com" />
+        <package android:name="com.nebula.karing" />
+    </queries>
     <application android:label="vps2vpn thirdparty" />
 </manifest>
