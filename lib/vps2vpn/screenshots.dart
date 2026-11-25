@@ -72,7 +72,7 @@ class _ShotRun {
       await _settle(5000);
       await _round('ready', tabs: const [vpsTabHome]);
 
-      await _keyframes();
+      await _keyframes('connect');
       await _until(() => container.read(isStartProvider), 60);
       await _settle(15000);
       await _breath();
@@ -95,7 +95,7 @@ class _ShotRun {
           .read(themeSettingProvider.notifier)
           .update((s) => s.copyWith(primaryColor: defaultPrimaryColor));
 
-      container.read(commonActionProvider.notifier).toggleRunning();
+      await _keyframes('disconnect');
       await _until(() => !container.read(isStartProvider), 30);
     } catch (e, s) {
       _log.writeln('failed: $e\n$s');
@@ -132,13 +132,13 @@ class _ShotRun {
     }
   }
 
-  /// Connecting to connected, back to back at first, to review the motion.
-  Future<void> _keyframes() async {
+  /// Connecting or disconnecting, back to back at first, to review the motion.
+  Future<void> _keyframes(String what) async {
     await _darkHome();
     container.read(commonActionProvider.notifier).toggleRunning();
-    for (var i = 0; i < 16; i++) {
-      await _settle(i < 10 ? 0 : 250);
-      await _shoot('keyframe-connect$i-home-default-dark-zh');
+    for (var i = 0; i < 24; i++) {
+      await _settle(i < 12 ? 0 : 120);
+      await _shoot('keyframe-$what$i-home-default-dark-zh');
     }
   }
 
