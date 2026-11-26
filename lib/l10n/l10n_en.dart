@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'l10n.dart';
 
 // ignore_for_file: type=lint
@@ -1934,7 +1935,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get coreBlockedBySmartAppControlTip =>
-      'Windows Smart App Control blocked vps2vpnCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start vps2vpn again. Smart App Control cannot be turned back on without reinstalling Windows.';
+      'Windows Smart App Control blocked the unsigned vps2vpnCore.exe. You can review its settings in Windows Security → App & browser control → Smart App Control settings. Turning it off affects protection for the whole device; whether it can be turned back on without reinstalling Windows depends on your Windows version and settings.';
 
   @override
   String get hideFromList => 'Hide from list';
@@ -3180,8 +3181,7 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other:
           '$label SUB-RULE rules were dropped, since custom profiles do not support sub-rules',
-      one:
-          '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
+      one: '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
     );
     return '$_temp0';
   }
