@@ -60,7 +60,7 @@ void main() {
         log:
             'password: "two words"\n'
             "pass='single quoted'\n"
-            'password="escaped \\\"quote\\\" secret"\n'
+            'password="escaped \\"quote\\" secret"\n'
             'Authorization: Bearer short-token\n'
             'Proxy-Authorization: Basic YWJjOmRlZg==\n'
             '{"Authorization":"Bearer json-token"}\n'
