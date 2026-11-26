@@ -265,7 +265,7 @@ void main() {
       );
       await tester.pump();
       expect(find.textContaining('may be gone'), findsOneWidget);
-      expect(find.textContaining('Your lines still work'), findsOneWidget);
+      expect(find.textContaining('Your nodes still work'), findsOneWidget);
       await tester.tap(find.text('Replace link'));
       await tester.pump();
       expect(find.text('Replace'), findsOneWidget);
