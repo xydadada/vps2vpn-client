@@ -424,28 +424,29 @@ class _VpsCardState extends State<VpsCard> {
         children: [
           box,
           if (p.dark && !widget.highlight)
-            // Light from above, fading out before the corners.
-            Positioned(
-              top: 0,
-              left: widget.radius,
-              right: widget.radius,
-              height: 1,
-              child: const IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0x00FFFFFF),
-                        Color(0x0FFFFFFF),
-                        Color(0x0FFFFFFF),
-                        Color(0x00FFFFFF),
-                      ],
-                      stops: [0, 0.2, 0.8, 1],
+            // Light from above, inside the edge, fading a pixel down.
+            for (final (row, alpha) in const [(1.0, 0x14), (2.0, 0x08)])
+              Positioned(
+                top: row,
+                left: widget.radius,
+                right: widget.radius,
+                height: 1,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0x00FFFFFF),
+                          Color(alpha << 24 | 0xFFFFFF),
+                          Color(alpha << 24 | 0xFFFFFF),
+                          const Color(0x00FFFFFF),
+                        ],
+                        stops: const [0, 0.2, 0.8, 1],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
         ],
       ),
     );

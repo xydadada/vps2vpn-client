@@ -708,7 +708,7 @@ class _HeroState extends ConsumerState<_Hero> {
                         p,
                         size: wide ? 36 : 28,
                         weight: FontWeight.w600,
-                        spacing: -0.8,
+                        spacing: -1.1,
                         height: 1.15,
                       ),
                     ),
@@ -720,7 +720,7 @@ class _HeroState extends ConsumerState<_Hero> {
             Text(
               sub,
               textAlign: wide ? TextAlign.start : TextAlign.center,
-              style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
+              style: vpsText(p, size: 13.5, color: p.muted, height: 1.5),
             ),
             if (portal) ...[
               const SizedBox(height: 12),
@@ -868,7 +868,11 @@ class _PowerRing extends StatefulWidget {
 class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
   late final AnimationController _spin = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 6),
+    duration: const Duration(milliseconds: 1200),
+  );
+  late final AnimationController _fill = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 600),
   );
   late final AnimationController _breath = AnimationController(
     vsync: this,
@@ -918,18 +922,20 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
     }
   }
 
-  // Busy, the ring turns fast while the line is tried; connected, the glow
-  // breathes once every four seconds.
+  // Turning only while connecting; connected, a still closed ring and a glow.
   void _sync() {
-    final period = Duration(milliseconds: widget.busy ? 1200 : 6000);
-    final retimed = _spin.duration != period;
-    _spin.duration = period;
-    if (widget.on && !_still) {
-      // repeat() carries on from the current angle; only a new speed needs it.
-      if (retimed || !_spin.isAnimating) _spin.repeat();
-      if (!_breath.isAnimating) _breath.repeat(reverse: true);
+    if (widget.on && widget.busy && !_still) {
+      if (!_spin.isAnimating) _spin.repeat();
+      _fill.value = 0;
     } else {
       _spin.stop();
+      if (widget.on) {
+        _still ? _fill.value = 1 : _fill.animateTo(1, curve: VpsMotion.settle);
+      }
+    }
+    if (widget.on && !_still) {
+      if (!_breath.isAnimating) _breath.repeat(reverse: true);
+    } else {
       _breath
         ..stop()
         ..value = 1;
@@ -942,6 +948,7 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
   @override
   void dispose() {
     _spin.dispose();
+    _fill.dispose();
     _breath.dispose();
     _ripple.dispose();
     _shift.dispose();
@@ -1008,14 +1015,17 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                 );
               },
             ),
-            // Rotating ring, in the state's colour while connected.
             AnimatedBuilder(
-              animation: _spin,
+              animation: Listenable.merge([_spin, _fill]),
               builder: (_, _) => Transform.rotate(
                 angle: _spin.value * 2 * math.pi,
                 child: CustomPaint(
                   size: Size(s, s),
-                  painter: _RingPainter(track: p.line, tone: arc),
+                  painter: _RingPainter(
+                    track: p.line,
+                    tone: arc,
+                    fill: _fill.value,
+                  ),
                 ),
               ),
             ),
@@ -1036,6 +1046,25 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                       : const Color(0x00000000),
                   width: 1.5,
                 ),
+              ),
+              foregroundDecoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: widget.on && !p.dark
+                    ? const RadialGradient(
+                        center: Alignment(0, 0.12),
+                        radius: 0.56,
+                        colors: [Color(0x00000000), Color(0x0F000000)],
+                        stops: [0.8, 1],
+                      )
+                    : LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(widget.on ? 0x14FFFFFF : 0x29FFFFFF),
+                          const Color(0x00FFFFFF),
+                        ],
+                        stops: const [0, 0.55],
+                      ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1072,10 +1101,11 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
 }
 
 class _RingPainter extends CustomPainter {
-  _RingPainter({required this.track, required this.tone});
+  _RingPainter({required this.track, required this.tone, required this.fill});
 
   final Color track;
   final Color tone;
+  final double fill;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1094,7 +1124,7 @@ class _RingPainter extends CustomPainter {
     // The gradient spans only the arc, and the arc starts a little past 0
     // so its round cap never samples the violet end of the sweep.
     const start = 0.12;
-    const sweep = math.pi * 1.4;
+    final sweep = math.pi * (1.4 + 0.6 * fill);
     canvas.drawArc(
       rect,
       start,
@@ -1107,18 +1137,18 @@ class _RingPainter extends CustomPainter {
         ..shader = SweepGradient(
           endAngle: start + sweep,
           colors: [
-            tone.withValues(alpha: 0),
-            tone.withValues(alpha: 0.7),
+            tone.withValues(alpha: tone.a * fill),
+            tone.withValues(alpha: tone.a * 0.7),
             tone,
           ],
-          stops: const [0, 0.55, 1],
+          stops: [0, 0.55 - 0.05 * fill, 1],
         ).createShader(rect),
     );
   }
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.track != track || old.tone != tone;
+      old.track != track || old.tone != tone || old.fill != fill;
 }
 
 class _PowerGlyph extends CustomPainter {
