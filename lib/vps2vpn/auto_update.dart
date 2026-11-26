@@ -273,6 +273,7 @@ Future<_Got> _downloadUpdate(
             }
           : null,
     );
+    vpsUiTrace('update downloaded ${release.version}');
     if (install) {
       download.value = UpdateReady(tag, file.path);
       _banner(
@@ -308,6 +309,7 @@ Future<_Got> _downloadUpdate(
     }
     return _Got.done;
   } on VpsUpdateRejected catch (e) {
+    vpsUiTrace('update refused ${release.version} ${e.reason}');
     if (install) download.value = before;
     if (!last) return _Got.refused;
     _banner(
@@ -333,6 +335,7 @@ Future<_Got> _downloadUpdate(
     );
     return _Got.refused;
   } catch (error) {
+    vpsUiTrace('update failed ${release.version}');
     if (install) download.value = before;
     commonPrint.log(
       'Client update download failed: ${compactError(error)}',

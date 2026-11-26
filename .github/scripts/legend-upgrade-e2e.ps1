@@ -160,7 +160,7 @@ rules:
   $clock = [Diagnostics.Stopwatch]::StartNew()
   $port = Start-App "$newVersion connects" 90
   Check (Wait-Until 60 { -not (Get-Process FlClash, FlClashCore -ErrorAction SilentlyContinue) }) 'FlClash was closed on connect without a question'
-  $trace = Get-Trace $takeoverTrace
+  $trace = @(Get-Trace $takeoverTrace)
   Check (@($trace -match 'before connect: act=true').Count -ge 1) 'takeover ran on connect'
   Check (@($trace -match 'answer remembered').Count -eq 0) 'nobody had to answer the takeover question'
   $seen = Get-NodeCount
@@ -171,13 +171,18 @@ rules:
   # 5. The first update check, 30 s after start, finds the newer release.
   $found = Wait-Until (150 - $clock.Elapsed.TotalSeconds) { @(Get-Trace $uiTrace) -match 'update available 9\.9\.9' }
   Check $found 'the first update check found 9.9.9'
+  # 9.9.9 lists no assets, so its installer URL is the real releases path,
+  # which has nothing: the download fails and nothing becomes installable.
+  $ended = Wait-Until 60 { @(Get-Trace $uiTrace) -match 'update (failed|refused|downloaded) 9\.9\.9|banner info ' }
+  Check $ended 'the update attempt for 9.9.9 ended'
   Test-AppAlive 'after the update check'
   Stop-App
 
-  $ui = Get-Trace $uiTrace
+  $ui = @(Get-Trace $uiTrace)
   "ui trace:"; $ui | ForEach-Object { "  $_" }
   Check (@($ui -match ' dialog ').Count -eq 0) 'no dialog opened (no what''s new, no takeover question)'
   Check (@($ui -match ' banner (warning|error) ').Count -eq 0) 'no warning or error banner'
+  Check (@($ui -match 'update downloaded |banner success ').Count -eq 0) 'the fake 9.9.9 never became ready to install'
 } finally {
   Copy-Item $script:prefs (Join-Path $Out 'shared_preferences.json') -ErrorAction SilentlyContinue
   Finish
