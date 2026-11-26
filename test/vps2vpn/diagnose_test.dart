@@ -33,7 +33,7 @@ void main() {
     expect(up, isFalse);
   });
 
-  testWidgets('a dead line with a dead subscription is the provider, not you', (
+  testWidgets('a dead line with a dead subscription is the server, not you', (
     tester,
   ) async {
     late String withSub;
@@ -56,8 +56,8 @@ void main() {
         ),
       ),
     );
-    expect(withSub, contains("provider's side"));
+    expect(withSub, contains("server's side"));
     expect(withSub, contains('Replace link'));
-    expect(without, isNot(contains("provider's side")));
+    expect(without, isNot(contains("server's side")));
   });
 }
