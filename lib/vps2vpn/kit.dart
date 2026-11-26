@@ -1206,9 +1206,18 @@ class VpsChip extends StatelessWidget {
           children: [
             _BeatDot(color: c, beat: beat),
             const SizedBox(width: 7),
-            Text(
-              label,
-              style: vpsText(p, size: 12.5, weight: FontWeight.w600, color: c),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: vpsText(
+                  p,
+                  size: 12.5,
+                  weight: FontWeight.w600,
+                  color: c,
+                ),
+              ),
             ),
           ],
         ),
@@ -1232,18 +1241,27 @@ class VpsChip extends StatelessWidget {
             decoration: BoxDecoration(color: c, shape: BoxShape.circle),
           ),
           const SizedBox(width: 7),
-          Text.rich(
-            TextSpan(
-              text: label,
-              children: [
-                if (unit case final unit?)
-                  TextSpan(
-                    text: ' $unit',
-                    style: vpsText(p, size: 10.5, color: p.soft),
-                  ),
-              ],
+          Flexible(
+            child: Text.rich(
+              TextSpan(
+                text: label,
+                children: [
+                  if (unit case final unit?)
+                    TextSpan(
+                      text: ' $unit',
+                      style: vpsText(p, size: 10.5, color: p.soft),
+                    ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: vpsText(
+                p,
+                size: 12,
+                weight: FontWeight.w500,
+                color: p.text,
+              ),
             ),
-            style: vpsText(p, size: 12, weight: FontWeight.w500, color: p.text),
           ),
         ],
       ),
