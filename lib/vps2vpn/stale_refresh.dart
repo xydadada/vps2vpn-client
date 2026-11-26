@@ -10,6 +10,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/vps2vpn/account.dart' show vpsDateTimeText;
 import 'package:fl_clash/vps2vpn/home.dart' show mainGroup;
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart' show tr;
@@ -197,7 +198,7 @@ String vpsMaintenanceText(
   VpsNodeStatus status,
 ) {
   final until = status.until;
-  final back = until == null ? '' : vpsClock(until);
+  final back = until == null ? '' : vpsDateTimeText(context, until);
   final note = status.note.isEmpty ? '' : '：${status.note}';
   return tr(
     context,

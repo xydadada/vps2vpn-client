@@ -5,6 +5,7 @@ import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/vps2vpn/account.dart' show vpsDateTimeText;
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/node_status.dart';
@@ -600,8 +601,8 @@ class _ProxyCard extends ConsumerWidget {
                                   ? ''
                                   : tr(
                                       context,
-                                      ' · 预计 ${vpsClock(status.until!)} 恢复',
-                                      ' · back about ${vpsClock(status.until!)}',
+                                      ' · 预计 ${vpsDateTimeText(context, status.until!)} 恢复',
+                                      ' · back about ${vpsDateTimeText(context, status.until!)}',
                                     ))
                         : proxy.name == vpsSmartGroupName
                         ? tr(

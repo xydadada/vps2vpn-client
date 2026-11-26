@@ -104,12 +104,3 @@ final vpsNodeStatusProvider =
       if (node.state == VpsNodeState.congested) ...node.names,
   ],
 );
-
-String vpsClock(DateTime at, {DateTime? now}) {
-  final today = now ?? DateTime.now();
-  final hm =
-      '${'${at.hour}'.padLeft(2, '0')}:${'${at.minute}'.padLeft(2, '0')}';
-  return at.year == today.year && at.month == today.month && at.day == today.day
-      ? hm
-      : '${at.month}/${at.day} $hm';
-}

@@ -533,18 +533,15 @@ class VpsUpdateNotice extends ConsumerWidget {
   }
 }
 
-String _clock(BuildContext context, DateTime at) {
-  final now = DateTime.now();
+/// "15:00" today, "11月26日 15:00" or "Nov 26 15:00" on any other day.
+String vpsDateTimeText(BuildContext context, DateTime at, {DateTime? now}) {
+  final today = now ?? DateTime.now();
   String two(int n) => n.toString().padLeft(2, '0');
   final time = '${two(at.hour)}:${two(at.minute)}';
-  if (at.year == now.year && at.month == now.month && at.day == now.day) {
+  if (at.year == today.year && at.month == today.month && at.day == today.day) {
     return time;
   }
-  return tr(
-    context,
-    '${at.month}月${at.day}日 $time',
-    '${at.month}/${at.day} $time',
-  );
+  return '${vpsDateText(context, at, now: today)} $time';
 }
 
 /// Settings page, always shown: this version, the last check and what it
@@ -580,7 +577,7 @@ class VpsUpdateCard extends ConsumerWidget {
     );
     final p = VpsPalette.of(context);
     final version = current ?? tr(context, '未知', 'unknown');
-    final at = check.at == null ? null : _clock(context, check.at!);
+    final at = check.at == null ? null : vpsDateTimeText(context, check.at!);
     final Widget action;
     final String title;
     final String detail;
