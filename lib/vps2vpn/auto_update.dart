@@ -14,6 +14,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
+import 'package:fl_clash/vps2vpn/ui_trace.dart';
 import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -514,6 +515,10 @@ Future<void> vpsAutoUpdateCheck(
   final container = ProviderScope.containerOf(ref.context, listen: false);
   try {
     final check = await _check(container, current);
+    vpsUiTrace(
+      'update ${check.status.name} '
+      '${check.releases.map((r) => r.version).join(',')}',
+    );
     if (check.status != VpsUpdateStatus.available) return;
     final newest = check.releases.first;
     if (!_autoTried.add(newest.version)) return;

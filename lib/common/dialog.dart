@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/vps2vpn/ui_trace.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -40,6 +41,7 @@ class Dialogs {
     BuildContext? context,
     bool? dismissible,
   }) async {
+    vpsUiTrace('dialog ${child.runtimeType}');
     final dress = this.dress;
     return showFloatingDialog<T>(
       context: context ?? _context,
@@ -239,6 +241,7 @@ class Dialogs {
       return;
     }
     commonPrint.log('banner: $text');
+    vpsUiTrace('banner ${level.name} $text');
     if (level == BannerLevel.error) {
       lastErrorBanner = (text: text, at: DateTime.now());
     }

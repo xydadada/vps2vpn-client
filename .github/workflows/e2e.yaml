@@ -14,6 +14,10 @@ on:
         description: Older releases to update from in the app's way, comma separated (empty = skip)
         required: false
         default: ''
+      legend:
+        description: Old release a user upgrades from by running the new setup by hand (empty = skip)
+        required: false
+        default: v1.0.27
 
 permissions:
   contents: read
@@ -70,6 +74,55 @@ jobs:
         with:
           name: e2e-${{ matrix.os }}
           path: e2e
+          if-no-files-found: ignore
+
+  legend:
+    # Must pass before a release becomes the latest (legend-upgrade-e2e.ps1).
+    if: ${{ inputs.legend != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - name: Checkout the test script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Download both installers and FlClash
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          FROM: ${{ inputs.legend }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D old -- $env:FROM
+          gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D new -- $env:TAG
+          gh release download -R chen08209/FlClash -p 'FlClash-0.9.4-windows-amd64-portable.zip' -D dl -- v0.9.4
+          $zip = 'dl/FlClash-0.9.4-windows-amd64-portable.zip'
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne '8fab8ab4edead33a6c6d4f249fd90a287acbf66a99cc5bd207fcfc034f3b1224') { throw "FlClash zip sha256 $hash" }
+          New-Item -ItemType Directory -Force tools | Out-Null
+          Move-Item $zip tools/flclash.zip
+          Get-ChildItem old, new, tools
+
+      - name: Upgrade by hand (end to end)
+        shell: pwsh
+        run: |
+          $old = (Get-ChildItem old -Filter '*-windows-amd64-setup.exe' | Select-Object -First 1).FullName
+          $new = (Get-ChildItem new -Filter '*-windows-amd64-setup.exe' | Select-Object -First 1).FullName
+          ./.github/scripts/legend-upgrade-e2e.ps1 -Old $old -New $new -Tools tools -Out legend
+
+      - name: Upload results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: legend-${{ matrix.os }}
+          path: legend
           if-no-files-found: ignore
 
   upgrade:

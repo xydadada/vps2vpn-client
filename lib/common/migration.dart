@@ -33,6 +33,9 @@ abstract interface class MigrationStore {
   Future<int> getUpgradeVersion();
 
   Future<void> setUpgradeVersion(int version);
+
+  /// Records the question before closing other apps as answered.
+  Future<void> setTakeoverAsked();
 }
 
 class _AppMigrationStore implements MigrationStore {
@@ -78,6 +81,9 @@ class _AppMigrationStore implements MigrationStore {
   @override
   Future<void> setUpgradeVersion(int version) =>
       preferences.setUpgradeVersion(version);
+
+  @override
+  Future<void> setTakeoverAsked() => preferences.setVpsTakeoverAsked(true);
 }
 
 class Migration {
@@ -123,6 +129,11 @@ class Migration {
     final from = await _store.getUpgradeVersion();
     if (from >= upgradeVersion) {
       return config;
+    }
+    // Releases before step 6 closed other apps without asking: an upgrade
+    // keeps that answer rather than asking it anew.
+    if (installed && from < 6) {
+      await _store.setTakeoverAsked();
     }
     var upgraded = config;
     if (installed) {
