@@ -31,10 +31,34 @@ void main() {
   test('the device id is a lowercase v4 UUID made once', () async {
     final store = <String, String>{};
     var writable = false;
+    final realLoad = vpsDeviceLoad;
+    final realSave = vpsDeviceSave;
+    addTearDown(() {
+      vpsDeviceLoad = realLoad;
+      vpsDeviceSave = realSave;
+    });
+    vpsDeviceLoad = (_) async => throw const FileSystemException('unavailable');
+    await expectLater(vpsDeviceId(), throwsA(isA<FileSystemException>()));
     vpsDeviceLoad = (key) async => store[key];
     vpsDeviceSave = (key, value) async {
       store[key] = value;
       if (!writable) throw const FileSystemException('disk full');
+    };
+    await expectLater(vpsDeviceId(), throwsA(isA<FileSystemException>()));
+    await expectLater(vpsDeviceId(), throwsA(isA<FileSystemException>()));
+    writable = true;
+    store.clear();
+    final loaded = Completer<void>();
+    var reads = 0;
+    var writes = 0;
+    vpsDeviceLoad = (key) async {
+      reads++;
+      await loaded.future;
+      return store[key];
+    };
+    vpsDeviceSave = (key, value) async {
+      writes++;
+      store[key] = value;
     };
     final id = vpsNewDeviceId(Random(1));
     expect(
@@ -45,10 +69,13 @@ void main() {
         ),
       ),
     );
-    await expectLater(vpsDeviceId(), throwsA(isA<FileSystemException>()));
-    await expectLater(vpsDeviceId(), throwsA(isA<FileSystemException>()));
-    writable = true;
-    final first = await vpsDeviceId();
+    final pending = [for (var i = 0; i < 10; i++) vpsDeviceId()];
+    loaded.complete();
+    final ids = await Future.wait(pending);
+    final first = ids.first;
+    expect(ids.toSet(), {first});
+    expect(reads, 1);
+    expect(writes, 1);
     expect(store['Id'], first);
     expect(await vpsDeviceId(), first);
   });

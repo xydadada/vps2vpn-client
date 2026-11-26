@@ -93,11 +93,18 @@ Future<void> Function(String key, String value) vpsDeviceSave =
     preferences.setVpsDevice;
 
 String? _deviceId;
+Future<String>? _deviceIdLoading;
 
 /// Made once and kept in this user's own settings, so each account on a
 /// shared computer is its own device.
-Future<String> vpsDeviceId() async {
-  if (_deviceId != null) return _deviceId!;
+Future<String> vpsDeviceId() {
+  if (_deviceId != null) return Future.value(_deviceId!);
+  return _deviceIdLoading ??= _loadDeviceId().whenComplete(() {
+    _deviceIdLoading = null;
+  });
+}
+
+Future<String> _loadDeviceId() async {
   final stored = (await vpsDeviceLoad('Id'))?.toLowerCase();
   if (stored != null && _uuidShape.hasMatch(stored)) {
     await vpsDeviceSave('Id', stored);
