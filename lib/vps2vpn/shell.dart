@@ -687,7 +687,7 @@ class VpsPage extends StatelessWidget {
                   const SizedBox(height: 22),
                   // Blocks arrive one after another, top to bottom.
                   for (final (i, child) in children.indexed)
-                    VpsEnter(index: i, child: child),
+                    VpsEnter(key: child.key, index: i, child: child),
                 ],
               ),
             ),

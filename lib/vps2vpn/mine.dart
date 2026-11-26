@@ -191,6 +191,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
         const VpsAccountCard(),
         for (final profile in profiles)
           Padding(
+            key: ValueKey(profile.id),
             padding: const EdgeInsets.only(bottom: 12),
             child: _ProfileCard(
               profile: profile,
