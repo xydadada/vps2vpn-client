@@ -77,17 +77,11 @@ class _QrPainter extends CustomPainter {
 
 /// "QR code" under a subscription: shown only when tapped, hidden again on
 /// the next tap.
-class VpsQrToggle extends StatefulWidget {
-  const VpsQrToggle({super.key, required this.link});
+/// A subscription's link as a code a phone scans, with the warning it needs.
+class VpsQrPanel extends StatelessWidget {
+  const VpsQrPanel({super.key, required this.link});
 
   final String link;
-
-  @override
-  State<VpsQrToggle> createState() => _VpsQrToggleState();
-}
-
-class _VpsQrToggleState extends State<VpsQrToggle> {
-  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
@@ -95,36 +89,16 @@ class _VpsQrToggleState extends State<VpsQrToggle> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        VpsPressable(
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              _open
-                  ? tr(context, '收起二维码', 'Hide QR code')
-                  : tr(context, '二维码（手机扫码导入）', 'QR code (scan with a phone)'),
-              style: vpsText(
-                p,
-                size: 12.5,
-                weight: FontWeight.w600,
-                color: p.accent,
-              ),
-            ),
+        Center(child: VpsQrCode(link)),
+        const SizedBox(height: 8),
+        Text(
+          tr(
+            context,
+            '二维码就是你的订阅链接，别截图发给别人。',
+            'This code is your subscription link; do not share a picture of it.',
           ),
+          style: vpsText(p, size: 12, color: p.warn),
         ),
-        if (_open) ...[
-          const SizedBox(height: 10),
-          Center(child: VpsQrCode(widget.link)),
-          const SizedBox(height: 8),
-          Text(
-            tr(
-              context,
-              '二维码就是你的订阅链接，别截图发给别人。',
-              'This code is your subscription link; do not share a picture of it.',
-            ),
-            style: vpsText(p, size: 12, color: p.warn),
-          ),
-        ],
       ],
     );
   }

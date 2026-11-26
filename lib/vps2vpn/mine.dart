@@ -22,7 +22,7 @@ import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart' show BannerLevel, ThemeMode;
+import 'package:prism_ui/prism_ui.dart' show BannerLevel, ThemeMode, Tooltip;
 
 /// vps2vpn: strict-route is on by default for the Windows TUN (see
 /// withWindowsStrictRoute in lib/common/migration.dart). This switch turns it
@@ -41,14 +41,19 @@ class _LanCompatibilityRow extends ConsumerWidget {
       ),
     );
     return VpsRow(
-      icon: VpsIcon.globe,
+      icon: VpsIcon.network,
       title: tr(context, '局域网兼容模式', 'LAN compatibility mode'),
       subtitle: tr(
         context,
-        '用虚拟网卡时，虚拟机（VirtualBox、Hyper-V）或局域网里的打印机、NAS 连不上，就打开它。代价是少量请求（域名查询、IPv6）可能不经过你的服务器',
+        '虚拟机或局域网里的打印机、NAS 连不上时打开',
+        'Turn on when VMs or printers and NAS on your network stop working',
+      ),
+      info: tr(
+        context,
+        '用虚拟网卡时，虚拟机（VirtualBox、Hyper-V）或局域网里的打印机、NAS 连不上，就打开它。代价是少量请求（域名查询、IPv6）可能不经过你的服务器。',
         'Turn on if, with the virtual adapter, VMs (VirtualBox, Hyper-V) or '
             'printers and NAS on your network stop working. Some lookups and '
-            'IPv6 traffic may then skip your server',
+            'IPv6 traffic may then skip your server.',
       ),
       trailing: VpsSwitch(
         value: !strictRoute,
@@ -139,7 +144,9 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final profiles = ref.watch(profilesProvider);
-    final hasRemoteProfiles = profiles.any((p) => p.type == ProfileType.url);
+    final remoteProfiles = profiles
+        .where((p) => p.type == ProfileType.url)
+        .length;
     final currentId = ref.watch(currentProfileIdProvider);
     final themeMode = ref.watch(
       themeSettingProvider.select((s) => s.themeMode),
@@ -163,7 +170,8 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
       children: [
         VpsSectionTitle(
           tr(context, '订阅', 'Subscriptions'),
-          trailing: !hasRemoteProfiles
+          // One subscription has its own refresh on its card.
+          trailing: remoteProfiles < 2
               ? null
               : VpsPressable(
                   onTap: _updating ? null : () => _updateProfiles(profiles),
@@ -187,7 +195,6 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   ),
                 ),
         ),
-        const VpsUpdateCard(),
         const VpsAccountCard(),
         for (final profile in profiles)
           Padding(
@@ -316,7 +323,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               if (smart) ...[
                 Container(height: 1, color: p.line),
                 VpsRow(
-                  icon: VpsIcon.bolt,
+                  icon: VpsIcon.gauge,
                   title: tr(
                     context,
                     '智能线路可以用高倍率节点',
@@ -372,7 +379,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 ],
                 Container(height: 1, color: p.line),
                 VpsRow(
-                  icon: VpsIcon.sun,
+                  icon: VpsIcon.power,
                   title: tr(context, '开机自启', 'Launch at startup'),
                   trailing: VpsSwitch(
                     value: autoLaunch,
@@ -411,6 +418,8 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
         const VpsCard(child: VpsFeedbackRow()),
         const SizedBox(height: 24),
         const VpsDevicesRow(),
+        VpsSectionTitle(tr(context, '关于', 'About')),
+        const VpsUpdateCard(),
         VpsCard(
           child: Row(
             children: [
@@ -556,7 +565,7 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
       child: Column(
         children: [
           VpsRow(
-            icon: VpsIcon.globe,
+            icon: VpsIcon.wifi,
             title: tr(context, '局域网共享', 'Share on LAN'),
             subtitle: allowLan && lanAddress != null
                 ? tr(
@@ -609,7 +618,7 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
             ),
             Container(height: 1, color: p.line),
             VpsRow(
-              icon: VpsIcon.shield,
+              icon: VpsIcon.tray,
               title: tr(context, '关闭窗口时留在托盘', 'Keep running in tray'),
               subtitle: tr(
                 context,
@@ -797,6 +806,7 @@ class _ProfileCard extends ConsumerStatefulWidget {
 
 class _ProfileCardState extends ConsumerState<_ProfileCard> {
   bool _replacing = false;
+  bool _qr = false;
 
   @override
   Widget build(BuildContext context) {
@@ -898,7 +908,23 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                   ],
                 ),
               ),
-              if (profile.url.isNotEmpty)
+              if (profile.url.isNotEmpty) ...[
+                Tooltip(
+                  message: tr(context, '手机扫码导入', 'Scan with a phone'),
+                  child: VpsPressable(
+                    onTap: () => setState(() => _qr = !_qr),
+                    selected: _qr,
+                    semanticLabel: tr(context, '手机扫码导入', 'Scan with a phone'),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: VpsIconView(
+                        VpsIcon.qr,
+                        size: 18,
+                        color: _qr ? p.accent : p.soft,
+                      ),
+                    ),
+                  ),
+                ),
                 VpsPressable(
                   onTap: busy ? null : onUpdate,
                   semanticLabel: context.appLocalizations.update,
@@ -911,6 +937,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                     ),
                   ),
                 ),
+              ],
             ],
           ),
           if (failing != null) ...[
@@ -981,9 +1008,9 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
             const SizedBox(height: 14),
             VpsSubscriptionExtras(info: sub),
           ],
-          if (profile.url.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            VpsQrToggle(link: profile.url),
+          if (profile.url.isNotEmpty && _qr) ...[
+            const SizedBox(height: 14),
+            VpsQrPanel(link: profile.url),
           ],
         ],
       ),

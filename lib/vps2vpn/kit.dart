@@ -1569,6 +1569,12 @@ enum VpsIcon {
   chevron,
   tick,
   close,
+  power,
+  gauge,
+  wifi,
+  network,
+  tray,
+  qr,
 }
 
 class VpsIconView extends StatelessWidget {
@@ -1833,6 +1839,62 @@ class _IconPainter extends CustomPainter {
         canvas
           ..drawLine(o(6.5, 6.5), o(17.5, 17.5), p)
           ..drawLine(o(17.5, 6.5), o(6.5, 17.5), p);
+      case VpsIcon.power:
+        canvas
+          ..drawArc(
+            Rect.fromCircle(center: o(12, 13), radius: 7.5 * u),
+            -math.pi / 2 + 0.65,
+            math.pi * 2 - 1.3,
+            false,
+            p,
+          )
+          ..drawLine(o(12, 3.5), o(12, 11), p);
+      case VpsIcon.gauge:
+        canvas
+          ..drawArc(
+            Rect.fromCircle(center: o(12, 14), radius: 8.5 * u),
+            math.pi * 0.8,
+            math.pi * 1.4,
+            false,
+            p,
+          )
+          ..drawLine(o(12, 14), o(16.5, 8.5), p)
+          ..drawCircle(o(12, 14), 1.2 * u, Paint()..color = color);
+      case VpsIcon.wifi:
+        for (final r in const [4.5, 9.0, 13.5]) {
+          canvas.drawArc(
+            Rect.fromCircle(center: o(12, 19.5), radius: r * u),
+            -math.pi * 0.75,
+            math.pi * 0.5,
+            false,
+            p,
+          );
+        }
+        canvas.drawCircle(o(12, 19.5), 1.2 * u, Paint()..color = color);
+      case VpsIcon.network:
+        canvas
+          ..drawRSuperellipse(rr(9, 3.5, 15, 8.5, 1.5), p)
+          ..drawRSuperellipse(rr(3.5, 15.5, 9.5, 20.5, 1.5), p)
+          ..drawRSuperellipse(rr(14.5, 15.5, 20.5, 20.5, 1.5), p)
+          ..drawLine(o(12, 8.5), o(12, 12), p)
+          ..drawLine(o(6.5, 12), o(17.5, 12), p)
+          ..drawLine(o(6.5, 12), o(6.5, 15.5), p)
+          ..drawLine(o(17.5, 12), o(17.5, 15.5), p);
+      case VpsIcon.tray:
+        canvas
+          ..drawRSuperellipse(rr(3.5, 4.5, 20.5, 19.5, 2.5), p)
+          ..drawLine(o(3.5, 14.5), o(20.5, 14.5), p)
+          ..drawLine(o(15.5, 17), o(17.5, 17), p);
+      case VpsIcon.qr:
+        final fill = Paint()..color = color;
+        canvas
+          ..drawRSuperellipse(rr(4, 4, 10.5, 10.5, 1.5), p)
+          ..drawRSuperellipse(rr(13.5, 4, 20, 10.5, 1.5), p)
+          ..drawRSuperellipse(rr(4, 13.5, 10.5, 20, 1.5), p)
+          ..drawRect(Rect.fromLTRB(13.5 * u, 13.5 * u, 16 * u, 16 * u), fill)
+          ..drawRect(Rect.fromLTRB(17.5 * u, 17.5 * u, 20 * u, 20 * u), fill)
+          ..drawRect(Rect.fromLTRB(17.5 * u, 13.5 * u, 20 * u, 16 * u), fill)
+          ..drawRect(Rect.fromLTRB(13.5 * u, 17.5 * u, 16 * u, 20 * u), fill);
     }
   }
 
@@ -2050,6 +2112,7 @@ class VpsRow extends StatelessWidget {
     required this.icon,
     required this.title,
     this.subtitle,
+    this.info,
     this.trailing,
     this.onTap,
   });
@@ -2057,6 +2120,9 @@ class VpsRow extends StatelessWidget {
   final VpsIcon icon;
   final String title;
   final String? subtitle;
+
+  /// The whole story behind [subtitle], in a "?" beside the title.
+  final String? info;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -2085,10 +2151,28 @@ class VpsRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: vpsText(p, size: 14.5, weight: FontWeight.w500),
-                ),
+                if (info == null)
+                  Text(
+                    title,
+                    style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+                  )
+                else
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: vpsText(
+                            p,
+                            size: 14.5,
+                            weight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      VpsInfoTip(info!),
+                    ],
+                  ),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
