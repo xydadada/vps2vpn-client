@@ -18,6 +18,11 @@ class CoreLib extends CoreHandlerInterface {
 
   Completer<bool> _connectedCompleter = Completer<bool>();
   Future<CoreLifecycleResult>? _closeOperation;
+  Future<CoreLifecycleResult>? _startOperation;
+  final _lifecycleTasks = SerialTaskScheduler();
+  bool _needsShutdown = false;
+  bool _connected = false;
+  int _startRevision = 0;
   int _lifecycleRevision = 0;
   int _methodCallId = 0;
   bool _closed = false;
@@ -38,78 +43,124 @@ class CoreLib extends CoreHandlerInterface {
   }
 
   @override
-  Future<CoreLifecycleResult> start() async {
+  Future<CoreLifecycleResult> start() {
     if (_closed) {
-      throw StateError('Core lifecycle is closed');
+      return Future.error(StateError('Core lifecycle is closed'));
+    }
+    final active = _startOperation;
+    if (active != null && _startRevision == _lifecycleRevision) {
+      return active;
     }
     final revision = ++_lifecycleRevision;
-    if (_connectedCompleter.isCompleted) {
+    _startRevision = revision;
+    late final Future<CoreLifecycleResult> operation;
+    operation = _lifecycleTasks.run(() => _start(revision)).whenComplete(() {
+      if (identical(_startOperation, operation)) _startOperation = null;
+    });
+    return _startOperation = operation;
+  }
+
+  Future<CoreLifecycleResult> _start(int revision) async {
+    if (!_isCurrent(revision)) return _superseded(revision);
+    if (_connected) {
       return CoreLifecycleResult(
         revision: revision,
         outcome: CoreLifecycleOutcome.coalesced,
       );
     }
+    if (_needsShutdown) {
+      await _shutdown();
+      if (!_isCurrent(revision)) return _superseded(revision);
+    }
+    _needsShutdown = true;
     final initializationError = await _service?.init() ?? '';
+    if (!_isCurrent(revision)) return _superseded(revision);
     if (initializationError.isNotEmpty) {
       throw StateError(initializationError);
     }
     await globalState.container.read(vpnOptionsProvider.future);
+    if (!_isCurrent(revision)) return _superseded(revision);
     _connectedCompleter.complete(true);
     final syncError =
         await _service?.syncState(
           globalState.container.read(sharedStateProvider),
         ) ??
         '';
+    if (!_isCurrent(revision)) return _superseded(revision);
     if (syncError.isNotEmpty) {
-      _connectedCompleter = Completer<bool>();
-      await _service?.shutdown();
+      await _shutdown();
       throw StateError(syncError);
     }
+    _connected = true;
     return CoreLifecycleResult(
       revision: revision,
       outcome: CoreLifecycleOutcome.applied,
     );
   }
 
+  bool _isCurrent(int revision) => revision == _lifecycleRevision;
+
+  CoreLifecycleResult _superseded(int revision) => CoreLifecycleResult(
+    revision: revision,
+    outcome: CoreLifecycleOutcome.superseded,
+  );
+
   @override
-  Future<CoreLifecycleResult> restart() async {
-    await stop();
-    return start();
+  Future<CoreLifecycleResult> restart() {
+    if (_closed) {
+      return Future.error(StateError('Core lifecycle is closed'));
+    }
+    final revision = ++_lifecycleRevision;
+    return _lifecycleTasks.run(() async {
+      await _stop(revision);
+      return _start(revision);
+    });
   }
 
   @override
-  Future<CoreLifecycleResult> stop() => _stop();
-
-  Future<CoreLifecycleResult> _stop({bool allowClosed = false}) async {
-    if (_closed && !allowClosed) {
-      throw StateError('Core lifecycle is closed');
+  Future<CoreLifecycleResult> stop() {
+    if (_closed) {
+      return Future.error(StateError('Core lifecycle is closed'));
     }
     final revision = ++_lifecycleRevision;
-    if (!_connectedCompleter.isCompleted) {
+    return _lifecycleTasks.run(() => _stop(revision));
+  }
+
+  Future<CoreLifecycleResult> _stop(int revision) async {
+    if (!_isCurrent(revision)) return _superseded(revision);
+    if (!_needsShutdown) {
       return CoreLifecycleResult(
         revision: revision,
         outcome: CoreLifecycleOutcome.coalesced,
       );
     }
+    await _shutdown();
+    return CoreLifecycleResult(
+      revision: revision,
+      outcome: _isCurrent(revision)
+          ? CoreLifecycleOutcome.applied
+          : CoreLifecycleOutcome.superseded,
+    );
+  }
+
+  Future<void> _shutdown() async {
     _connectedCompleter = Completer<bool>();
+    _connected = false;
     final stopped = await _service?.shutdown() ?? true;
     if (!stopped) {
       throw StateError('Android Core service shutdown failed');
     }
-    return CoreLifecycleResult(
-      revision: revision,
-      outcome: CoreLifecycleOutcome.applied,
-    );
+    _needsShutdown = false;
   }
 
   @override
   Future<CoreLifecycleResult> close() {
-    return _closeOperation ??= _close();
-  }
-
-  Future<CoreLifecycleResult> _close() async {
+    final active = _closeOperation;
+    if (active != null) return active;
     _closed = true;
-    return _stop(allowClosed: true);
+    final revision = ++_lifecycleRevision;
+    // A late init must finish before the terminal listener removal.
+    return _closeOperation = _lifecycleTasks.run(() => _stop(revision));
   }
 
   // The service opens and closes the Core's listeners itself and reports a run
