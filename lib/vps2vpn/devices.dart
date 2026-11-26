@@ -598,7 +598,7 @@ final vpsDeviceSyncProvider = Provider.autoDispose<void>((ref) {
 });
 
 String vpsRemovedText(BuildContext context) =>
-    tr(context, '这台设备已被账号主人移除', 'The account owner removed this device');
+    tr(context, '此设备已被账号所有者移除', 'This device was removed by the owner');
 
 String _ago(BuildContext context, DateTime? at) {
   if (at == null) return '';
@@ -618,7 +618,7 @@ String _outcomeText(BuildContext context, VpsDeviceOutcome outcome) =>
       VpsDeviceOutcome.ok => '',
       VpsDeviceOutcome.featureOff => tr(
         context,
-        '账号主人没有打开设备管理',
+        '账号所有者没有开启设备管理',
         'The account owner has device management off',
       ),
       VpsDeviceOutcome.notFound => tr(
@@ -665,7 +665,11 @@ Future<void> _copyRestoreNote(BuildContext context) async {
   );
   if (!context.mounted) return;
   dialogs.showBanner(
-    tr(context, '已复制，发给账号主人请他恢复', 'Copied; send it to the account owner'),
+    tr(
+      context,
+      '已复制，请发给账号所有者恢复此设备',
+      'Copied; send it to the owner to restore this device',
+    ),
   );
 }
 
@@ -704,9 +708,9 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
             Text(
               tr(
                 context,
-                '这个订阅在本机已停用。账号主人恢复后再连接即可。',
-                'This subscription is off on this device until the owner '
-                    'restores it; then connect again.',
+                '此设备已被移除，这个订阅在本机已停用。账号所有者恢复后即可重新连接。',
+                'This device was removed, so this subscription is off here '
+                    'until the owner restores it; then connect again.',
               ),
               style: vpsText(p, size: 13, color: p.soft, height: 1.5),
             ),
@@ -716,7 +720,7 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
               runSpacing: 10,
               children: [
                 VpsButton(
-                  label: tr(context, '联系主人恢复', 'Ask the owner to restore'),
+                  label: tr(context, '联系所有者恢复', 'Ask the owner to restore'),
                   filled: true,
                   onTap: () => unawaited(_copyRestoreNote(context)),
                 ),
