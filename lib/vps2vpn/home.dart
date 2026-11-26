@@ -1429,7 +1429,7 @@ class _Stat extends StatelessWidget {
         children: [
           if (curve) ...[
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: (width - 52) * 0.6),
+              constraints: BoxConstraints(maxWidth: width - 52),
               child: _text(p),
             ),
             const SizedBox(width: 16),
@@ -1610,8 +1610,14 @@ class _SparkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width < 32) return;
+    // About 3px a sample, so a narrow tile shows the last few seconds.
+    final keep = math.max(8, size.width ~/ 3);
+    final values = this.values.length > keep
+        ? this.values.sublist(this.values.length - keep)
+        : this.values;
     final peak = values.fold<num>(0, math.max);
-    if (peak < _quiet || size.width < 40) return;
+    if (peak < _quiet) return;
     final top = math.max(peak, _floor);
     const stroke = 1.4;
     final rise = size.height - stroke;

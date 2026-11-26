@@ -378,7 +378,18 @@ class _ShotRun {
   /// CI idles at 0 B/s: a still minute of browsing, about 14.7 KB/s.
   void _holdSpeed() {
     final rand = math.Random(7);
-    const bursts = {14: 3.4, 15: 1.8, 33: 2.6, 47: 4.1, 48: 2.2};
+    const bursts = {
+      14: 1.5,
+      15: 2.6,
+      16: 1.7,
+      33: 1.9,
+      34: 1.4,
+      49: 1.4,
+      50: 2.3,
+      51: 2.9,
+      52: 1.8,
+      53: 1.3,
+    };
     final samples = [
       for (var i = 0; i < trafficSampleLength - 1; i++)
         Traffic(
