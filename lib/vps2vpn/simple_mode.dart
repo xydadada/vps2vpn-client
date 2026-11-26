@@ -46,9 +46,8 @@ Widget vpsDressAlert(BuildContext context, Widget child) {
   );
 }
 
-/// "Outbound mode" in advanced mode, "How you go online" in simple mode.
-String outboundModeTitle(BuildContext context) =>
-    vps2vpnAdvancedMode || vps2vpnUpstreamUi
+/// "Proxy mode" in vps2vpn's modes, upstream's "Outbound mode" otherwise.
+String outboundModeTitle(BuildContext context) => vps2vpnUpstreamUi
     ? context.appLocalizations.outboundMode
     : context.appLocalizations.vRouting;
 

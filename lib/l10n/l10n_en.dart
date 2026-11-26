@@ -3952,10 +3952,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vMine => 'Me';
 
   @override
-  String get vSmartRouting => 'Smart routing';
+  String get vSmartRouting => 'Rule mode';
 
   @override
-  String get vProxyAll => 'Proxy everything';
+  String get vProxyAll => 'Global mode';
 
   @override
   String get vAdvancedMode => 'Advanced mode';
@@ -3970,7 +3970,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vSettings => 'Settings';
 
   @override
-  String get vRouting => 'Routing';
+  String get vRouting => 'Proxy mode';
 
   @override
   String get subscriptionEmpty => 'The subscription returned an empty config';

@@ -169,26 +169,25 @@ String vpsAccountBlockReason(BuildContext context, VpsAccountBlock block) =>
     };
 
 /// What the member can do about [block].
-String vpsAccountBlockHint(
-  BuildContext context,
-  VpsAccountBlock block,
-) => switch (block) {
-  VpsAccountBlock.linkChanged => tr(
-    context,
-    '请向管理员要新链接，复制后在「设置」里点“从剪贴板导入”。',
-    'Ask the owner for the new link, copy it and tap "From clipboard" in Settings.',
-  ),
-  VpsAccountBlock.devices => tr(
-    context,
-    '先断开其他设备上的连接，稍后会自动恢复。',
-    'Disconnect your other devices; it resumes by itself shortly.',
-  ),
-  _ => tr(
-    context,
-    '现在连接也上不了网，请联系管理员处理。',
-    "Connecting won't get you online now. Ask the owner to sort it out.",
-  ),
-};
+String vpsAccountBlockHint(BuildContext context, VpsAccountBlock block) =>
+    switch (block) {
+      VpsAccountBlock.linkChanged => tr(
+        context,
+        '请向管理员获取新链接，复制后在「设置」中点击「从剪贴板粘贴」。',
+        'Ask the admin for the new link, copy it and ${vpsClick()} '
+            '"Paste from clipboard" in Settings.',
+      ),
+      VpsAccountBlock.devices => tr(
+        context,
+        '先断开其他设备上的连接，稍后会自动恢复。',
+        'Disconnect your other devices; it resumes by itself shortly.',
+      ),
+      _ => tr(
+        context,
+        '现在连接也上不了网，请联系管理员处理。',
+        "Connecting won't get you online now. Ask the owner to sort it out.",
+      ),
+    };
 
 /// "Expired", "Expires today" or the whole days left until [expire].
 String vpsExpiryText(BuildContext context, DateTime expire, {DateTime? now}) {
@@ -315,8 +314,9 @@ class VpsAccountCard extends ConsumerWidget {
         lines: [
           tr(
             context,
-            '服务器不再认这个链接了。请向管理员要新链接，复制后点“从剪贴板导入”。',
-            'The server no longer knows this link. Ask for the new one, copy it and tap "From clipboard".',
+            '服务器已不再接受这个链接。请向管理员获取新链接，复制后点击「从剪贴板粘贴」。',
+            'The server no longer accepts this link. Ask the admin for the '
+                'new one, copy it and ${vpsClick()} "Paste from clipboard".',
           ),
         ],
         action: refresh,
@@ -384,7 +384,7 @@ class VpsAccountCard extends ConsumerWidget {
           if (page != null)
             VpsButton(
               key: const ValueKey('vps-member-centre'),
-              label: tr(context, '打开会员中心', 'Open member centre'),
+              label: tr(context, '打开会员中心', 'Open member center'),
               icon: VpsIcon.me,
               filled:
                   block == VpsAccountBlock.quota ||

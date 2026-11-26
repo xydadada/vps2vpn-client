@@ -6923,13 +6923,13 @@ abstract class AppLocalizations {
   /// No description provided for @vSmartRouting.
   ///
   /// In en, this message translates to:
-  /// **'Smart routing'**
+  /// **'Rule mode'**
   String get vSmartRouting;
 
   /// No description provided for @vProxyAll.
   ///
   /// In en, this message translates to:
-  /// **'Proxy everything'**
+  /// **'Global mode'**
   String get vProxyAll;
 
   /// No description provided for @vAdvancedMode.
@@ -6959,7 +6959,7 @@ abstract class AppLocalizations {
   /// No description provided for @vRouting.
   ///
   /// In en, this message translates to:
-  /// **'Routing'**
+  /// **'Proxy mode'**
   String get vRouting;
 
   /// No description provided for @subscriptionEmpty.

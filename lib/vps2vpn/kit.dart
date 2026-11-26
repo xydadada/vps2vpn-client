@@ -3,6 +3,7 @@
 // Everything simple mode draws comes from here, so the look stays one system.
 
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -23,6 +24,10 @@ const vpsCoral = Color(0xFFFF6F61);
 const vpsCoralSoft = Color(0xFFFF8A70);
 const vpsCoralDeep = Color(0xFFE63E5C);
 const vpsViolet = Color(0xFF8B5CF6);
+
+/// The English verb for pressing: "click" with a pointer, "tap" on a phone.
+String vpsClick({bool start = false}) =>
+    Platform.isAndroid ? (start ? 'Tap' : 'tap') : (start ? 'Click' : 'click');
 
 /// The logo keeps the brand colours whatever theme colour is picked.
 const vpsBrandGradient = LinearGradient(

@@ -266,7 +266,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               Container(height: 1, color: p.line),
               _ChoiceRow(
                 icon: VpsIcon.sparkle,
-                label: tr(context, '主题色', 'Theme colour'),
+                label: tr(context, '主题色', 'Accent color'),
                 child: const VpsAccentPicker(),
               ),
               Container(height: 1, color: p.line),
@@ -327,15 +327,15 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   icon: VpsIcon.gauge,
                   title: tr(
                     context,
-                    '智能线路可以用高倍率节点',
-                    'Smart line may use dearer nodes',
+                    '智能线路可使用高倍率节点',
+                    'Smart line may use higher-rate nodes',
                   ),
                   subtitle: tr(
                     context,
-                    '默认只在 1 倍及以下的节点里挑，都连不上才用高倍率的；打开后谁快用谁，可能多扣流量',
-                    'Off, it picks among nodes billed at 1x or less and uses '
-                        'dearer ones only when none answers; on, the fastest '
-                        'wins, which may use up more data',
+                    '默认只从 1 倍及以下的节点中选择，都无法连接时才使用高倍率节点；打开后优先使用最快的节点，可能消耗更多流量',
+                    'Off: picks only nodes billed at 1× or less, and '
+                        'higher-rate ones only when none answers. On: the '
+                        'fastest node wins, which may use more data',
                   ),
                   trailing: VpsSwitch(
                     value: ref.watch(
@@ -494,7 +494,7 @@ class _LegalLineState extends State<_LegalLine> {
         children: [
           VpsPressable(
             onTap: () => setState(() => _open = !_open),
-            child: Text(tr(context, '许可信息', 'Licences'), style: style),
+            child: Text(tr(context, '许可信息', 'Licenses'), style: style),
           ),
           AnimatedSize(
             duration: VpsMotion.medium,
@@ -508,8 +508,8 @@ class _LegalLineState extends State<_LegalLine> {
                         '本软件包含按 GPL-3.0 许可的开源组件（FlClash、mihomo），以及按 OFL 许可的字体（Inter、Noto Sans SC）。'
                             '全部许可文本位于安装目录 data/legal，可向发布方索取对应源代码。',
                         'Includes GPL-3.0 components (FlClash, mihomo) and OFL fonts '
-                            '(Inter, Noto Sans SC). All licences are in data/legal; '
-                            'source is available on request.',
+                            '(Inter, Noto Sans SC). All licenses are in data/legal; '
+                            'request the source from the publisher.',
                       ),
                       textAlign: TextAlign.center,
                       style: style,

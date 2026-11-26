@@ -335,10 +335,10 @@ final vpsFeedbackSyncProvider = Provider.autoDispose<void>((ref) {
               )
             : tr(
                 context,
-                '之前保存的反馈没能发送（${_why(context, answer)}），可以在「我的」→「反馈问题」里复制后发给服务提供者',
-                'The note you saved could not be sent '
-                    '(${_why(context, answer)}); copy it from Me > '
-                    'Feedback and send it to your provider',
+                '之前保存的反馈发送失败（${_why(context, answer)}），可以在「设置」→「反馈问题」中复制，然后发给管理员',
+                'The feedback you saved could not be sent '
+                    '(${_why(context, answer)}); copy it from Settings > '
+                    'Feedback and send it to the admin',
               ),
       );
     }),
@@ -357,8 +357,8 @@ final vpsFeedbackSyncProvider = Provider.autoDispose<void>((ref) {
     dialogs.showBanner(
       tr(
         context,
-        '管理员回复了你的反馈，到「我的」→「反馈问题」查看',
-        'The admin answered your note; see Me > Feedback',
+        '管理员回复了你的反馈，请到「设置」→「反馈问题」查看',
+        'The admin replied to your feedback; see Settings > Feedback',
       ),
     );
   }());

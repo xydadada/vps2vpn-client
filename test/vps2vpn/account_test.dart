@@ -194,7 +194,7 @@ void main() {
       subscription: 'https://panel.example:8443/s/abcdefghijklmnop',
     );
     expect(button, findsOneWidget);
-    expect(find.text('Open member centre'), findsOneWidget);
+    expect(find.text('Open member center'), findsOneWidget);
     await _pump(
       tester,
       const VpsAccountCard(),

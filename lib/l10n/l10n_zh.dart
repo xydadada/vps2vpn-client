@@ -3724,10 +3724,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vMine => '我的';
 
   @override
-  String get vSmartRouting => '智能分流';
+  String get vSmartRouting => '规则模式';
 
   @override
-  String get vProxyAll => '全部走代理';
+  String get vProxyAll => '全局模式';
 
   @override
   String get vAdvancedMode => '高级模式';
@@ -3742,7 +3742,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vSettings => '设置';
 
   @override
-  String get vRouting => '上网方式';
+  String get vRouting => '代理模式';
 
   @override
   String get subscriptionEmpty => '订阅返回了空配置';

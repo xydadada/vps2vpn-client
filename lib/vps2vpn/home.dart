@@ -378,8 +378,8 @@ class VpsHomePage extends ConsumerWidget {
                     items: const [Mode.rule, Mode.global],
                     value: mode == Mode.direct ? Mode.rule : mode,
                     labelOf: (m) => m == Mode.rule
-                        ? tr(context, '规则模式', 'Rule')
-                        : tr(context, '全局模式', 'Global'),
+                        ? tr(context, '规则模式', 'Rule mode')
+                        : tr(context, '全局模式', 'Global mode'),
                     onChanged: (m) =>
                         ref.read(setupActionProvider.notifier).changeMode(m),
                   ),
@@ -405,7 +405,7 @@ class VpsHomePage extends ConsumerWidget {
                         tr(
                           context,
                           '系统代理：设置系统代理，浏览器及遵循系统设置的应用生效，轻量、无需管理员权限。\n虚拟网卡（TUN）：在网络层接管全部流量，终端、游戏等不读取代理设置的程序同样生效，需要管理员权限。',
-                          'System proxy: sets the system proxy; browsers and apps that honour it. No admin needed.\nTUN: a virtual adapter takes over all traffic at the network layer, terminals and games included. Needs admin.',
+                          'System proxy: browsers and apps that use the system proxy. No admin rights needed.\nVirtual adapter (TUN): takes over all traffic, terminals and games included. Needs admin rights.',
                         ),
                       ),
                     ],
@@ -811,8 +811,8 @@ class _HeroState extends ConsumerState<_Hero> {
                     )
                   : tr(
                       context,
-                      '轻点"连接"，即刻接入你的私有线路',
-                      'Tap Connect to use your private line',
+                      '点击「连接」接入你的私有网络',
+                      '${vpsClick(start: true)} "Connect" to use your private network',
                     ));
 
     return LayoutBuilder(
