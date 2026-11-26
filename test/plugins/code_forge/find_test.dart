@@ -201,6 +201,51 @@ void main() {
     expect(controller.getLineText(5), '    sport: 1');
   });
 
+  testWidgets('an open finder cannot replace after the editor is read-only', (
+    tester,
+  ) async {
+    final (controller, finder) = await pumpFind(tester);
+    finder.isActive = true;
+    finder.matchWholeWord = true;
+    finder.find('80');
+    finder.replaceInputController.text = '443';
+    await pumpEditor(
+      tester,
+      controller,
+      findController: finder,
+      readOnly: true,
+    );
+
+    finder.replace();
+    await finder.replaceAll();
+    expect(controller.text, _document);
+    expect(finder.matchCount, 2);
+    finder.next();
+    expect(finder.currentMatchIndex, 1);
+  });
+
+  test(
+    'an in-flight large replacement respects a change to read-only',
+    () async {
+      final original = 'port: 80\n' * 20000;
+      final controller = CodeForgeController()..text = original;
+      final finder = FindController(controller);
+      addTearDown(controller.dispose);
+      addTearDown(finder.dispose);
+      finder.find('80', scrollToMatch: false);
+      while (finder.matchCount == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      finder.replaceInputController.text = '443';
+
+      final pending = finder.replaceAll();
+      controller.readOnly = true;
+      await pending;
+      expect(controller.text, original);
+      expect(controller.isModified, isFalse);
+    },
+  );
+
   testWidgets('replacing an empty regex match moves on to the next one', (
     tester,
   ) async {
