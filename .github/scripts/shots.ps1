@@ -14,6 +14,11 @@ try {
   # of the app's own Core that sends it straight out. Test keys, loopback only.
   $uuid = '6f3b2c1e-8d4a-4b7e-9c2f-1a5e7d9b3c40'
   $reality = "servername: www.microsoft.com, client-fingerprint: chrome, reality-opts: {public-key: 9Rx_b6KSKRiopPHxSmB0N5Q2tQb0eX2ICnP_2f3XVVE, short-id: 5a1f}"
+  # Hysteria2 and TUIC inbounds refuse to start without a certificate.
+  $key = [Security.Cryptography.ECDsa]::Create([Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+  $cert = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=localhost', $key, [Security.Cryptography.HashAlgorithmName]::SHA256).CreateSelfSigned([DateTimeOffset]::Now.AddDays(-1), [DateTimeOffset]::Now.AddDays(2))
+  $pem = { param($text) ($text.Trim() -replace "`r?`n", '\n') }
+  $tls = "certificate: `"$(& $pem $cert.ExportCertificatePem())`", private-key: `"$(& $pem $key.ExportPkcs8PrivateKeyPem())`""
   $servers = @(
     @{ label = '日本'; base = 24410 },
     @{ label = '美国 ×2'; base = 24420 },
@@ -26,9 +31,9 @@ try {
     $proxies += "  - {name: '$($names[0])', type: hysteria2, server: 127.0.0.1, port: $hy2, password: shots, sni: localhost, skip-cert-verify: true, alpn: [h3]}"
     $proxies += "  - {name: '$($names[1])', type: vless, server: 127.0.0.1, port: $vless, uuid: $uuid, network: tcp, udp: true, tls: true, $reality}"
     $proxies += "  - {name: '$($names[2])', type: tuic, server: 127.0.0.1, port: $tuic, uuid: $uuid, password: shots, sni: localhost, skip-cert-verify: true, alpn: [h3]}"
-    $listeners += "  - {name: in-$hy2, type: hysteria2, listen: 127.0.0.1, port: $hy2, proxy: DIRECT, users: {shots: shots}, alpn: [h3]}"
+    $listeners += "  - {name: in-$hy2, type: hysteria2, listen: 127.0.0.1, port: $hy2, proxy: DIRECT, users: {shots: shots}, alpn: [h3], $tls}"
     $listeners += "  - {name: in-$vless, type: vless, listen: 127.0.0.1, port: $vless, proxy: DIRECT, users: [{username: shots, uuid: $uuid}], reality-config: {dest: 'www.microsoft.com:443', private-key: OPjIAFeak2MQLqOlnr_JxtXRQ5hNPeR-7npvsRoXRns, short-id: [5a1f], server-names: [www.microsoft.com]}}"
-    $listeners += "  - {name: in-$tuic, type: tuic, listen: 127.0.0.1, port: $tuic, proxy: DIRECT, users: {$($uuid): shots}, alpn: [h3]}"
+    $listeners += "  - {name: in-$tuic, type: tuic, listen: 127.0.0.1, port: $tuic, proxy: DIRECT, users: {$($uuid): shots}, alpn: [h3], $tls}"
     $fallbacks += "  - {name: '$($s.label)', type: fallback, proxies: ['$($names -join "', '")'], url: 'https://www.gstatic.com/generate_204', interval: 300, lazy: true}"
     $lines += $names; $labels += $s.label
   }
