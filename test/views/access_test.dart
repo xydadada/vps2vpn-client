@@ -745,6 +745,61 @@ void main() {
     });
   });
 
+  group('clipboard export', () {
+    for (final fails in [false, true]) {
+      testWidgets(
+        fails ? 'reports a clipboard write failure' : 'writes the active list',
+        (tester) async {
+          seedAccessControl(
+            const AccessControlProps(
+              enable: true,
+              rejectList: ['com.example.browser', 'com.example.chat'],
+            ),
+          );
+          final failure = PlatformException(
+            code: 'clipboard_unavailable',
+            message: 'Clipboard is busy',
+          );
+          Object? written;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method != 'Clipboard.setData') return null;
+              written = call.arguments;
+              if (fails) throw failure;
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          await pumpAccessView(tester);
+          final l10n = currentAppLocalizations;
+          Finder inMenu(Finder finder) =>
+              find.descendant(of: find.byType(PopupMenu), matching: finder);
+          await openBarMenu(tester);
+          await tester.tap(inMenu(find.text(l10n.action)));
+          await tester.pumpAndSettle();
+          await tester.tap(inMenu(find.text(l10n.clipboardExport)));
+          await tester.pumpAndSettle();
+
+          expect(written, {'text': 'com.example.browser\ncom.example.chat'});
+          expect(tester.takeException(), isNull);
+          expect(
+            find.text(userFacingErrorMessage(failure, l10n)),
+            fails ? findsOneWidget : findsNothing,
+          );
+          expect(container.read(accessControlStateProvider).rejectList, [
+            'com.example.browser',
+            'com.example.chat',
+          ]);
+          await teardownView(tester);
+        },
+      );
+    }
+  });
+
   group('clipboard import', () {
     Future<void> importText(WidgetTester tester, String text) async {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
