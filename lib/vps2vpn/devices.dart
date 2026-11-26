@@ -746,21 +746,27 @@ Future<void> _removeProfile(WidgetRef ref, int profileId) async {
 
 Future<bool> vpsAskRemoveProfile(BuildContext context) async =>
     await dialogs.showMessage(
-      title: tr(context, '移除这个订阅', 'Remove this subscription'),
+      title: tr(context, '移除这个订阅？', 'Remove this subscription?'),
       message: TextSpan(
         text: tr(
           context,
-          '只从本机删掉这个订阅，账号本身不受影响。',
-          'Only this device forgets the subscription; the account stays.',
+          '只删除本机上的这个订阅，账号不受影响。',
+          'Only this device forgets the subscription; the account is not '
+              'affected.',
         ),
       ),
+      confirmText: tr(context, '移除', 'Remove'),
       destructive: true,
     ) ==
     true;
 
-/// [confirmKick] opens it on the question before signing others out.
-Future<void> vpsShowDevices({bool confirmKick = false}) => dialogs
-    .showCommonDialog<void>(child: _DevicesDialog(confirmKick: confirmKick));
+/// [sample] stands in for the panel's answer in screenshots.
+Future<void> vpsShowDevices({
+  bool confirmKick = false,
+  VpsDeviceList? sample,
+}) => dialogs.showCommonDialog<void>(
+  child: _DevicesDialog(confirmKick: confirmKick, sample: sample),
+);
 
 class VpsDevicesRow extends ConsumerWidget {
   const VpsDevicesRow({super.key});
@@ -796,9 +802,10 @@ class VpsDevicesRow extends ConsumerWidget {
 }
 
 class _DevicesDialog extends ConsumerStatefulWidget {
-  const _DevicesDialog({this.confirmKick = false});
+  const _DevicesDialog({this.confirmKick = false, this.sample});
 
   final bool confirmKick;
+  final VpsDeviceList? sample;
 
   @override
   ConsumerState<_DevicesDialog> createState() => _DevicesDialogState();
@@ -824,6 +831,11 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   }
 
   void _reload() {
+    if (widget.sample case final sample?) {
+      _list = Future.value(sample);
+      _listed = true;
+      return;
+    }
     final call = _call();
     if (call == null) return;
     final list = _list = vpsDeviceId().then((id) => vpsListDevices(call, id));
@@ -1094,7 +1106,12 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
     }
     return AlertDialog(
       title: tr(context, '设备管理', 'Devices'),
+      destructive: kicked == null,
       actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(tr(context, '关闭', 'Close')),
+        ),
         if (kicked == null)
           TextButton(
             style: ButtonStyle(
@@ -1108,10 +1125,6 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                 : () => setState(() => _confirming = true),
             child: Text(tr(context, '让其他设备下线', 'Sign out other devices')),
           ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(tr(context, '关闭', 'Close')),
-        ),
       ],
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),

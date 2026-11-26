@@ -321,17 +321,56 @@ class _ShotRun {
         await close();
         await shot('devices', vpsShowDevices);
         await close();
+        final now = DateTime.now();
+        await shot(
+          'devices-loaded',
+          () => vpsShowDevices(
+            sample: (
+              outcome: VpsDeviceOutcome.ok,
+              onlineIps: 2,
+              maxIps: 3,
+              devices: [
+                VpsDevice(
+                  id: '0f3c9a1e',
+                  name: 'DESKTOP-SHOTS',
+                  platform: 'windows',
+                  version: '1.0.34',
+                  lastSeen: now,
+                  ip: '203.0.113.24',
+                  thisDevice: true,
+                ),
+                VpsDevice(
+                  id: '7b21d4c8',
+                  name: 'Pixel 8',
+                  platform: 'android',
+                  version: '1.0.33',
+                  lastSeen: now.subtract(const Duration(minutes: 12)),
+                  ip: '198.51.100.7',
+                ),
+                VpsDevice(
+                  id: 'c94e0b37',
+                  name: 'MacBook Air',
+                  platform: 'macos',
+                  lastSeen: now.subtract(const Duration(days: 9)),
+                  revoked: true,
+                ),
+              ],
+            ),
+          ),
+        );
+        await close();
         await shot('kick', () => vpsShowDevices(confirmKick: true));
         await close();
         await shot('remove-subscription', () => vpsAskRemoveProfile(here()));
         await close();
         await shot(
           'whats-new',
-          () => dialogs.showMessage(
+          () => dialogs.showAlert(
             title: '1.0.33 更新内容',
             message: const TextSpan(
               text: '首页标题在智能线路切换时不再来回跳；导航栏、标题栏和侧边栏的细节修整。',
             ),
+            confirmText: '知道了',
           ),
         );
         await close();

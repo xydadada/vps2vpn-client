@@ -736,13 +736,14 @@ class VpsUpdateCard extends ConsumerWidget {
               VpsPressable(
                 semanticLabel: tr(context, '更新内容', "What's new"),
                 onTap: () => unawaited(
-                  dialogs.showMessage(
+                  dialogs.showAlert(
                     title: tr(
                       context,
                       '${release!.version} 更新内容',
                       "What's new in ${release.version}",
                     ),
                     message: TextSpan(text: release.notes),
+                    confirmText: tr(context, '知道了', 'Got it'),
                   ),
                 ),
                 child: Padding(

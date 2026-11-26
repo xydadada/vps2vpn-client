@@ -949,6 +949,57 @@ class VpsButton extends StatelessWidget {
 }
 
 /// A smooth custom switch.
+/// Scrolls [child]; an edge with more beyond it fades out, so a line is never
+/// cut in half there.
+class VpsFadingScroll extends StatefulWidget {
+  const VpsFadingScroll({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<VpsFadingScroll> createState() => _VpsFadingScrollState();
+}
+
+class _VpsFadingScrollState extends State<VpsFadingScroll> {
+  var _top = false;
+  var _bottom = false;
+
+  bool _sync(ScrollMetrics m) {
+    final top = m.extentBefore > 0.5;
+    final bottom = m.extentAfter > 0.5;
+    if (top != _top || bottom != _bottom) {
+      setState(() {
+        _top = top;
+        _bottom = bottom;
+      });
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const edge = 28.0;
+    const solid = Color(0xFF000000);
+    const clear = Color(0x00000000);
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (r) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [_top ? clear : solid, solid, solid, _bottom ? clear : solid],
+        stops: [0, edge / r.height, 1 - edge / r.height, 1],
+      ).createShader(r),
+      child: NotificationListener<ScrollMetricsNotification>(
+        onNotification: (n) => n.depth == 0 && _sync(n.metrics),
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (n) => n.depth == 0 && _sync(n.metrics),
+          child: SingleChildScrollView(child: widget.child),
+        ),
+      ),
+    );
+  }
+}
+
 class VpsSwitch extends StatelessWidget {
   const VpsSwitch({super.key, required this.value, required this.onChanged});
 

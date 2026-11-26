@@ -86,11 +86,13 @@ class Dialogs {
   Future<void> showAlert({
     required InlineSpan message,
     String? title,
+    String? confirmText,
     bool? dismissible,
   }) {
     return _showMessage(
       message: message,
       title: title,
+      confirmText: confirmText,
       dismissible: dismissible,
       cancelable: false,
     );

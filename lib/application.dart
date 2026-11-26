@@ -126,6 +126,7 @@ class ApplicationState extends ConsumerState<Application> {
       String tr(String zhText, String en) => zh ? zhText : en;
       final res = await dialogs.showMessage(
         title: tr('导入订阅', 'Import subscription'),
+        confirmText: tr('导入', 'Import'),
         message: TextSpan(
           children: [
             if (source == null)
@@ -226,51 +227,54 @@ class ApplicationState extends ConsumerState<Application> {
         Color seedOf(Brightness b) => themeProps.primaryColor != null
             ? Color(themeProps.primaryColor!)
             : dynamicColor.seedOf(b);
-        return PrismApp(
-          debugShowCheckedModeBanner: false,
-          navigatorKey: globalState.navigatorKey,
-          onNavigationNotification: (_) => true,
-          localizationsDelegates: const [
-            appLocalizationsDelegate,
-            AppUiLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-          ],
-          builder: (context, child) {
-            return VpsAccentScope(
-              light: seedOf(Brightness.light),
-              dark: seedOf(Brightness.dark),
-              child: vpsShotBoundary(
-                buildManagerStack(
+        return vpsShotBoundary(
+          PrismApp(
+            debugShowCheckedModeBanner: false,
+            navigatorKey: globalState.navigatorKey,
+            onNavigationNotification: (_) => true,
+            localizationsDelegates: const [
+              appLocalizationsDelegate,
+              AppUiLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            builder: (context, child) {
+              return VpsAccentScope(
+                light: seedOf(Brightness.light),
+                dark: seedOf(Brightness.dark),
+                child: buildManagerStack(
                   isDesktop: system.isDesktop,
                   onConnectivityChanged: _handleConnectivityChanged,
                   terminateSignals: _terminateSignals,
                   child: child!,
                 ),
-              ),
-            );
-          },
-          title: appName,
-          locale: getLocaleForString(locale),
-          supportedLocales: AppLocalizations.supportedLocales,
-          themeMode: themeProps.themeMode,
-          theme: watchAppTheme(ref, Brightness.light),
-          darkTheme: watchAppTheme(ref, Brightness.dark),
-          textScale: textScale.enable ? textScale.scale : null,
-          minTextScale: minTextScale,
-          maxTextScale: maxTextScale,
-          liquidGlass: switch (themeProps.liquidGlass) {
-            LiquidGlassMode.none => null,
-            LiquidGlassMode.ultra => LiquidGlassQuality.ultra,
-            LiquidGlassMode.standard => LiquidGlassQuality.standard,
-          },
-          emojiFont: (family: FontFamily.twEmoji.value, pattern: emojiPattern),
-          stackedBanners: !ref.watch(isMobileViewProvider),
-          bannerTopInset: ref.watch(overlayTopOffsetProvider),
-          remoteFocus: system.isTV,
-          floatingKeyboard: app?.floatingKeyboard,
-          onGenerateRoute: (settings) => HomeRoute(
-            settings: settings,
-            builder: (_) => KeyboardInsetHold(child: child!),
+              );
+            },
+            title: appName,
+            locale: getLocaleForString(locale),
+            supportedLocales: AppLocalizations.supportedLocales,
+            themeMode: themeProps.themeMode,
+            theme: watchAppTheme(ref, Brightness.light),
+            darkTheme: watchAppTheme(ref, Brightness.dark),
+            textScale: textScale.enable ? textScale.scale : null,
+            minTextScale: minTextScale,
+            maxTextScale: maxTextScale,
+            liquidGlass: switch (themeProps.liquidGlass) {
+              LiquidGlassMode.none => null,
+              LiquidGlassMode.ultra => LiquidGlassQuality.ultra,
+              LiquidGlassMode.standard => LiquidGlassQuality.standard,
+            },
+            emojiFont: (
+              family: FontFamily.twEmoji.value,
+              pattern: emojiPattern,
+            ),
+            stackedBanners: !ref.watch(isMobileViewProvider),
+            bannerTopInset: ref.watch(overlayTopOffsetProvider),
+            remoteFocus: system.isTV,
+            floatingKeyboard: app?.floatingKeyboard,
+            onGenerateRoute: (settings) => HomeRoute(
+              settings: settings,
+              builder: (_) => KeyboardInsetHold(child: child!),
+            ),
           ),
         );
       },

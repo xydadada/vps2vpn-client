@@ -21,15 +21,15 @@ Future<VpsTakeoverAnswer?> vpsShowTakeoverAsk(List<String> names) async {
         final p = VpsPalette.of(context);
         final list = names.join(tr(context, '、', ', '));
         return AlertDialog(
-          title: tr(context, '先关闭其他代理软件？', 'Close the other proxy apps?'),
+          title: tr(context, '先退出其他代理软件？', 'Quit the other proxy apps first?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(tr(context, '不关闭，直接连接', 'Connect without')),
+              child: Text(tr(context, '不退出，直接连接', 'Connect anyway')),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(tr(context, '关闭并连接', 'Close and connect')),
+              child: Text(tr(context, '退出并连接', 'Quit and connect')),
             ),
           ],
           child: Column(
@@ -39,34 +39,37 @@ Future<VpsTakeoverAnswer?> vpsShowTakeoverAsk(List<String> names) async {
               Text(
                 tr(
                   context,
-                  '$list 正在运行，它们会和 vps2vpn 抢系统代理和端口。关闭前请先保存它们里面没保存的设置。'
-                      '选"不关闭"也能连接，只是可能互相冲突。',
-                  '$list is running and will fight vps2vpn over the system '
-                      'proxy and ports. Save anything unsaved in it first. '
-                      'Connecting without closing works too, but they may '
-                      'get in each other\'s way.',
+                  '$list 正在运行，会和 vps2vpn 争用系统代理和端口。退出前请先保存它们中未保存的设置。'
+                      '选择「不退出」也能连接，但可能互相冲突。',
+                  '$list is running and will compete with vps2vpn for the '
+                      'system proxy and ports. Save anything unsaved in it '
+                      'first. "Connect anyway" works too, but they may get '
+                      'in each other\'s way.',
                 ),
-                style: vpsText(p, size: 13.5, height: 1.5),
+                style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Checkbox(
-                    value: remember,
-                    onChanged: (v) => setState(() => remember = v ?? false),
-                  ),
-                  Expanded(
-                    child: Text(
-                      tr(
-                        context,
-                        '记住我的选择（可在"设置"里的"连接时自动接管"改）',
-                        'Remember my choice (change it under Take over on '
-                            'Connect in Settings)',
-                      ),
-                      style: vpsText(p, size: 12.5, color: p.soft),
+              const SizedBox(height: 4),
+              // The box sits 15 px inside its 48 px target.
+              Transform.translate(
+                offset: const Offset(-15, 0),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: remember,
+                      onChanged: (v) => setState(() => remember = v ?? false),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: Text(
+                        tr(
+                          context,
+                          '记住我的选择（可在设置里修改）',
+                          'Remember my choice (change it in Settings)',
+                        ),
+                        style: vpsText(p, size: 12.5, color: p.soft),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

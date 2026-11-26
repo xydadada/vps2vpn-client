@@ -538,11 +538,14 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
     String label,
     bool value,
     ValueChanged<bool> on,
-  ) => Row(
-    children: [
-      Expanded(child: Text(label, style: vpsText(p, size: 13))),
-      VpsSwitch(value: value, onChanged: on),
-    ],
+  ) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      children: [
+        Expanded(child: Text(label, style: vpsText(p, size: 13))),
+        VpsSwitch(value: value, onChanged: on),
+      ],
+    ),
   );
 
   @override
@@ -578,7 +581,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
       ],
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
-        child: SingleChildScrollView(
+        child: VpsFadingScroll(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
