@@ -612,7 +612,7 @@ class _ProxyCard extends ConsumerWidget {
     final busy = status?.state == VpsNodeState.congested;
     final shown = pinned
         ? (name: friendlyLineName(context, proxy.name), rate: null)
-        : vpsNodeName(proxy.name);
+        : vpsNodeTitle(context, proxy.name);
     final rate = shown.rate;
     final using = selected && !pinned;
     final protocol = vpsNameSaysProtocol(proxy.name, proxy.type)
@@ -775,7 +775,7 @@ extension on _ProxyCard {
       if (protocol != null) TextSpan(text: protocol),
       if (rate != null)
         TextSpan(
-          text: '${rate == rate.roundToDouble() ? rate.round() : rate}×',
+          text: vpsRateText(rate),
           style: rate >= 2 ? TextStyle(color: p.warn) : null,
         ),
     ];

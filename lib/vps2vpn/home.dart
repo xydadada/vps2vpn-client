@@ -151,12 +151,23 @@ final _codeHead = RegExp(r'^([A-Za-z]{2})(?:[\s_|·-]+|(?=[^\x00-\x7F]))');
 
 /// "us 洛杉矶 · 5.0x" reads "洛杉矶 · 5×": the flag already names the country.
 String vpsNodeLabel(BuildContext context, String raw) {
+  final (:name, :rate) = vpsNodeTitle(context, raw);
+  return rate == null ? name : '$name · ${vpsRateText(rate)}';
+}
+
+/// A node's name without its country code, and its rate unless 1×. A code
+/// followed only by a number ("US-2") keeps the country, spelled out.
+({String name, double? rate}) vpsNodeTitle(BuildContext context, String raw) {
   final shown = vpsNodeShown(raw);
-  final name = shown.name.isNotEmpty
+  final code = shown.code;
+  final name = code == null
       ? shown.name
-      : countryName(context, shown.code!);
-  final rate = shown.rate;
-  return rate == null || rate == 1 ? name : '$name · ${_rateText(rate)}×';
+      : shown.name.isEmpty
+      ? countryName(context, code)
+      : RegExp(r'^\d+$').hasMatch(shown.name)
+      ? '${countryName(context, code)} ${shown.name}'
+      : shown.name;
+  return (name: name, rate: shown.rate == 1 ? null : shown.rate);
 }
 
 /// [vpsNodeName] less a leading country code; empty when the code was all.
@@ -227,6 +238,8 @@ bool vpsBuiltinOutbound(String name) =>
 
 String _rateText(double rate) =>
     rate == rate.roundToDouble() ? '${rate.round()}' : '$rate';
+
+String vpsRateText(double rate) => '${_rateText(rate)}×';
 
 /// The first selectable group whose first choice is a proxy, as the Core's
 /// smart line picks it: what "the server you use" means here.
@@ -711,8 +724,8 @@ class _HeroState extends ConsumerState<_Hero> {
                   : dearRate != null
                   ? tr(
                       context,
-                      '当前用的是 ×${_rateText(dearRate)} 计费线路（低倍率线路都连不上），流量按 ${_rateText(dearRate)} 倍扣',
-                      'On a line billed at ${_rateText(dearRate)}x (none of the '
+                      '当前用的是 ${vpsRateText(dearRate)} 计费线路（低倍率线路都连不上），流量按 ${_rateText(dearRate)} 倍扣',
+                      'On a line billed at ${vpsRateText(dearRate)} (none of the '
                           'cheaper lines answers); traffic counts '
                           '${_rateText(dearRate)} times',
                     )
