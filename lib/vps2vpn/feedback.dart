@@ -382,8 +382,10 @@ String _why(BuildContext context, VpsFeedbackAnswer answer) =>
 
 bool vpsFeedbackOpen(WidgetRef ref) {
   final url = ref.read(currentProfileProvider)?.url ?? '';
-  final member = ref.read(vpsMemberProvider).value?.member;
-  return vpsApiBase(url) != null && (member == null || member.feedback);
+  final result = ref.read(vpsMemberProvider);
+  return vpsApiBase(url) != null &&
+      !result.isLoading &&
+      result.value?.member?.feedback == true;
 }
 
 Future<void> vpsShowFeedback() =>
