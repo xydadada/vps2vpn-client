@@ -172,9 +172,13 @@ var nonPublicProbePrefixes = []netip.Prefix{
 	netip.MustParsePrefix("198.51.100.0/24"),
 	netip.MustParsePrefix("203.0.113.0/24"),
 	netip.MustParsePrefix("240.0.0.0/4"),
-	// RFC 3849 documentation and RFC 5180 benchmarking.
+	// IANA IPv6 documentation, benchmarking, discard, dummy and SRv6 space.
 	netip.MustParsePrefix("2001:db8::/32"),
 	netip.MustParsePrefix("2001:2::/48"),
+	netip.MustParsePrefix("3fff::/20"),
+	netip.MustParsePrefix("100::/64"),
+	netip.MustParsePrefix("100:0:0:1::/64"),
+	netip.MustParsePrefix("5f00::/16"),
 	// RFC 6052 and RFC 8215 NAT64 translation prefixes and the deprecated
 	// IPv4-compatible ::/96: an IPv4 address in IPv6 form, never an exit.
 	netip.MustParsePrefix("64:ff9b::/96"),
