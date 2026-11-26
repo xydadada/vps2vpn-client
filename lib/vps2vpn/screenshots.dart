@@ -5,14 +5,18 @@ import 'dart:ui' as ui;
 
 import 'package:fl_clash/common/constant.dart' show defaultPrimaryColor;
 import 'package:fl_clash/common/dialog.dart' show dialogs;
+import 'package:fl_clash/models/models.dart' show SubscriptionInfo;
 import 'package:prism_ui/banner.dart' show BannerLevel;
 import 'package:prism_ui/navigator.dart' show rootNavigatorKey;
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/devices.dart';
 import 'package:fl_clash/vps2vpn/feedback.dart';
+import 'package:fl_clash/vps2vpn/home.dart' show mainGroup;
 import 'package:fl_clash/vps2vpn/mine.dart' show vpsThemeColors;
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/takeover.dart'
+    show VpsTakeoverReport, vpsTakeoverReport;
 import 'package:fl_clash/vps2vpn/takeover_notice.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -24,7 +28,8 @@ import 'package:rust_api/window.dart';
 /// Test hook for CI: with VPS2VPN_SHOT_DIR set, vps2vpn photographs every page
 /// in each theme, language and window size into that folder, before and after
 /// connecting, then quits. VPS2VPN_SHOT_SUB (loopback only) is the
-/// subscription it imports after the empty first screen.
+/// subscription it imports after the empty first screen; legend.yaml beside
+/// it is a third-party panel's, shot last.
 final String? _shotDir = Platform.environment['VPS2VPN_SHOT_DIR'];
 
 final _boundary = GlobalKey();
@@ -105,6 +110,9 @@ class _ShotRun {
       container
           .read(themeSettingProvider.notifier)
           .update((s) => s.copyWith(primaryColor: defaultPrimaryColor));
+      if (sub != null) {
+        await _legend(sub.replaceFirst('sub.yaml', 'legend.yaml'));
+      }
 
       await _keyframes('disconnect');
       await _until(() => !container.read(isStartProvider), 30);
@@ -318,6 +326,49 @@ class _ShotRun {
         await _settle(6000);
       }
     }
+  }
+
+  /// A third-party panel's subscription as people see it: lower-case codes
+  /// before city names, rates as "5.0x", terabytes of data, most of a year
+  /// left, a 5x node picked by hand and the banner after a takeover.
+  Future<void> _legend(String link) async {
+    final before = container.read(profilesProvider).length;
+    await container
+        .read(profilesActionProvider.notifier)
+        .addProfileFromLink(link);
+    await _until(() => container.read(profilesProvider).length > before, 60);
+    final profile = container.read(currentProfileProvider);
+    if (profile == null) return;
+    const tb = 1024 * 1024 * 1024 * 1024;
+    final expire = DateTime.now().add(const Duration(days: 328));
+    container
+        .read(profilesActionProvider.notifier)
+        .putProfile(
+          profile.copyWith(
+            subscriptionInfo: SubscriptionInfo(
+              upload: (0.4 * tb).round(),
+              download: (8.7 * tb).round(),
+              total: 100 * tb,
+              expire: expire.millisecondsSinceEpoch ~/ 1000,
+            ),
+          ),
+          select: true,
+        );
+    await _settle(15000);
+    final main = mainGroup(container.read(currentGroupsStateProvider).value);
+    const dear = 'us 洛杉矶 · 5.0x';
+    if (main != null && main.all.any((p) => p.name == dear)) {
+      await container
+          .read(proxiesActionProvider.notifier)
+          .changeProxy(groupName: main.name, proxyName: dear);
+    }
+    vpsTakeoverReport.value = const VpsTakeoverReport(closed: ['FlClash']);
+    await _settle(8000);
+    await _round(
+      'legend',
+      tabs: const [vpsTabHome, vpsTabServers, vpsTabMe],
+      sizes: const ['wide', 'default'],
+    );
   }
 
   void _locale(String locale) => container
