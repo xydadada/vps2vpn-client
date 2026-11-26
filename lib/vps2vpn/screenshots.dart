@@ -328,9 +328,7 @@ class _ShotRun {
     }
   }
 
-  /// A third-party panel's subscription as people see it: lower-case codes
-  /// before city names, rates as "5.0x", terabytes of data, most of a year
-  /// left, a 5x node picked by hand and the banner after a takeover.
+  /// Terabytes left, most of a year to go, a 5x node picked by hand.
   Future<void> _legend(String link) async {
     final before = container.read(profilesProvider).length;
     await container
