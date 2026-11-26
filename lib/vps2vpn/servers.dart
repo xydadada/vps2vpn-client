@@ -13,7 +13,8 @@ import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart' show BannerLevel;
+import 'package:prism_ui/prism_ui.dart'
+    show BannerLevel, PopupAnchor, PopupMenu, PopupMenuItem, Tooltip;
 
 /// Protocol names a non-expert can read.
 String protocolLabel(BuildContext context, String type) {
@@ -28,6 +29,12 @@ String protocolLabel(BuildContext context, String type) {
     'ss' || 'shadowsocks' => 'Shadowsocks',
     'anytls' => 'AnyTLS',
     'wireguard' => 'WireGuard',
+    'ssr' => 'ShadowsocksR',
+    'snell' => 'Snell',
+    'mieru' => 'Mieru',
+    'ssh' => 'SSH',
+    'http' => 'HTTP',
+    'socks5' => 'SOCKS5',
     'direct' => tr(context, '直连', 'Direct'),
     'reject' => tr(context, '拦截', 'Block'),
     'selector' => tr(context, '手动选择', 'Manual'),
@@ -36,6 +43,33 @@ String protocolLabel(BuildContext context, String type) {
     'loadbalance' => tr(context, '负载均衡', 'Balanced'),
     _ => type,
   };
+}
+
+const _protocolWords = {
+  'hysteria2': {'HYSTERIA2', 'HY2', 'HYSTERIA'},
+  'hysteria': {'HYSTERIA', 'HY'},
+  'vless': {'VLESS', 'REALITY'},
+  'tuic': {'TUIC'},
+  'trojan': {'TROJAN'},
+  'vmess': {'VMESS'},
+  'ss': {'SS', 'SHADOWSOCKS'},
+  'shadowsocks': {'SS', 'SHADOWSOCKS'},
+  'ssr': {'SSR', 'SHADOWSOCKSR'},
+  'anytls': {'ANYTLS'},
+  'wireguard': {'WIREGUARD', 'WG'},
+  'snell': {'SNELL'},
+  'mieru': {'MIERU'},
+  'ssh': {'SSH'},
+  'http': {'HTTP', 'HTTPS'},
+  'socks5': {'SOCKS5', 'SOCKS'},
+};
+
+/// Whether a node's name already says its protocol ("SG · Hysteria2",
+/// "JP Reality").
+bool vpsNameSaysProtocol(String name, String type) {
+  final words = _protocolWords[type.toLowerCase()];
+  return words != null &&
+      name.toUpperCase().split(RegExp('[^A-Z0-9]+')).any(words.contains);
 }
 
 class VpsServersPage extends ConsumerStatefulWidget {
@@ -236,8 +270,8 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                 Text(
                   tr(
                     context,
-                    '在「设置」中导入订阅后，节点将显示在这里',
-                    'Import a subscription in Settings and its nodes appear here',
+                    '导入订阅后，节点会显示在这里',
+                    'Import a subscription and its nodes show up here',
                   ),
                   textAlign: TextAlign.center,
                   style: vpsText(p, size: 13.5, color: p.soft),
@@ -325,9 +359,8 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
       subtitle: selectable
           ? tr(
               context,
-              '点击切换节点。延迟是经这条线路打开测试网址的往返时间，会比 ping 略高',
-              'Tap to switch. Latency is the round trip to a test page '
-                  'through the line, a little above ping',
+              '点击切换节点 · 延迟为打开测试网址的往返时间',
+              'Tap to switch · latency is the round trip to a test page',
             )
           : tr(
               context,
@@ -368,7 +401,8 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                       children: [
                         for (final g in groups)
                           _GroupTab(
-                            label: friendlyLineName(context, g.name),
+                            label: vpsGroupLabel(context, g.name),
+                            tooltip: g.name,
                             selected: g.name == group.name,
                             onTap: () => setState(() => _groupName = g.name),
                           ),
@@ -377,13 +411,9 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                   : const SizedBox.shrink(),
             ),
             const SizedBox(width: 12),
-            _GroupTab(
-              // Says how the list is sorted now; a tap switches it.
-              label: byLatency
-                  ? tr(context, '排序：延迟从低到高', 'Sort: fastest first')
-                  : tr(context, '排序：订阅原顺序', 'Sort: as subscribed'),
-              selected: false,
-              onTap: () => setState(() => _byLatency.value = !_byLatency.value),
+            _SortPill(
+              byLatency: byLatency,
+              onChanged: (v) => setState(() => _byLatency.value = v),
             ),
           ],
         ),
@@ -426,21 +456,87 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   }
 }
 
+class _SortPill extends StatelessWidget {
+  const _SortPill({required this.byLatency, required this.onChanged});
+
+  final bool byLatency;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final latency = tr(context, '延迟从低到高', 'Fastest first');
+    final listed = tr(context, '订阅原顺序', 'As subscribed');
+    return PopupAnchor(
+      targetBuilder: (open) => VpsPressable(
+        onTap: open,
+        semanticLabel: tr(context, '排序', 'Sort'),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 6, 9, 6),
+          decoration: ShapeDecoration(
+            color: p.track,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(VpsRadius.pill),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                byLatency ? latency : listed,
+                style: vpsText(
+                  p,
+                  size: 12.5,
+                  weight: FontWeight.w500,
+                  color: p.soft,
+                ),
+              ),
+              const SizedBox(width: 3),
+              RotatedBox(
+                quarterTurns: 1,
+                child: VpsIconView(VpsIcon.chevron, size: 13, color: p.muted),
+              ),
+            ],
+          ),
+        ),
+      ),
+      popupBuilder: (_) => PopupMenu(
+        items: [
+          PopupMenuItem(
+            label: latency,
+            checked: byLatency,
+            onPressed: () => onChanged(true),
+          ),
+          PopupMenuItem(
+            label: listed,
+            checked: !byLatency,
+            onPressed: () => onChanged(false),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _GroupTab extends StatelessWidget {
   const _GroupTab({
     required this.label,
+    required this.tooltip,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
+
+  /// The group's own name, shown on hover when [label] renames it.
+  final String tooltip;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    return VpsPressable(
+    final tab = VpsPressable(
       onTap: onTap,
       selected: selected,
       child: AnimatedContainer(
@@ -467,6 +563,7 @@ class _GroupTab extends StatelessWidget {
         ),
       ),
     );
+    return tooltip == label ? tab : Tooltip(message: tooltip, child: tab);
   }
 }
 
@@ -517,6 +614,10 @@ class _ProxyCard extends ConsumerWidget {
         ? (name: friendlyLineName(context, proxy.name), rate: null)
         : vpsNodeName(proxy.name);
     final rate = shown.rate;
+    final using = selected && !pinned;
+    final protocol = vpsNameSaysProtocol(proxy.name, proxy.type)
+        ? null
+        : protocolLabel(context, proxy.type);
     final (delayText, delayColor) = switch (delay) {
       null => ('—', p.muted),
       0 => ('…', p.soft),
@@ -547,23 +648,31 @@ class _ProxyCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    shown.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: vpsText(p, size: 14, weight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
                   Row(
                     children: [
                       Flexible(
-                        child: Text(
-                          shown.name,
+                        child: Text.rich(
+                          _subtitle(context, p, status, protocol, rate, using),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: vpsText(p, size: 14, weight: FontWeight.w600),
+                          style: vpsText(
+                            p,
+                            size: 12,
+                            color: busy
+                                ? p.warn
+                                : proxy.name == vpsSmartGroupName || using
+                                ? p.accent
+                                : p.soft,
+                          ),
                         ),
                       ),
-                      if (rate != null && rate != 1) ...[
-                        const SizedBox(width: 8),
-                        _Tag(
-                          '${rate == rate.truncateToDouble() ? rate.toInt() : rate}x',
-                          rate >= 2 ? p.warn : p.soft,
-                        ),
-                      ],
                       if (down) ...[
                         const SizedBox(width: 8),
                         _Tag(tr(context, '维护中', 'Maintenance'), p.muted),
@@ -592,42 +701,6 @@ class _ProxyCard extends ConsumerWidget {
                         ),
                       ],
                     ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    status != null && status.note.isNotEmpty
-                        ? status.note +
-                              (status.until == null
-                                  ? ''
-                                  : tr(
-                                      context,
-                                      ' · 预计 ${vpsDateTimeText(context, status.until!)} 恢复',
-                                      ' · back about ${vpsDateTimeText(context, status.until!)}',
-                                    ))
-                        : proxy.name == vpsSmartGroupName
-                        ? tr(
-                            context,
-                            '推荐 · 自动用最快的服务器',
-                            'Recommended · uses the fastest server',
-                          )
-                        : proxy.name == vpsAIGroupName
-                        ? tr(context, 'AI 服务固定出口', 'Steady exit for AI')
-                        : protocolLabel(context, proxy.type) +
-                              (proxy.name.toUpperCase().contains('REALITY') &&
-                                      proxy.type.toLowerCase() == 'vless'
-                                  ? ' · REALITY'
-                                  : ''),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: vpsText(
-                      p,
-                      size: 12,
-                      color: busy
-                          ? p.warn
-                          : proxy.name == vpsSmartGroupName
-                          ? p.accent
-                          : p.soft,
-                    ),
                   ),
                 ],
               ),
@@ -658,6 +731,63 @@ class _ProxyCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+extension on _ProxyCard {
+  /// Under the name: a notice, what the line does, or the protocol the name
+  /// does not already say and the billing rate, after "In use" when chosen.
+  TextSpan _subtitle(
+    BuildContext context,
+    VpsPalette p,
+    VpsNodeStatus? status,
+    String? protocol,
+    double? rate,
+    bool using,
+  ) {
+    if (status != null && status.note.isNotEmpty) {
+      final until = status.until;
+      return TextSpan(
+        text:
+            status.note +
+            (until == null
+                ? ''
+                : tr(
+                    context,
+                    ' · 预计 ${vpsDateTimeText(context, until)} 恢复',
+                    ' · back about ${vpsDateTimeText(context, until)}',
+                  )),
+      );
+    }
+    if (proxy.name == vpsSmartGroupName) {
+      return TextSpan(
+        text: tr(context, '推荐 · 自动选最快', 'Recommended · picks the fastest'),
+      );
+    }
+    if (proxy.name == vpsAIGroupName) {
+      return TextSpan(text: tr(context, 'AI 服务固定出口', 'Steady exit for AI'));
+    }
+    final parts = <InlineSpan>[
+      if (using)
+        TextSpan(
+          text: tr(context, '使用中', 'In use'),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      if (protocol != null) TextSpan(text: protocol),
+      if (rate != null)
+        TextSpan(
+          text: '×${rate == rate.roundToDouble() ? rate.round() : rate}',
+          style: rate >= 2 ? TextStyle(color: p.warn) : null,
+        ),
+    ];
+    return TextSpan(
+      children: [
+        for (final (i, part) in parts.indexed) ...[
+          if (i > 0) const TextSpan(text: ' · '),
+          part,
+        ],
+      ],
     );
   }
 }
@@ -787,7 +917,39 @@ class _NodeTile extends StatelessWidget {
       ),
       child: label == null
           ? VpsIconView(VpsIcon.sparkle, size: 17, color: ink)
-          : VpsFlag(label!),
+          : Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                VpsFlag(label!),
+                Positioned(
+                  right: -8,
+                  bottom: -8,
+                  child: AnimatedScale(
+                    scale: selected ? 1 : 0,
+                    duration: VpsMotion.medium,
+                    curve: VpsMotion.settle,
+                    child: Container(
+                      width: 17,
+                      height: 17,
+                      alignment: Alignment.center,
+                      decoration: ShapeDecoration(
+                        gradient: p.accentGradient,
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: BorderRadius.circular(VpsRadius.pill),
+                          side: BorderSide(color: p.card, width: 1.5),
+                        ),
+                      ),
+                      child: VpsIconView(
+                        VpsIcon.tick,
+                        size: 11,
+                        color: p.accentInk,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }

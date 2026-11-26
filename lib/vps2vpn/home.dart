@@ -103,13 +103,21 @@ final _rateTail = RegExp(
   caseSensitive: false,
 );
 
+// Our panel puts the protocol after the rate: "Tokyo ×2 Hysteria2".
+final _protocolTail = RegExp(
+  r'\s+(?:hysteria2?|hy2|reality|vless|tuic|trojan|vmess|ss|anytls|wireguard|wg)$',
+  caseSensitive: false,
+);
+
 ({String name, double? rate}) vpsNodeName(String raw) {
   var name = raw;
   double? rate;
-  final m = _rateTail.firstMatch(name);
+  final tail = _protocolTail.firstMatch(name);
+  final head = tail == null ? name : name.substring(0, tail.start);
+  final m = _rateTail.firstMatch(head);
   if (m != null && m.start > 0) {
     rate = double.tryParse(m[1] ?? m[2] ?? m[3]!);
-    name = name.substring(0, m.start);
+    name = head.substring(0, m.start) + (tail?[0] ?? '');
   }
   name = name.replaceAll(_flagPair, '').trim();
   return (name: name.isEmpty ? raw : name, rate: rate);
@@ -190,6 +198,21 @@ String friendlyLineName(BuildContext context, String name) => switch (name) {
   vpsAIGroupName => tr(context, 'AI 专线', 'AI line'),
   _ => name,
 };
+
+const _panelGroupsEn = {
+  '节点选择': 'Proxy',
+  '自动选择': 'Auto',
+  'AI服务': 'AI',
+  '国内服务': 'China',
+  '漏网之鱼': 'Final',
+};
+final _panelGroupsZh = {for (final e in _panelGroupsEn.entries) e.value: e.key};
+
+String vpsGroupLabel(BuildContext context, String name) {
+  final line = friendlyLineName(context, name);
+  if (line != name) return line;
+  return (vpsZh(context) ? _panelGroupsZh : _panelGroupsEn)[name] ?? name;
+}
 
 const _builtinOutbounds = {
   'DIRECT',

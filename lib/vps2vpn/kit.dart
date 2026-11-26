@@ -1428,6 +1428,7 @@ enum VpsIcon {
   sparkle,
   plus,
   chevron,
+  tick,
 }
 
 class VpsIconView extends StatelessWidget {
@@ -1678,6 +1679,15 @@ class _IconPainter extends CustomPainter {
             [9, 19],
           ]),
           p,
+        );
+      case VpsIcon.tick:
+        canvas.drawPath(
+          poly([
+            [5, 12.5],
+            [10, 17.5],
+            [19, 7],
+          ]),
+          p..strokeWidth = 2.6 * u,
         );
     }
   }

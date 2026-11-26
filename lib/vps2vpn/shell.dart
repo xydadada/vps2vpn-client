@@ -641,6 +641,18 @@ class VpsPage extends StatelessWidget {
       builder: (context, c) {
         final wide = c.maxWidth >= 600;
         final side = wide ? 36.0 : 16.0;
+        // Narrow, the actions keep the title's row and the subtitle runs the
+        // full width under both.
+        final under = !wide && action != null && subtitle != null;
+        final note = subtitle == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  subtitle!,
+                  style: vpsText(p, size: 14, color: p.soft),
+                ),
+              );
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
             side,
@@ -656,7 +668,9 @@ class VpsPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment: under
+                        ? CrossAxisAlignment.center
+                        : CrossAxisAlignment.end,
                     children: [
                       Expanded(
                         child: Column(
@@ -671,20 +685,14 @@ class VpsPage extends StatelessWidget {
                                 spacing: -0.7,
                               ),
                             ),
-                            if (subtitle != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  subtitle!,
-                                  style: vpsText(p, size: 14, color: p.soft),
-                                ),
-                              ),
+                            if (!under) ?note,
                           ],
                         ),
                       ),
                       ?action,
                     ],
                   ),
+                  if (under) ?note,
                   const SizedBox(height: 22),
                   const VpsErrorNotice(),
                   // Blocks arrive one after another, top to bottom.

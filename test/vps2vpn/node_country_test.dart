@@ -2,6 +2,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
+import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -54,6 +55,23 @@ void main() {
       code: null,
       rate: null,
     ));
+  });
+
+  test("our panel's rate before the protocol comes off too", () {
+    expect(vpsNodeName('美国 ×2 Hysteria2'), (name: '美国 Hysteria2', rate: 2.0));
+    expect(vpsNodeName('Tokyo ×0.5 Reality'), (
+      name: 'Tokyo Reality',
+      rate: 0.5,
+    ));
+    expect(vpsNodeName('日本 TUIC'), (name: '日本 TUIC', rate: null));
+  });
+
+  test('a name that says its protocol', () {
+    expect(vpsNameSaysProtocol('日本 Hysteria2', 'hysteria2'), isTrue);
+    expect(vpsNameSaysProtocol('JP · Reality', 'vless'), isTrue);
+    expect(vpsNameSaysProtocol('SG-HY2', 'hysteria2'), isTrue);
+    expect(vpsNameSaysProtocol('新加坡 01', 'tuic'), isFalse);
+    expect(vpsNameSaysProtocol('Russia', 'ss'), isFalse);
   });
 
   test('nodes of one region stay apart', () {
