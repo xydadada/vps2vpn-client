@@ -123,6 +123,27 @@ void main() {
       }
     });
 
+    test('a late reply after changing subscriptions has no effects', () async {
+      for (final answer in [(200, '{"ok":true,"revoked":true}'), _off]) {
+        final reply = Completer<(int, String, String?)>();
+        var current = true;
+        final marks = <bool>[];
+        var disconnects = 0;
+        final result = vpsDeviceBeat(
+          call: (path, {body, headers = const {}}) => reply.future,
+          body: {'device_id': 'me'},
+          isCurrent: () => current,
+          mark: marks.add,
+          disconnect: () => disconnects++,
+        );
+        current = false;
+        reply.complete((answer.$1, answer.$2, null));
+        await result;
+        expect(marks, isEmpty);
+        expect(disconnects, 0);
+      }
+    });
+
     test('the mark is kept per subscription and survives a restart', () async {
       String? stored;
       vpsRemovedLoad = () async => stored;

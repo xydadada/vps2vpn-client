@@ -165,8 +165,10 @@ Future<VpsDeviceOutcome> vpsDeviceBeat({
   required Map<String, Object?> body,
   required void Function(bool removed) mark,
   required FutureOr<void> Function() disconnect,
+  bool Function()? isCurrent,
 }) async {
   final (outcome, json) = await _ask(call, 'device', body: body);
+  if (isCurrent?.call() == false) return outcome;
   switch (outcome) {
     case VpsDeviceOutcome.ok:
       final removed = json['revoked'] == true;
@@ -601,6 +603,7 @@ final vpsDeviceSyncProvider = Provider.autoDispose<void>((ref) {
     if (!ref.mounted) return;
     await vpsDeviceBeat(
       call: call,
+      isCurrent: () => ref.mounted,
       body: vpsCheckInBody(id: ownId, version: globalState.packageInfo.version),
       mark: (r) {
         told = r && !ref.read(vpsRemovedProvider).contains(profileId);
