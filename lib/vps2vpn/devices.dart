@@ -473,12 +473,13 @@ final vpsKickResumeProvider = Provider.autoDispose<void>((ref) {
     }
     unawaited(
       dialogs.showQrCode(
-        title: tr(now, '其他设备已踢掉，本机已换上新链接', 'Others signed out; new link here'),
+        title: tr(now, '其他设备已下线，本机已换上新链接', 'Other devices signed out'),
         data: link,
         message: tr(
           now,
-          '其他设备要用的话，扫码或复制这条新链接重新导入。',
-          'Scan or copy this new link on any other device you still use.',
+          '其他设备如需继续使用，请扫码或复制这条新链接重新导入。',
+          'This device is on a new link. Scan or copy it on any other device '
+              'you still use.',
         ),
       ),
     );
@@ -920,16 +921,18 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
           kicked.switched
               ? tr(
                   context,
-                  '其他设备都已断开，本机已换上新链接。其他设备要用的话，把新链接重新导入。',
-                  'Every other device is out and this one is on the new '
-                      'link. Import the new link on any device you still use.',
+                  '其他设备都已下线，本机已换上新链接。其他设备如需继续使用，请重新导入新链接。',
+                  'Every other device is signed out and this one is on the '
+                      'new link. Import the new link on any device you still '
+                      'use.',
                 )
               : tr(
                   context,
-                  '其他设备都已断开，本机已换上新链接，但新订阅还没下载下来（网络不通）。点"重试"。',
-                  'Every other device is out and this one is on the new '
-                      'link, but the new subscription has not downloaded yet '
-                      '(no network). Tap Retry.',
+                  '其他设备都已下线，本机已换上新链接，但新订阅还没下载下来（网络不通）。请点击「重试」。',
+                  'Every other device is signed out and this one is on the '
+                      'new link, but the new subscription has not downloaded '
+                      'yet (no network). ${Platform.isAndroid ? 'Tap' : 'Click'} '
+                      '"Retry".',
                 ),
           style: vpsText(p, size: 13, color: p.soft, height: 1.5),
         ),
@@ -1063,7 +1066,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
     final kicked = _kicked;
     if (_confirming && kicked == null) {
       return AlertDialog(
-        title: tr(context, '踢掉其他所有设备', 'Sign out every other device'),
+        title: tr(context, '让其他设备下线？', 'Sign out other devices?'),
         destructive: true,
         actions: [
           TextButton(
@@ -1072,13 +1075,13 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
           ),
           TextButton(
             onPressed: () => unawaited(_kick()),
-            child: Text(tr(context, '踢掉', 'Sign them out')),
+            child: Text(tr(context, '下线', 'Sign out')),
           ),
         ],
         child: Text(
           tr(
             context,
-            '其他设备（包括手机上的其他软件）会立刻断开，需要重新导入新链接才能继续使用。',
+            '其他设备（包括手机上的其他软件）会立即断开，需要重新导入新链接才能继续使用。',
             'Every other device, other apps on phones included, disconnects '
                 'at once and needs the new link imported to keep working.',
           ),
@@ -1099,7 +1102,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
             onPressed: _busy || !_listed
                 ? null
                 : () => setState(() => _confirming = true),
-            child: Text(tr(context, '踢掉其他所有设备', 'Sign out other devices')),
+            child: Text(tr(context, '让其他设备下线', 'Sign out other devices')),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
