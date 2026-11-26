@@ -10,6 +10,7 @@ import 'package:fl_clash/providers/config.dart';
 import 'package:fl_clash/providers/database.dart';
 import 'package:fl_clash/providers/mitm.dart';
 import 'package:fl_clash/state.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -111,6 +112,39 @@ hostname = %APPEND% example.com
       ).readAsString(),
       '{}',
     );
+  });
+
+  test('failed resource downloads do not log their private URLs', () async {
+    final messages = <String>[];
+    final originalPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) messages.add(message);
+    };
+    addTearDown(() => debugPrint = originalPrint);
+    final resourceUrl = urlOf(
+      '/private-path.json?token=private-query',
+    ).replaceFirst('http://', 'http://private-user:private-password@');
+    bodies = {
+      '/private.sgmodule':
+          '#!name=Private\n[Map Local]\n'
+          '^https://example\\.com/a data="$resourceUrl"\n',
+    };
+
+    await action().addFromUrl(urlOf('/private.sgmodule'));
+
+    final warning = messages.singleWhere(
+      (message) => message.contains('MITM resource'),
+    );
+    expect(warning, contains('HTTP 404'));
+    for (final secret in [
+      'private-user',
+      'private-password',
+      'private-path',
+      'private-query',
+    ]) {
+      expect(messages.join('\n'), isNot(contains(secret)));
+    }
+    expect((await stored()).single.resources, isEmpty);
   });
 
   test('a script a module carries in its text is written out', () async {
