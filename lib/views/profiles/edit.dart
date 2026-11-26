@@ -410,10 +410,14 @@ Future<void> renameProfile(
       validator: (value) => validateProfileName(appLocalizations, value),
     ),
   );
-  if (label == null || label == profile.label) {
+  if (label == null || label == profile.label || !context.mounted) {
     return;
   }
-  profilesAction.putProfile(profile.copyWith(label: label));
+  final current = ref.read(profilesProvider).getProfile(profile.id);
+  if (current == null) {
+    return;
+  }
+  profilesAction.putProfile(current.copyWith(label: label));
 }
 
 class _ProfileNameField extends StatelessWidget {
