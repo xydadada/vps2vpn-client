@@ -3344,6 +3344,12 @@ abstract class AppLocalizations {
   /// **'This backup comes from a newer version of the app. Update the app before restoring it'**
   String get backupFromNewerVersion;
 
+  /// No description provided for @backupTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup exceeds 2,000 files or 256 MiB of uncompressed data. Reduce its contents and try again'**
+  String get backupTooLarge;
+
   /// No description provided for @networkTimeoutError.
   ///
   /// In en, this message translates to:
