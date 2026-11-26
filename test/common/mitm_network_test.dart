@@ -2,6 +2,35 @@ import 'package:fl_clash/common/mitm_network.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('equivalent domain maps remain interchangeable as collection keys', () {
+    const first = MitmNetwork(
+      nameserverPolicy: {
+        'one.example': ['192.0.2.1'],
+        'two.example': ['192.0.2.2'],
+      },
+      hosts: {
+        'one.example': ['192.0.2.10'],
+        'two.example': ['192.0.2.20'],
+      },
+    );
+    for (final reversed in [
+      MitmNetwork(
+        nameserverPolicy: Map.fromEntries(
+          first.nameserverPolicy.entries.toList().reversed,
+        ),
+        hosts: first.hosts,
+      ),
+      MitmNetwork(
+        nameserverPolicy: first.nameserverPolicy,
+        hosts: Map.fromEntries(first.hosts.entries.toList().reversed),
+      ),
+    ]) {
+      expect(reversed, first);
+      expect({first, reversed}, hasLength(1));
+      expect({first: 'cached'}[reversed], 'cached');
+    }
+  });
+
   test('list edits replace, go first or go last, in module order', () {
     const profile = ['1.1.1.1'];
     expect(const MitmListEdit(replace: true, before: ['a']).applyTo(profile), [
