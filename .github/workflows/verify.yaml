@@ -17,18 +17,6 @@ env:
   FLUTTER_VERSION: '3.50.0'
 
 jobs:
-  site:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          package-manager-cache: false
-      - name: Site interaction tests
-        run: node --test test/site/*.test.cjs
-
   go:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -141,3 +129,15 @@ jobs:
           else
             cargo test --locked --manifest-path services/helper/Cargo.toml
           fi
+
+  site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Site interaction tests
+        run: node --test test/site/*.test.cjs
