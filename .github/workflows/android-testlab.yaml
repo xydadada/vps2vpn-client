@@ -39,6 +39,9 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Check that diagnostic summaries hide subscription values
+        run: python3 -m unittest discover -s .github/testlab -p '*_test.py' -v
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.8.0'
