@@ -11,9 +11,9 @@ on:
         required: true
         default: v1.0.33
       from:
-        description: Older releases to update from in the app's way, comma separated (empty = skip)
+        description: Older releases to update from in the app's way, comma separated; latest = the current latest release (empty = skip)
         required: false
-        default: ''
+        default: latest
       legend:
         description: Old release a user upgrades from by running the new setup by hand (empty = skip)
         required: false
@@ -30,9 +30,15 @@ jobs:
     steps:
       - id: from
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
           FROM: ${{ inputs.from }}
         run: |
-          list=$(printf '%s' "$FROM" | tr ', ' '\n\n' | sed '/^$/d' | jq -R . | jq -sc .)
+          set -euo pipefail
+          latest=$(gh release view -R "$REPO" --json tagName -q .tagName)
+          list=$(printf '%s' "$FROM" | tr ', ' '\n\n' | sed '/^$/d' | sed "s/^latest$/$latest/" \
+            | { grep -vxF "$TAG" || true; } | sort -u | jq -R . | jq -sc .)
           echo "list=$list" >> "$GITHUB_OUTPUT"
           echo "update from: $list"
 
@@ -170,3 +176,25 @@ jobs:
           name: upgrade-${{ matrix.os }}-${{ matrix.from }}
           path: upgrade
           if-no-files-found: ignore
+
+  gate:
+    # A release becomes the latest only when this passes: the install, the
+    # legend upgrade and the in-app update all ran and passed, none skipped.
+    needs: [plan, e2e, legend, upgrade]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          E2E: ${{ needs.e2e.result }}
+          LEGEND: ${{ needs.legend.result }}
+          UPGRADE: ${{ needs.upgrade.result }}
+          FROM: ${{ needs.plan.outputs.from }}
+          OLD: ${{ inputs.legend }}
+        run: |
+          echo "install: $E2E"
+          echo "legend from ${OLD:-nothing}: $LEGEND"
+          echo "update from $FROM: $UPGRADE"
+          [ "$E2E" = success ] && [ "$LEGEND" = success ] && [ "$UPGRADE" = success ] || {
+            echo "not a release gate: every check must run and pass" >&2
+            exit 1
+          }
