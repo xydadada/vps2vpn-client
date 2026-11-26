@@ -246,10 +246,11 @@ func TestShareLinksReadBackThroughTheConverter(t *testing.T) {
 		{
 			proxy: map[string]any{
 				"name": "https", "type": "http", "server": "j.example", "port": 443,
-				"username": "test", "tls": true,
+				"username": "test", "tls": true, "skip-cert-verify": true,
 			},
 			want: map[string]string{
 				"type": "http", "username": "test", "password": "", "tls": "true",
+				"skip-cert-verify": "true",
 			},
 		},
 		{
@@ -332,7 +333,7 @@ func TestShareLinksLeaveOutWhatNoLinkCarries(t *testing.T) {
 // faithful representation of the source proxy and must not be exported.
 func TestVShareLinksRejectTLSModesThePinnedDecoderWouldDrop(t *testing.T) {
 	cases := []struct {
-		name string
+		name  string
 		proxy map[string]any
 	}{
 		{
@@ -433,8 +434,8 @@ func TestTuicShareLinksFailClosedForUnrepresentableTLSOptions(t *testing.T) {
 		t.Fatal("ordinary TUIC link should remain exportable")
 	}
 	cases := []struct {
-		name string
-		key string
+		name  string
+		key   string
 		value any
 	}{
 		{"skip certificate verification", "skip-cert-verify", true},
@@ -468,5 +469,66 @@ func TestDecodeShareLinksAnswersEveryLine(t *testing.T) {
 	}
 	if results[0][0]["name"] != "one" || results[2][0]["name"] != "two" {
 		t.Errorf("names = %v, %v", results[0][0]["name"], results[2][0]["name"])
+	}
+}
+
+func TestShareLinksRejectAdditionalUnencodedTLSIdentity(t *testing.T) {
+	for _, kind := range []string{"trojan", "hysteria", "hysteria2", "anytls", "http"} {
+		for _, key := range []string{"name-cert-verify", "certificate", "private-key"} {
+			t.Run(kind+"/"+key, func(t *testing.T) {
+				fields := proxyFields{
+					"name": kind, "type": kind, "server": "node.example", "port": 443,
+					"password": "test-password", "auth-str": "test-auth", "tls": true,
+					"skip-cert-verify": true,
+				}
+				if encodeShareLink(fields) == "" {
+					t.Fatal("the plain supported TLS form should remain exportable")
+				}
+				fields[key] = "test-identity"
+				if encodeShareLink(fields) != "" {
+					t.Fatal("export would drop the TLS identity policy")
+				}
+			})
+		}
+	}
+}
+
+func TestShareLinksRejectTLSModesTheDecoderChanges(t *testing.T) {
+	for _, fields := range []proxyFields{
+		{"type": "socks5", "tls": true},
+		{"type": "http", "tls": true},
+		{"type": "http", "tls": true, "skip-cert-verify": false},
+		{"type": "http", "tls": true, "skip-cert-verify": true, "sni": "tls.example"},
+		{"type": "http", "tls": true, "skip-cert-verify": true, "fingerprint": "test-pin"},
+		{"type": "hysteria", "fingerprint": "test-pin"},
+	} {
+		fields["name"], fields["server"], fields["port"] = "test", "node.example", 443
+		fields["username"], fields["password"] = "test-user", "test-password"
+		if link := encodeShareLink(fields); link != "" {
+			decoded := handleDecodeShareLinks(LinesParams{Lines: []string{link}})
+			t.Errorf("TLS policy lost: source=%v decoded=%v", fields, decoded)
+		}
+	}
+}
+
+func TestShareLinksKeepSupportedCertificatePolicies(t *testing.T) {
+	for _, kind := range []string{"trojan", "hysteria2", "anytls"} {
+		t.Run(kind, func(t *testing.T) {
+			fields := proxyFields{
+				"name": kind, "type": kind, "server": "node.example", "port": 443,
+				"password": "test-password", "sni": "tls.example",
+				"fingerprint": "test-pin", "skip-cert-verify": true,
+			}
+			link := encodeShareLink(fields)
+			decoded := handleDecodeShareLinks(LinesParams{Lines: []string{link}})
+			if len(decoded) != 1 || len(decoded[0]) != 1 {
+				t.Fatalf("supported TLS policy no longer round trips: %v", decoded)
+			}
+			for _, key := range []string{"sni", "fingerprint", "skip-cert-verify"} {
+				if decoded[0][0][key] != fields[key] {
+					t.Errorf("%s changed: got %v, want %v", key, decoded[0][0][key], fields[key])
+				}
+			}
+		})
 	}
 }

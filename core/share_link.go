@@ -287,8 +287,7 @@ func encodeVmess(f proxyFields) string {
 	return "vmess://" + base64.StdEncoding.EncodeToString(data)
 }
 
-// VLESS and VMess share links cannot express these certificate identity
-// requirements in either the pinned Xray or legacy v2rayN decoder.
+// The pinned share-link decoders cannot carry custom certificate names or mTLS.
 func hasUnencodedTLSIdentity(f proxyFields) bool {
 	for _, key := range []string{"name-cert-verify", "certificate", "private-key"} {
 		if f.str(key) != "" {
@@ -379,6 +378,9 @@ func vShareQuery(f proxyFields) url.Values {
 }
 
 func encodeTrojan(f proxyFields) string {
+	if hasUnencodedTLSIdentity(f) {
+		return ""
+	}
 	query := url.Values{}
 	if f.flag("skip-cert-verify") {
 		query.Set("allowInsecure", "1")
@@ -404,6 +406,9 @@ func encodeTrojan(f proxyFields) string {
 }
 
 func encodeHysteria(f proxyFields) string {
+	if hasUnencodedTLSIdentity(f) || f.str("fingerprint") != "" {
+		return ""
+	}
 	query := url.Values{}
 	setIf(query, "peer", f.str("sni"))
 	setIf(query, "obfs", f.str("obfs"))
@@ -425,7 +430,7 @@ func encodeHysteria(f proxyFields) string {
 // A realm hop needs the realm server's address where the link holds the
 // proxy's own, so such a proxy has no link.
 func encodeHysteria2(f proxyFields) string {
-	if f.sub("realm-opts").flag("enable") {
+	if f.sub("realm-opts").flag("enable") || hasUnencodedTLSIdentity(f) {
 		return ""
 	}
 	host := hostPort(f)
@@ -486,6 +491,10 @@ func encodeTuic(f proxyFields) string {
 // The converter reads the user info as base64 before falling back to plain
 // text, so it always carries the ":" that no base64 alphabet has.
 func encodeSocks(f proxyFields, scheme string) string {
+	if f.flag("tls") && (scheme != "https" || !f.flag("skip-cert-verify") ||
+		f.str("sni") != "" || f.str("fingerprint") != "" || hasUnencodedTLSIdentity(f)) {
+		return ""
+	}
 	var user *url.Userinfo
 	if username, password := f.str("username"), f.str("password"); username != "" || password != "" {
 		user = url.UserPassword(username, password)
@@ -494,6 +503,9 @@ func encodeSocks(f proxyFields, scheme string) string {
 }
 
 func encodeAnyTLS(f proxyFields) string {
+	if hasUnencodedTLSIdentity(f) {
+		return ""
+	}
 	query := url.Values{}
 	setIf(query, "sni", f.str("sni"))
 	if f.flag("skip-cert-verify") {
