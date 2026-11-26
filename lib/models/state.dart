@@ -236,6 +236,7 @@ abstract class MitmModuleSource with _$MitmModuleSource {
 abstract class MigrationData with _$MigrationData {
   const factory MigrationData({
     Map<String, Object?>? configMap,
+    @Default(false) bool hasDatabaseSnapshot,
     @Default([]) List<Rule> rules,
     @Default([]) List<Script> scripts,
     @Default([]) List<Profile> profiles,
