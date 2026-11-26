@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'l10n.dart';
 
 // ignore_for_file: type=lint
@@ -3180,8 +3181,7 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other:
           '$label SUB-RULE rules were dropped, since custom profiles do not support sub-rules',
-      one:
-          '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
+      one: '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
     );
     return '$_temp0';
   }
@@ -3406,7 +3406,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmAndroidRootDesc =>
-      'Without root, only apps that trust user certificates, mostly browsers, can be decrypted. With root, every app can.';
+      'Without root, decryption needs apps that trust user certificates. Root can add the CA to the system store, but apps with certificate pinning or their own trust store may still reject it.';
 
   @override
   String get mitmCertificateLinuxTip =>
@@ -3455,7 +3455,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmInstallSystemCaTip =>
-      'Root was found, so the certificate goes into the system\'s trusted certificates as a FlClash MITM CA module for Magisk, KernelSU or APatch. Every app on this device will then trust it, and anyone holding its private key could decrypt this device\'s HTTPS traffic. To undo it, regenerate the certificate or remove the module in the root manager and restart. If root is denied, it is installed as a user certificate instead.';
+      'Root was found, so the certificate goes into the system\'s trusted certificates as a FlClash MITM CA module for Magisk, KernelSU or APatch. Apps that use the system CA store can trust it, but certificate pinning or a separate trust store may still reject it. Anyone holding its private key could decrypt traffic that trusts this CA. To undo it, regenerate the certificate or remove the module in the root manager and restart. If root is denied, it is installed as a user certificate instead.';
 
   @override
   String get mitmInstallUserCaTip =>
