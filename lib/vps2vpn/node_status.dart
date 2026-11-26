@@ -1,6 +1,7 @@
 // vps2vpn: our panel's word on its servers, down for maintenance or crowded.
 
 import 'package:collection/collection.dart';
+import 'package:fl_clash/providers/state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum VpsNodeState { ok, maintenance, congested }
@@ -73,7 +74,10 @@ Map<String, VpsNodeStatus> vpsNodeStatusByName(List<VpsNodeStatus> nodes) => {
 /// that is briefly out of reach does not undo it.
 class VpsNodeStatusNotifier extends Notifier<List<VpsNodeStatus>> {
   @override
-  List<VpsNodeStatus> build() => const [];
+  List<VpsNodeStatus> build() {
+    ref.watch(currentProfileProvider.select((p) => (p?.id, p?.url)));
+    return const [];
+  }
 
   bool set(List<VpsNodeStatus> nodes) {
     final kept = [
