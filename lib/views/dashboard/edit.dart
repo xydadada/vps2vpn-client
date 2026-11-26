@@ -329,9 +329,10 @@ class _PresenceState extends State<_Presence>
   }
 
   void _reveal() {
+    if (!mounted) return;
     final box = _content.currentContext?.findRenderObject();
     final position = Scrollable.maybeOf(context)?.position;
-    if (!mounted || box is! RenderBox || !box.hasSize || position == null) {
+    if (box is! RenderBox || !box.hasSize || position == null) {
       return;
     }
     final viewport = RenderAbstractViewport.maybeOf(box);
