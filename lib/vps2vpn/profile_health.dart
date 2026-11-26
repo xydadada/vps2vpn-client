@@ -156,6 +156,8 @@ bool vpsUnreachable(Object error) {
 
 class VpsProfileHealthNotifier extends Notifier<Map<int, VpsProfileHealth>> {
   var _loaded = false;
+  var _dirty = false;
+  final _forgotten = <int>{};
 
   @override
   Map<int, VpsProfileHealth> build() {
@@ -171,7 +173,8 @@ class VpsProfileHealthNotifier extends Notifier<Map<int, VpsProfileHealth>> {
       if (json is! Map) return;
       final loaded = <int, VpsProfileHealth>{
         for (final MapEntry(:key, :value) in json.entries)
-          if (int.tryParse('$key') case final id? when value is Map)
+          if (int.tryParse('$key') case final id?
+              when value is Map && !_forgotten.contains(id))
             id: VpsProfileHealth.fromJson(value.cast<String, Object?>()),
       };
       // What happened while loading is newer than what was saved.
@@ -179,12 +182,22 @@ class VpsProfileHealthNotifier extends Notifier<Map<int, VpsProfileHealth>> {
     } catch (_) {
     } finally {
       _loaded = true;
+      _forgotten.clear();
+      if (_dirty && ref.mounted) _save();
     }
   }
 
   void _put(int id, VpsProfileHealth? health) {
     state = health == null ? ({...state}..remove(id)) : {...state, id: health};
-    if (!_loaded) return;
+    if (!_loaded) {
+      _dirty = true;
+      return;
+    }
+    _save();
+  }
+
+  void _save() {
+    _dirty = false;
     unawaited(
       preferences
           .setVpsProfileHealth(
@@ -199,6 +212,10 @@ class VpsProfileHealthNotifier extends Notifier<Map<int, VpsProfileHealth>> {
   VpsProfileHealth? of(int id) => state[id];
 
   void forget(int id) {
+    if (!_loaded) {
+      _forgotten.add(id);
+      _dirty = true;
+    }
     if (state.containsKey(id)) _put(id, null);
   }
 

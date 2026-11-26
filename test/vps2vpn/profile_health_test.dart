@@ -1,9 +1,33 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:fl_clash/common/preferences.dart';
 import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:shared_preferences_platform_interface/types.dart';
+
+import '../helpers/preferences.dart';
+
+class _LoadingStore extends InMemorySharedPreferencesStore {
+  _LoadingStore() : super.empty();
+  final loading = Completer<Map<String, Object>>();
+  final writes = <String, Object>{};
+
+  @override
+  Future<Map<String, Object>> getAllWithParameters(
+    GetAllParameters parameters,
+  ) => loading.future;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    writes[key] = value;
+    return true;
+  }
+}
 
 VpsProfileSnapshot _snap(List<String> nodes) => vpsSnapshotOf(
   utf8.encode(
@@ -16,8 +40,48 @@ VpsProfileSnapshot _snap(List<String> nodes) => vpsSnapshotOf(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final realRead = vpsReadSnapshot;
   tearDown(() => vpsReadSnapshot = realRead);
+
+  test(
+    'live changes survive late hydration and are saved for restart',
+    () async {
+      SharedPreferences.resetStatic();
+      final store = _LoadingStore();
+      SharedPreferencesStorePlatform.instance = store;
+      addTearDown(mockPreferences);
+      final rebound = preferences.rebind();
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final health = c.read(vpsProfileHealthProvider.notifier);
+      health.forget(1);
+      health.failed(2, const SocketException('offline'), 'new failure');
+      expect(store.writes, isEmpty);
+      store.loading.complete({
+        'flutter.vpsProfileHealth': jsonEncode({
+          '1': const VpsProfileHealth().toJson(),
+          '2': const VpsProfileHealth().toJson(),
+          '3': const VpsProfileHealth().toJson(),
+        }),
+      });
+      await rebound;
+      await Future<void>.delayed(Duration.zero);
+      expect(c.read(vpsProfileHealthProvider).keys.toSet(), {2, 3});
+      expect(health.of(2)!.error, 'new failure');
+      final saved =
+          jsonDecode(store.writes['flutter.vpsProfileHealth']! as String)
+              as Map;
+      expect(saved.keys.toSet(), {'2', '3'});
+      expect((saved['2'] as Map)['error'], 'new failure');
+      final again = ProviderContainer();
+      addTearDown(again.dispose);
+      again.read(vpsProfileHealthProvider);
+      await Future<void>.delayed(Duration.zero);
+      expect(again.read(vpsProfileHealthProvider).keys.toSet(), {2, 3});
+      expect(again.read(vpsProfileHealthProvider)[2]!.error, 'new failure');
+    },
+  );
 
   test('reads node names from YAML and from our JSON profile', () {
     final yaml = vpsSnapshotOf(
