@@ -64,6 +64,31 @@ const _countryZh = {
   'TR': '土耳其',
 };
 
+const _countryEn = {
+  'SG': 'Singapore',
+  'US': 'United States',
+  'JP': 'Japan',
+  'HK': 'Hong Kong',
+  'TW': 'Taiwan',
+  'KR': 'South Korea',
+  'DE': 'Germany',
+  'GB': 'United Kingdom',
+  'FR': 'France',
+  'NL': 'Netherlands',
+  'AU': 'Australia',
+  'CA': 'Canada',
+  'IN': 'India',
+  'MY': 'Malaysia',
+  'TH': 'Thailand',
+  'VN': 'Vietnam',
+  'PH': 'Philippines',
+  'ID': 'Indonesia',
+  'RU': 'Russia',
+  'CN': 'China',
+  'MO': 'Macao',
+  'TR': 'Türkiye',
+};
+
 /// The country a node's name points at ("新加坡 Hysteria2", "US-2", "jp
 /// reality"), as a two-letter code, or null.
 final _flagPair = RegExp(r'[\u{1F1E6}-\u{1F1FF}]{2}', unicode: true);
@@ -141,7 +166,7 @@ String vpsNodeLabel(BuildContext context, String raw) {
 
 String countryName(BuildContext context, String code) {
   final c = code.toUpperCase();
-  return vpsZh(context) ? (_countryZh[c] ?? c) : c;
+  return (vpsZh(context) ? _countryZh : _countryEn)[c] ?? c;
 }
 
 /// What [group] uses now, past the smart line's hidden rate tiers.
@@ -565,9 +590,12 @@ class _HeroState extends ConsumerState<_Hero> {
               label: tr(context, '测速中…', 'Testing…'),
               color: p.muted,
             ),
-            < 0 => VpsChip(label: tr(context, '延迟 —', '— ms'), color: p.muted),
+            < 0 => VpsChip(
+              label: tr(context, '延迟 —', 'Latency —'),
+              color: p.muted,
+            ),
             final d => VpsChip(
-              label: tr(context, '延迟 $d', '$d'),
+              label: tr(context, '延迟 $d', 'Latency $d'),
               unit: 'ms',
               color: d < 200 ? p.good : (d < 500 ? p.warn : p.soft),
             ),
@@ -1261,68 +1289,71 @@ class _Stats extends ConsumerWidget {
       final used = member != null ? member.used : sub!.upload + sub.download;
       leftShare = plan > 0 ? (1 - used / plan).clamp(0.0, 1.0) : 0.0;
     }
-    final tiles = <Widget>[
-      // Down and up in one tile: one number big, the other its footnote.
-      _Stat(
-        icon: VpsIcon.arrowDown,
-        label: tr(context, '实时速度', 'Speed'),
-        value: on ? now.down.traffic.value : '—',
-        unit: on ? '${now.down.traffic.unit}/s' : null,
-        foot: on
-            ? '↑ ${now.up.traffic.value} ${now.up.traffic.unit}/s'
-            : tr(context, '连接后显示', 'Shown once connected'),
-        spark: on ? [for (final t in recent) t.down + t.up] : null,
-        sparkColor: p.good,
-      ),
-      _Stat(
-        icon: VpsIcon.sparkle,
-        label: tr(context, '本次流量', 'This session'),
-        value: on ? (total.up + total.down).traffic.value : '—',
-        unit: on ? (total.up + total.down).traffic.unit : null,
-      ),
-      if (left != null)
-        _Stat(
-          icon: VpsIcon.shield,
-          label: tr(context, '剩余流量', 'Data left'),
-          value: left.value,
-          unit: left.unit,
-          foot: hugePlan
-              ? tr(
-                  context,
-                  '共 ${plan.traffic.value} ${plan.traffic.unit}',
-                  'of ${plan.traffic.value} ${plan.traffic.unit}',
-                )
-              : null,
-          ring: leftShare,
-          ringColor: leftShare == null
-              ? p.accent
-              : leftShare < 0.1
-              ? p.bad
-              : leftShare < 0.25
-              ? p.warn
-              : p.good,
-        ),
-      if (expire != null)
-        _Stat(
-          icon: VpsIcon.info,
-          label: tr(context, '到期', 'Expires'),
-          value: expire,
-          foot: expireDate == null
-              ? null
-              : tr(
-                  context,
-                  '${vpsDateText(context, expireDate)}到期',
-                  'Until ${vpsDateText(context, expireDate)}',
-                ),
-        ),
-      // Latency is not repeated here: the hero's capsule already shows it.
-    ];
     // Separate tiles with air between them (like iOS widgets), not one
     // table with rules: each number reads as its own thing.
     return LayoutBuilder(
       builder: (context, c) {
-        final cols = c.maxWidth >= 680 ? tiles.length : 2;
+        final count = 2 + (left == null ? 0 : 1) + (expire == null ? 0 : 1);
+        final cols = c.maxWidth >= 680 ? count : 2;
         const gap = 12.0;
+        final tileWidth = (c.maxWidth - gap * (cols - 1)) / cols;
+        final tiles = <Widget>[
+          // Down and up in one tile: one number big, the other its footnote.
+          _Stat(
+            icon: VpsIcon.arrowDown,
+            label: tr(context, '实时速度', 'Speed'),
+            value: on ? now.down.traffic.value : '—',
+            unit: on ? '${now.down.traffic.unit}/s' : null,
+            foot: on
+                ? '↑ ${now.up.traffic.value} ${now.up.traffic.unit}/s'
+                : tr(context, '连接后显示', 'Shown once connected'),
+            spark: on ? [for (final t in recent) t.down + t.up] : null,
+            sparkColor: p.good,
+            width: tileWidth,
+          ),
+          _Stat(
+            icon: VpsIcon.sparkle,
+            label: tr(context, '本次流量', 'This session'),
+            value: on ? (total.up + total.down).traffic.value : '—',
+            unit: on ? (total.up + total.down).traffic.unit : null,
+          ),
+          if (left != null)
+            _Stat(
+              icon: VpsIcon.shield,
+              label: tr(context, '剩余流量', 'Data left'),
+              value: left.value,
+              unit: left.unit,
+              foot: hugePlan
+                  ? tr(
+                      context,
+                      '共 ${plan!.traffic.value} ${plan.traffic.unit}',
+                      'of ${plan.traffic.value} ${plan.traffic.unit}',
+                    )
+                  : null,
+              ring: leftShare,
+              ringColor: leftShare == null
+                  ? p.accent
+                  : leftShare < 0.1
+                  ? p.bad
+                  : leftShare < 0.25
+                  ? p.warn
+                  : p.good,
+            ),
+          if (expire != null)
+            _Stat(
+              icon: VpsIcon.info,
+              label: tr(context, '到期', 'Expires'),
+              value: expire,
+              foot: expireDate == null
+                  ? null
+                  : tr(
+                      context,
+                      '${vpsDateText(context, expireDate)}到期',
+                      'Until ${vpsDateText(context, expireDate)}',
+                    ),
+            ),
+          // Latency is not repeated here: the hero's capsule already shows it.
+        ];
         final rows = <Widget>[];
         for (var i = 0; i < tiles.length; i += cols) {
           final slice = tiles.sublist(i, math.min(i + cols, tiles.length));
@@ -1365,6 +1396,7 @@ class _Stat extends StatelessWidget {
     this.sparkColor,
     this.ring,
     this.ringColor,
+    this.width,
   });
 
   final VpsIcon icon;
@@ -1381,16 +1413,42 @@ class _Stat extends StatelessWidget {
   final double? ring;
   final Color? ringColor;
 
+  final double? width;
+
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final spark = this.spark;
     final ring = this.ring;
+    final width = this.width;
+    // Right of the numbers and inside the padding, clear of the corners.
+    final curve = spark != null && spark.length > 1 && width != null;
     final text = Padding(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Row(
         children: [
-          Expanded(child: _text(p)),
+          if (curve) ...[
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: (width - 52) * 0.6),
+              child: _text(p),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(
+                  height: 36,
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      size: Size.infinite,
+                      painter: _SparkPainter(spark, sparkColor ?? p.accent),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ] else
+            Expanded(child: _text(p)),
           if (ring != null) ...[
             const SizedBox(width: 10),
             TweenAnimationBuilder<double>(
@@ -1426,26 +1484,7 @@ class _Stat extends StatelessWidget {
         ],
       ),
     );
-    return ClipRSuperellipse(
-      borderRadius: BorderRadius.circular(VpsRadius.large),
-      child: Stack(
-        children: [
-          if (spark != null && spark.length > 1)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: 44,
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _SparkPainter(spark, sparkColor ?? p.accent),
-                ),
-              ),
-            ),
-          text,
-        ],
-      ),
-    );
+    return text;
   }
 
   Widget _text(VpsPalette p) {
@@ -1453,6 +1492,7 @@ class _Stat extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             VpsIconView(icon, size: 14, color: p.muted),
             const SizedBox(width: 6),
@@ -1473,6 +1513,7 @@ class _Stat extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Row(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
@@ -1563,13 +1604,20 @@ class _SparkPainter extends CustomPainter {
   final List<num> values;
   final Color color;
 
+  // Nothing under 1 KB/s; a floor keeps a small blip off the top.
+  static const _quiet = 1024;
+  static const _floor = 16 * 1024;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final top = values.fold<num>(0, math.max);
-    if (top <= 0) return;
+    final peak = values.fold<num>(0, math.max);
+    if (peak < _quiet || size.width < 40) return;
+    final top = math.max(peak, _floor);
+    const stroke = 1.4;
+    final rise = size.height - stroke;
     final step = size.width / (values.length - 1);
     Offset at(int i) =>
-        Offset(i * step, size.height - size.height * 0.9 * (values[i] / top));
+        Offset(i * step, stroke / 2 + rise * (1 - values[i] / top));
     final line = Path()..moveTo(0, at(0).dy);
     for (var i = 1; i < values.length; i++) {
       final a = at(i - 1), b = at(i);
@@ -1580,7 +1628,6 @@ class _SparkPainter extends CustomPainter {
       ..lineTo(size.width, size.height)
       ..lineTo(0, size.height)
       ..close();
-    // The numbers sit on the left: the curve fades out before it reaches them.
     final bounds = Offset.zero & size;
     canvas
       ..saveLayer(bounds, Paint())
@@ -1590,23 +1637,31 @@ class _SparkPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [color.withValues(alpha: 0.14), color.withValues(alpha: 0)],
+            colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0)],
           ).createShader(bounds),
       )
       ..drawPath(
         line,
         Paint()
-          ..color = color.withValues(alpha: 0.55)
+          ..color = color.withValues(alpha: 0.6)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
+          ..strokeWidth = stroke,
       )
+      // A smoothstep fade-in from the left edge: flat at both ends, no seam.
       ..drawRect(
         bounds,
         Paint()
           ..blendMode = BlendMode.dstIn
           ..shader = const LinearGradient(
-            colors: [Color(0x00000000), Color(0x00000000), Color(0xFF000000)],
-            stops: [0, 0.4, 0.8],
+            colors: [
+              Color(0x00000000),
+              Color(0x1B000000),
+              Color(0x5A000000),
+              Color(0xA5000000),
+              Color(0xE5000000),
+              Color(0xFF000000),
+            ],
+            stops: [0, 0.07, 0.14, 0.21, 0.28, 0.35],
           ).createShader(bounds),
       )
       ..restore();

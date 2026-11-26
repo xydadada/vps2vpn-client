@@ -3,9 +3,11 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:fl_clash/common/constant.dart' show defaultPrimaryColor;
+import 'package:fl_clash/common/constant.dart'
+    show defaultPrimaryColor, trafficSampleLength;
 import 'package:fl_clash/common/dialog.dart' show dialogs;
-import 'package:fl_clash/models/models.dart' show SubscriptionInfo;
+import 'package:fl_clash/common/fixed.dart' show FixedList;
+import 'package:fl_clash/models/models.dart' show SubscriptionInfo, Traffic;
 import 'package:prism_ui/banner.dart' show BannerLevel;
 import 'package:prism_ui/navigator.dart' show rootNavigatorKey;
 import 'package:fl_clash/providers/providers.dart';
@@ -66,6 +68,7 @@ class _ShotRun {
   final ProviderContainer container;
   final Directory dir;
   final _log = StringBuffer();
+  final _holds = <ProviderSubscription<Object?>>[];
 
   Future<void> run() async {
     try {
@@ -87,6 +90,7 @@ class _ShotRun {
 
       await _keyframes('connect');
       await _until(() => container.read(isStartProvider), 60);
+      _holdSpeed();
       await _settle(15000);
       await _breath();
       await _round('connected', tabs: _tabs.keys.toList());
@@ -114,11 +118,13 @@ class _ShotRun {
         await _legend(sub.replaceFirst('sub.yaml', 'legend.yaml'));
       }
 
+      _releaseSpeed();
       await _keyframes('disconnect');
       await _until(() => !container.read(isStartProvider), 30);
     } catch (e, s) {
       _log.writeln('failed: $e\n$s');
     } finally {
+      _releaseSpeed();
       await File(join(dir.path, 'shots.log')).writeAsString(_log.toString());
       await container.read(systemActionProvider.notifier).handleExit(false);
     }
@@ -367,6 +373,49 @@ class _ShotRun {
       tabs: const [vpsTabHome, vpsTabServers, vpsTabMe],
       sizes: const ['wide', 'default'],
     );
+  }
+
+  /// CI idles at 0 B/s: a still minute of browsing, about 14.7 KB/s.
+  void _holdSpeed() {
+    final rand = math.Random(7);
+    const bursts = {14: 3.4, 15: 1.8, 33: 2.6, 47: 4.1, 48: 2.2};
+    final samples = [
+      for (var i = 0; i < trafficSampleLength - 1; i++)
+        Traffic(
+          down: ((11 + rand.nextDouble() * 7) * 1024 * (bursts[i] ?? 1))
+              .round(),
+          up: ((1.2 + rand.nextDouble() * 1.2) * 1024).round(),
+        ),
+      const Traffic(down: 15053, up: 1946),
+    ];
+    const total = Traffic(down: 1288490189, up: 42991616);
+    final speed = container.read(trafficsProvider.notifier);
+    final sum = container.read(totalTrafficProvider.notifier);
+    void hold() =>
+        speed.value = FixedList(trafficSampleLength, list: [...samples]);
+    hold();
+    sum.value = total;
+    _holds
+      ..add(
+        container.listen<FixedList<Traffic>>(trafficsProvider, (_, next) {
+          final list = next.list;
+          if (list.length != samples.length || list.last != samples.last) {
+            hold();
+          }
+        }),
+      )
+      ..add(
+        container.listen<Traffic>(totalTrafficProvider, (_, next) {
+          if (next != total) sum.value = total;
+        }),
+      );
+  }
+
+  void _releaseSpeed() {
+    for (final hold in _holds) {
+      hold.close();
+    }
+    _holds.clear();
   }
 
   void _locale(String locale) => container

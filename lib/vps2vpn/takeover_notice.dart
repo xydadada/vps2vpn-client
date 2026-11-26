@@ -138,7 +138,9 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
         var warn = false;
         if (r.closed.isNotEmpty) {
           zh.add('已为你退出 ${r.closed.join('、')}，网络已由 vps2vpn 接管');
-          en.add('Quit ${r.closed.join(', ')}; vps2vpn now runs your network');
+          en.add(
+            '${r.closed.join(', ')} closed. vps2vpn now runs your network',
+          );
         }
         if (r.stillRunning.isNotEmpty) {
           warn = true;
