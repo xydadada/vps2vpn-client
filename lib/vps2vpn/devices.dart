@@ -28,6 +28,7 @@ enum VpsDeviceOutcome {
   rejected,
   unreachable,
   maybeDone,
+  notSaved,
 }
 
 /// A path under `<sub>/api/`, with a JSON body for a POST.
@@ -98,7 +99,10 @@ String? _deviceId;
 Future<String> vpsDeviceId() async {
   if (_deviceId != null) return _deviceId!;
   final stored = (await vpsDeviceLoad('Id'))?.toLowerCase();
-  if (stored != null && _uuidShape.hasMatch(stored)) return _deviceId = stored;
+  if (stored != null && _uuidShape.hasMatch(stored)) {
+    await vpsDeviceSave('Id', stored);
+    return _deviceId = stored;
+  }
   final made = vpsNewDeviceId();
   await vpsDeviceSave('Id', made);
   return _deviceId = made;
@@ -339,7 +343,7 @@ Future<VpsKickResult> vpsKickOthers({
   required Uri base,
   required String ownId,
   required String requestId,
-  required void Function(String link) adopt,
+  required FutureOr<void> Function(String link) adopt,
   required Future<void> Function() refetch,
   bool resumed = false,
   List<Duration> backoff = const [
@@ -372,7 +376,11 @@ Future<VpsKickResult> vpsKickOthers({
   if (link == null) {
     return (outcome: VpsDeviceOutcome.rejected, link: null, switched: false);
   }
-  adopt(link);
+  try {
+    await adopt(link);
+  } catch (_) {
+    return (outcome: VpsDeviceOutcome.notSaved, link: null, switched: false);
+  }
   try {
     await refetch();
   } catch (_) {
@@ -388,7 +396,7 @@ var _kicking = false;
 Future<VpsKickResult?> vpsRunKick({
   required VpsDeviceCall call,
   required Profile profile,
-  required void Function(Profile moved) put,
+  required Future<void> Function(Profile moved) put,
   required Future<void> Function(Profile moved) update,
   VpsKickPending? resume,
   Future<void> Function(Duration) wait = Future<void>.delayed,
@@ -405,23 +413,32 @@ Future<VpsKickResult?> vpsRunKick({
           requestId: vpsNewRequestId(),
           at: DateTime.now(),
         );
-    if (resume == null) await vpsSaveKickPending(pending);
+    final String ownId;
+    try {
+      await vpsSaveKickPending(pending);
+      ownId = await vpsDeviceId();
+    } catch (_) {
+      return (outcome: VpsDeviceOutcome.notSaved, link: null, switched: false);
+    }
     Profile? moved;
     final result = await vpsKickOthers(
       call: call,
       base: base,
-      ownId: await vpsDeviceId(),
+      ownId: ownId,
       requestId: pending.requestId,
       resumed: resume != null,
       wait: wait,
-      adopt: (link) {
+      adopt: (link) async {
         moved = profile.copyWith(url: link);
-        put(moved!);
+        await put(moved!);
       },
       refetch: () => update(moved!),
     );
-    if (result.outcome != VpsDeviceOutcome.unreachable) {
-      await vpsSaveKickPending(null);
+    if (result.outcome != VpsDeviceOutcome.unreachable &&
+        result.outcome != VpsDeviceOutcome.notSaved) {
+      try {
+        await vpsSaveKickPending(null);
+      } catch (_) {}
     }
     return result;
   } finally {
@@ -435,53 +452,64 @@ final vpsKickResumeProvider = Provider.autoDispose<void>((ref) {
   ref.watch(isStartProvider);
   final calls = ref.read(vpsDeviceCallsProvider);
   final profiles = ref.read(profilesProvider);
-  final put = ref.read(profilesProvider.notifier).put;
+  final put = ref.read(profilesProvider.notifier).putAsync;
   final actions = ref.read(profilesActionProvider.notifier);
-  unawaited(() async {
-    final pending = await vpsLoadKickPending();
-    if (pending == null) return;
-    final profile = profiles.getProfile(pending.profileId);
-    final base = vpsApiBase(pending.oldUrl);
-    final context = globalState.navigatorKey.currentContext;
-    if (profile == null || profile.url != pending.oldUrl || base == null) {
-      await vpsSaveKickPending(null);
-      return;
-    }
-    if (DateTime.now().difference(pending.at) > vpsKickReplayWindow) {
-      await vpsSaveKickPending(null);
-      if (context != null && context.mounted) {
-        dialogs.showBanner(_outcomeText(context, VpsDeviceOutcome.maybeDone));
+  unawaited(
+    () async {
+      final pending = await vpsLoadKickPending();
+      if (pending == null) return;
+      final profile = profiles.getProfile(pending.profileId);
+      final base = vpsApiBase(pending.oldUrl);
+      final context = globalState.navigatorKey.currentContext;
+      if (profile == null || profile.url != pending.oldUrl || base == null) {
+        await vpsSaveKickPending(null);
+        return;
       }
-      return;
-    }
-    final result = await vpsRunKick(
-      call: calls(base),
-      profile: profile,
-      put: put,
-      update: actions.updateProfile,
-      resume: pending,
-    );
-    final now = globalState.navigatorKey.currentContext;
-    if (result == null || now == null || !now.mounted) return;
-    final link = result.link;
-    if (link == null) {
-      if (result.outcome != VpsDeviceOutcome.unreachable) {
-        dialogs.showBanner(_outcomeText(now, result.outcome));
+      if (DateTime.now().difference(pending.at) > vpsKickReplayWindow) {
+        await vpsSaveKickPending(null);
+        if (context != null && context.mounted) {
+          dialogs.showBanner(_outcomeText(context, VpsDeviceOutcome.maybeDone));
+        }
+        return;
       }
-      return;
-    }
-    unawaited(
-      dialogs.showQrCode(
-        title: tr(now, '其他设备已踢掉，本机已换上新链接', 'Others signed out; new link here'),
-        data: link,
-        message: tr(
-          now,
-          '其他设备要用的话，扫码或复制这条新链接重新导入。',
-          'Scan or copy this new link on any other device you still use.',
+      final result = await vpsRunKick(
+        call: calls(base),
+        profile: profile,
+        put: put,
+        update: actions.updateProfile,
+        resume: pending,
+      );
+      final now = globalState.navigatorKey.currentContext;
+      if (result == null || now == null || !now.mounted) return;
+      final link = result.link;
+      if (link == null) {
+        if (result.outcome != VpsDeviceOutcome.unreachable) {
+          dialogs.showBanner(_outcomeText(now, result.outcome));
+        }
+        return;
+      }
+      unawaited(
+        dialogs.showQrCode(
+          title: tr(
+            now,
+            '其他设备已踢掉，本机已换上新链接',
+            'Others signed out; new link here',
+          ),
+          data: link,
+          message: tr(
+            now,
+            '其他设备要用的话，扫码或复制这条新链接重新导入。',
+            'Scan or copy this new link on any other device you still use.',
+          ),
         ),
-      ),
-    );
-  }());
+      );
+    }().catchError((Object _) {
+      final context = globalState.navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        dialogs.showBanner(_outcomeText(context, VpsDeviceOutcome.notSaved));
+      }
+    }),
+  );
 });
 
 Future<String?> Function() vpsRemovedLoad = () => vpsDeviceLoad('Removed');
@@ -564,12 +592,16 @@ final vpsDeviceSyncProvider = Provider.autoDispose<void>((ref) {
     }
     _beatAt[profileId] = now;
     var told = false;
+    final String ownId;
+    try {
+      ownId = await vpsDeviceId();
+    } catch (_) {
+      return;
+    }
+    if (!ref.mounted) return;
     await vpsDeviceBeat(
       call: call,
-      body: vpsCheckInBody(
-        id: await vpsDeviceId(),
-        version: globalState.packageInfo.version,
-      ),
+      body: vpsCheckInBody(id: ownId, version: globalState.packageInfo.version),
       mark: (r) {
         told = r && !ref.read(vpsRemovedProvider).contains(profileId);
         removed.mark(profileId, r);
@@ -644,10 +676,23 @@ String _outcomeText(BuildContext context, VpsDeviceOutcome outcome) =>
         '可能已经生效，请到会员页查看新链接',
         'It may have gone through; look for the new link on the member page',
       ),
+      VpsDeviceOutcome.notSaved => tr(
+        context,
+        '无法保存本机数据。请检查磁盘空间后重试。',
+        'Local data could not be saved. Check free disk space and try again.',
+      ),
     };
 
 Future<void> _copyRestoreNote(BuildContext context) async {
-  final id = await vpsDeviceId();
+  final String id;
+  try {
+    id = await vpsDeviceId();
+  } catch (_) {
+    if (context.mounted) {
+      dialogs.showBanner(_outcomeText(context, VpsDeviceOutcome.notSaved));
+    }
+    return;
+  }
   if (!context.mounted) return;
   final name = vpsDeviceName();
   await Clipboard.setData(
@@ -841,7 +886,12 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
       _busy = true;
       _error = null;
     });
-    final error = await action();
+    String? error;
+    try {
+      error = await action();
+    } catch (_) {
+      if (mounted) error = _outcomeText(context, VpsDeviceOutcome.notSaved);
+    }
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -871,7 +921,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
       final result = await vpsRunKick(
         call: ref.read(vpsDeviceCallsProvider)(base),
         profile: profile,
-        put: ref.read(profilesProvider.notifier).put,
+        put: ref.read(profilesProvider.notifier).putAsync,
         update: ref.read(profilesActionProvider.notifier).updateProfile,
       );
       if (!mounted || result == null) return null;
@@ -1051,6 +1101,12 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                 FutureBuilder<VpsDeviceList>(
                   future: _list,
                   builder: (context, snap) {
+                    if (snap.hasError) {
+                      return Text(
+                        _outcomeText(context, VpsDeviceOutcome.notSaved),
+                        style: vpsText(p, size: 13, color: p.bad),
+                      );
+                    }
                     final list = snap.data;
                     if (list == null) {
                       return Padding(

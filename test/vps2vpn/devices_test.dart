@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -29,8 +30,12 @@ void main() {
 
   test('the device id is a lowercase v4 UUID made once', () async {
     final store = <String, String>{};
+    var writable = false;
     vpsDeviceLoad = (key) async => store[key];
-    vpsDeviceSave = (key, value) async => store[key] = value;
+    vpsDeviceSave = (key, value) async {
+      store[key] = value;
+      if (!writable) throw const FileSystemException('disk full');
+    };
     final id = vpsNewDeviceId(Random(1));
     expect(
       id,
@@ -40,6 +45,9 @@ void main() {
         ),
       ),
     );
+    await expectLater(vpsDeviceId(), throwsA(isA<FileSystemException>()));
+    await expectLater(vpsDeviceId(), throwsA(isA<FileSystemException>()));
+    writable = true;
     final first = await vpsDeviceId();
     expect(store['Id'], first);
     expect(await vpsDeviceId(), first);
@@ -364,6 +372,89 @@ void main() {
         autoUpdateDuration: Duration(hours: 1),
       );
 
+      test('no request is sent without a saved recovery record', () async {
+        vpsDeviceSave = (_, _) async =>
+            throw const FileSystemException('disk full');
+        for (final resume in <VpsKickPending?>[
+          null,
+          (
+            profileId: 9,
+            oldUrl: old,
+            requestId: 'saved-in-memory',
+            at: DateTime.now(),
+          ),
+        ]) {
+          final result = await vpsRunKick(
+            call: (path, {body, headers = const {}}) async =>
+                fail('no saved replay'),
+            profile: profile(),
+            put: (_) async => fail('no server request'),
+            update: (_) async => fail('no server request'),
+            resume: resume,
+            wait: noWait,
+          );
+          expect(result!.outcome, VpsDeviceOutcome.notSaved);
+          expect(result.link, isNull);
+        }
+      });
+
+      test(
+        'the new URL is durable before refetch or clearing the replay',
+        () async {
+          final saving = Completer<void>();
+          final saved = Completer<void>();
+          var fetched = false;
+          final result = vpsRunKick(
+            call: _panel([], (_) => answered),
+            profile: profile(),
+            put: (moved) async {
+              expect(moved.url, fresh);
+              saving.complete();
+              await saved.future;
+            },
+            update: (_) async => fetched = true,
+            wait: noWait,
+          );
+          await saving.future;
+          expect(fetched, isFalse);
+          expect(await vpsLoadKickPending(), isNotNull);
+          saved.complete();
+          expect((await result)!.switched, isTrue);
+          expect(fetched, isTrue);
+          expect(await vpsLoadKickPending(), isNull);
+        },
+      );
+
+      test(
+        'a failed local save keeps the same kick replay for recovery',
+        () async {
+          final sent = <_Sent>[];
+          final first = await vpsRunKick(
+            call: _panel(sent, (_) => answered),
+            profile: profile(),
+            put: (_) async => throw const FileSystemException('disk full'),
+            update: (_) async => fail('URL was not persisted'),
+            wait: noWait,
+          );
+          expect(first!.outcome, VpsDeviceOutcome.notSaved);
+          final pending = await vpsLoadKickPending();
+          expect(pending, isNotNull);
+          final resumed = await vpsRunKick(
+            call: _panel(sent, (_) => answered),
+            profile: profile(),
+            put: (_) async {},
+            update: (_) async {},
+            resume: pending,
+            wait: noWait,
+          );
+          expect(resumed!.switched, isTrue);
+          expect(sent.map((s) => s.body!['request_id']).toSet(), {
+            pending!.requestId,
+          });
+          expect(await vpsLoadKickPending(), isNull);
+        },
+      );
+
       test(
         'what got no answer waits, and a restart sends the same id',
         () async {
@@ -374,7 +465,7 @@ void main() {
               throw const SocketException('down');
             },
             profile: profile(),
-            put: (_) => fail('no new link'),
+            put: (_) async => fail('no new link'),
             update: (_) async => fail('nothing to fetch'),
             wait: noWait,
           );
@@ -389,7 +480,7 @@ void main() {
           final resumed = await vpsRunKick(
             call: _panel(again, (_) => answered),
             profile: profile(),
-            put: put.add,
+            put: (profile) async => put.add(profile),
             update: (_) async {},
             resume: pending,
             wait: noWait,
@@ -405,7 +496,7 @@ void main() {
         await vpsRunKick(
           call: _panel([], (_) => (400, '{"code":"bad_request"}')),
           profile: profile(),
-          put: (_) => fail('no new link'),
+          put: (_) async => fail('no new link'),
           update: (_) async {},
           wait: noWait,
         );

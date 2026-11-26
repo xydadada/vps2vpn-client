@@ -6,6 +6,8 @@ import 'package:fl_clash/common/preferences.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:shared_preferences_platform_interface/types.dart';
 
 import '../helpers/preferences.dart';
 
@@ -18,6 +20,24 @@ const _sharedState = SharedState(
   onlyStatisticsProxy: true,
 );
 
+class _FailedDeviceStore extends InMemorySharedPreferencesStore {
+  _FailedDeviceStore({this.failRead = false}) : super.empty();
+
+  final bool failRead;
+
+  @override
+  Future<Map<String, Object>> getAllWithParameters(
+    GetAllParameters parameters,
+  ) async {
+    if (failRead) throw StateError('Store unavailable');
+    return {};
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      false;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -26,6 +46,35 @@ void main() {
   setUp(() async {
     await mockPreferences();
     store = await SharedPreferences.getInstance();
+  });
+
+  group('device state', () {
+    test('round-trips a successfully persisted value', () async {
+      await preferences.setVpsDevice('Kick', 'pending');
+
+      expect(await preferences.getVpsDevice('Kick'), 'pending');
+    });
+
+    for (final failRead in [false, true]) {
+      test(
+        failRead
+            ? 'reports an unavailable device store'
+            : 'reports a device write rejected by the store',
+        () async {
+          SharedPreferences.resetStatic();
+          SharedPreferencesStorePlatform.instance = _FailedDeviceStore(
+            failRead: failRead,
+          );
+          addTearDown(mockPreferences);
+          await preferences.rebind();
+
+          await expectLater(
+            preferences.setVpsDevice('Kick', 'pending'),
+            throwsStateError,
+          );
+        },
+      );
+    }
   });
 
   group('applied config md5', () {

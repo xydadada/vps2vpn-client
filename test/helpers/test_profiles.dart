@@ -22,6 +22,9 @@ class TestProfiles extends Profiles {
   }
 
   @override
+  Future<void> putAsync(Profile profile) async => put(profile);
+
+  @override
   Future<void> del(int id) async {
     state = state.where((profile) => profile.id != id).toList();
   }

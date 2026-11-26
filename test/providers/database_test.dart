@@ -128,6 +128,42 @@ void main() {
       expect(read().single.label, 'First');
     });
 
+    test('putAsync waits until the optimistic row is persisted', () async {
+      final release = Completer<void>();
+      final entered = Completer<void>();
+      final held = testDatabase.transaction(() async {
+        entered.complete();
+        await release.future;
+      });
+      await entered.future;
+      var completed = false;
+
+      final save = notifier.putAsync(profile(1, label: 'Saved')).then((_) {
+        completed = true;
+      });
+      expect(read().single.label, 'Saved');
+      await pumpEventQueue();
+      expect(completed, isFalse);
+
+      release.complete();
+      await held;
+      await save;
+      expect(completed, isTrue);
+      expect((await testDatabase.profilesDao.get(1))?.label, 'Saved');
+    });
+
+    test('putAsync propagates a failed write after rollback', () async {
+      await notifier.putAsync(profile(1, label: 'Kept'));
+      await breakTable('profiles');
+
+      await expectLater(
+        notifier.putAsync(profile(1, label: 'Lost')),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(read().single.label, 'Kept');
+    });
+
     test(
       'put de-duplicates a label already taken by another profile',
       () async {
