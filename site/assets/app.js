@@ -1024,6 +1024,10 @@
 
   async function start() {
     const carried = takeCarriedView();
+    if (carried.query) {
+      state.query = carried.query;
+      $('#cl-search').value = carried.query;
+    }
     syncShot();
     splitWordmark();
     applyStaticText();
@@ -1038,18 +1042,15 @@
 
     const [device] = await Promise.all([detectDevice(), loadData()]);
     state.detected = device;
-    state.platform = device.platform || 'android';
-    state.arch = device.arch;
-    if (PLATFORMS.includes(carried.platform)) {
-      state.platform = carried.platform;
-      state.platformChosen = true;
-      if (carried.arch === 'x64' || carried.arch === 'arm64') state.arch = carried.arch;
+    if (!state.platformChosen) {
+      state.platform = device.platform || 'android';
+      state.arch = device.arch;
+      if (PLATFORMS.includes(carried.platform)) {
+        state.platform = carried.platform;
+        state.platformChosen = true;
+        if (carried.arch === 'x64' || carried.arch === 'arm64') state.arch = carried.arch;
+      }
     }
-    if (carried.query) {
-      state.query = carried.query;
-      $('#cl-search').value = carried.query;
-    }
-
     renderReleaseMeta();
     selectTab($('#platform-seg'), state.platform, false);
     renderCta();

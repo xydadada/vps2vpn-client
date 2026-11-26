@@ -17,6 +17,18 @@ env:
   FLUTTER_VERSION: '3.50.0'
 
 jobs:
+  site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Site interaction tests
+        run: node --test test/site/*.test.cjs
+
   go:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
