@@ -103,13 +103,13 @@ void main() {
     test('the unasked test import takes only an address on this PC', () {
       for (final local in [
         'http://127.0.0.1:18000/sub.yaml',
-        'http://localhost:18000/sub.yaml',
         'http://[::1]:18000/sub.yaml',
       ]) {
         expect(vpsLoopbackLink(local), local);
       }
       for (final other in [
         null,
+        'http://localhost:18000/sub.yaml',
         'https://panel.example.com/s/$_tok',
         'http://127.0.0.1.example.com/sub.yaml',
         'file:///C:/sub.yaml',
@@ -211,6 +211,26 @@ void main() {
       'body': 'Pre-release for the automated installer check. Not for users.',
     }, installed: true)!;
     expect(test.notes, isNull);
+  });
+
+  test('a GitHub release takes downloads only from our own releases', () {
+    const name = 'vps2vpn-1.0.40-windows-amd64-setup.exe';
+    const ours =
+        'https://github.com/$vpsReleaseRepository/releases/download/v1.0.40/$name';
+    for (final elsewhere in [
+      'https://example.com/$name',
+      'http://github.com/$vpsReleaseRepository/releases/download/v1.0.40/$name',
+      'https://github.com/$vpsReleaseRepository/releases/download/../../../x/y/releases/download/$name',
+      'https://github.com@example.com/$vpsReleaseRepository/releases/download/v1.0.40/$name',
+    ]) {
+      final r = vpsReleaseFromGitHub({
+        'tag_name': 'v1.0.40',
+        'assets': [
+          {'name': name, 'browser_download_url': elsewhere},
+        ],
+      }, installed: true)!;
+      expect(r.files['windows'].toString(), ours, reason: elsewhere);
+    }
   });
 
   test('prefers the installer the panel holds for this platform', () {
