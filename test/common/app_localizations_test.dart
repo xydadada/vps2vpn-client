@@ -209,7 +209,7 @@ void main() {
           null,
           lookupAppLocalizations(const Locale('zh')),
         ),
-        '应用与核心的连接已断开',
+        '应用与内核的连接已断开',
       );
     });
 
