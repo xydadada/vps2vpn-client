@@ -184,10 +184,10 @@ List<_Field>? _parse(
           return stopped();
         }
         final bodyStart = length.$2;
-        final bodyEnd = bodyStart + length.$1;
-        if (length.$1 < 0 || bodyEnd > end) {
+        if (length.$1 < 0 || length.$1 > end - bodyStart) {
           return stopped();
         }
+        final bodyEnd = bodyStart + length.$1;
         offset = bodyEnd;
         fields.add(_lengthDelimited(bytes, number, bodyStart, bodyEnd, depth));
       case 5:

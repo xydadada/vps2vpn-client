@@ -148,6 +148,24 @@ void main() {
       expect(content.truncated, isTrue);
     });
 
+    test('an overflowing length falls back to binary without throwing', () {
+      final bytes = [0x0a, ...List.filled(8, 0xff), 0x7f];
+      expect(mitmProtobufText(Uint8List.fromList(bytes)), isNull);
+      final content = _read(bytes, contentType: 'application/protobuf');
+      expect(content.kind, MitmBodyKind.binary);
+      expect(content.bytes, bytes);
+    });
+
+    test('a cut message retains fields before an overflowing length', () {
+      final content = _read(
+        [0x08, 0x01, 0x12, ...List.filled(8, 0xff), 0x7f],
+        contentType: 'application/protobuf',
+        truncated: true,
+      );
+      expect(content.format, MitmBodyFormat.protobuf);
+      expect(content.text, '1: 1');
+    });
+
     test('gRPC stops inflating a frame past the limit', () {
       List<int> frame(List<int> gzipped) => [
         1,
