@@ -90,6 +90,56 @@ const _countryEn = {
   'TR': 'Türkiye',
 };
 
+const _placeEn = {
+  '洛杉矶': 'Los Angeles',
+  '圣何塞': 'San Jose',
+  '硅谷': 'Silicon Valley',
+  '西雅图': 'Seattle',
+  '旧金山': 'San Francisco',
+  '纽约': 'New York',
+  '芝加哥': 'Chicago',
+  '达拉斯': 'Dallas',
+  '迈阿密': 'Miami',
+  '阿什本': 'Ashburn',
+  '东京': 'Tokyo',
+  '大阪': 'Osaka',
+  '首尔': 'Seoul',
+  '春川': 'Chuncheon',
+  '台北': 'Taipei',
+  '伦敦': 'London',
+  '法兰克福': 'Frankfurt',
+  '巴黎': 'Paris',
+  '阿姆斯特丹': 'Amsterdam',
+  '悉尼': 'Sydney',
+  '墨尔本': 'Melbourne',
+  '多伦多': 'Toronto',
+  '温哥华': 'Vancouver',
+  '孟买': 'Mumbai',
+  '吉隆坡': 'Kuala Lumpur',
+  '曼谷': 'Bangkok',
+  '胡志明市': 'Ho Chi Minh City',
+  '河内': 'Hanoi',
+  '马尼拉': 'Manila',
+  '雅加达': 'Jakarta',
+  '莫斯科': 'Moscow',
+  '伊斯坦布尔': 'Istanbul',
+  '迪拜': 'Dubai',
+  '圣保罗': 'São Paulo',
+};
+
+/// English for the place a node's name starts with ("洛杉矶 Reality").
+String vpsPlaceEn(String name) {
+  final m = RegExp(r'^(\S+)(.*)$', dotAll: true).firstMatch(name);
+  if (m == null) return name;
+  final head = m[1]!;
+  final code = _countryZh.entries
+      .where((e) => e.value == head)
+      .map((e) => e.key)
+      .firstOrNull;
+  final en = _placeEn[head] ?? (code == null ? null : _countryEn[code]);
+  return en == null ? name : '$en${m[2]}';
+}
+
 /// The country a node's name points at ("新加坡 Hysteria2", "US-2", "jp
 /// reality"), as a two-letter code, or null.
 final _flagPair = RegExp(r'[\u{1F1E6}-\u{1F1FF}]{2}', unicode: true);
@@ -166,7 +216,9 @@ String vpsNodeLabel(BuildContext context, String raw) {
       ? countryName(context, code)
       : RegExp(r'^\d+$').hasMatch(shown.name)
       ? '${countryName(context, code)} ${shown.name}'
-      : shown.name;
+      : vpsZh(context)
+      ? shown.name
+      : vpsPlaceEn(shown.name);
   return (name: name, rate: shown.rate == 1 ? null : shown.rate);
 }
 

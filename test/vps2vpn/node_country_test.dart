@@ -16,6 +16,14 @@ void main() {
     expect(vpsGuessCountry('IN Mumbai'), 'IN');
   });
 
+  test('English names the place a node name starts with', () {
+    expect(vpsPlaceEn('洛杉矶'), 'Los Angeles');
+    expect(vpsPlaceEn('日本 Reality'), 'Japan Reality');
+    expect(vpsPlaceEn('首尔 2'), 'Seoul 2');
+    expect(vpsPlaceEn('洛杉矶高速'), '洛杉矶高速');
+    expect(vpsPlaceEn('自动选择'), '自动选择');
+  });
+
   test('no country when the name does not say one', () {
     expect(vpsGuessCountry('智能线路'), isNull);
     expect(vpsGuessCountry('Hysteria2'), isNull);

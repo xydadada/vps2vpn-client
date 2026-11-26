@@ -1,5 +1,7 @@
 // vps2vpn "Servers": pick the line you use, see how fast each one answers.
 
+import 'dart:io' show Platform;
+
 import 'package:fl_clash/common/dialog.dart' show dialogs;
 import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -228,7 +230,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
       tr(
         context,
         '测速完成：${nodes.length} 个节点里 $ok 个能用',
-        'Tested: $ok of ${nodes.length} servers answer',
+        'Tested: $ok of ${nodes.length} nodes answer',
       ),
       level: ok > 0 ? BannerLevel.success : BannerLevel.warning,
     );
@@ -360,7 +362,8 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
           ? tr(
               context,
               '点击切换节点 · 延迟为打开测试网址的往返时间',
-              'Tap to switch · latency is the round trip to a test page',
+              '${Platform.isAndroid ? 'Tap' : 'Click'} to switch · latency is '
+                  'the round trip to a test page',
             )
           : tr(
               context,
@@ -554,6 +557,12 @@ class _GroupTab extends StatelessWidget {
         ),
         child: Text(
           label,
+          // One line box for Latin and CJK labels, so a row shares a baseline.
+          strutStyle: const StrutStyle(
+            fontSize: 13.5,
+            height: 1.3,
+            forceStrutHeight: true,
+          ),
           style: vpsText(
             p,
             size: 13.5,
@@ -626,6 +635,8 @@ class _ProxyCard extends ConsumerWidget {
       < 500 => ('$delay ms', p.warn),
       _ => ('$delay ms', p.soft),
     };
+    final subtitle = _subtitle(context, p, status, protocol, rate, using);
+    final tagged = down || busy || fresh || fastest || bestForAi || ai != null;
     return VpsCard(
       onTap: onTap,
       highlight: selected,
@@ -646,6 +657,7 @@ class _ProxyCard extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -654,54 +666,56 @@ class _ProxyCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: vpsText(p, size: 14, weight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text.rich(
-                          _subtitle(context, p, status, protocol, rate, using),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: vpsText(
-                            p,
-                            size: 12,
-                            color: busy
-                                ? p.warn
-                                : proxy.name == vpsSmartGroupName || using
-                                ? p.accent
-                                : p.soft,
+                  if (tagged || subtitle.toPlainText().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text.rich(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: vpsText(
+                              p,
+                              size: 12,
+                              color: busy
+                                  ? p.warn
+                                  : proxy.name == vpsSmartGroupName || using
+                                  ? p.accent
+                                  : p.soft,
+                            ),
                           ),
                         ),
-                      ),
-                      if (down) ...[
-                        const SizedBox(width: 8),
-                        _Tag(tr(context, '维护中', 'Maintenance'), p.muted),
-                      ] else if (busy) ...[
-                        const SizedBox(width: 8),
-                        _Tag(tr(context, '拥挤', 'Busy'), p.warn),
+                        if (down) ...[
+                          const SizedBox(width: 8),
+                          _Tag(tr(context, '维护中', 'Maintenance'), p.muted),
+                        ] else if (busy) ...[
+                          const SizedBox(width: 8),
+                          _Tag(tr(context, '拥挤', 'Busy'), p.warn),
+                        ],
+                        if (fresh) ...[
+                          const SizedBox(width: 8),
+                          _Tag(tr(context, '新', 'New'), p.accent),
+                        ],
+                        if (fastest) ...[
+                          const SizedBox(width: 8),
+                          _Tag(tr(context, '最快', 'Fastest'), p.good),
+                        ],
+                        if (bestForAi) ...[
+                          const SizedBox(width: 8),
+                          _Tag(tr(context, '适合 AI', 'Best for AI'), p.accent),
+                        ] else if (ai != null) ...[
+                          const SizedBox(width: 8),
+                          _Tag(
+                            ai!
+                                ? tr(context, 'AI 可用', 'AI works')
+                                : tr(context, 'AI 不可用', 'No AI'),
+                            ai! ? p.accent : p.muted,
+                          ),
+                        ],
                       ],
-                      if (fresh) ...[
-                        const SizedBox(width: 8),
-                        _Tag(tr(context, '新', 'New'), p.accent),
-                      ],
-                      if (fastest) ...[
-                        const SizedBox(width: 8),
-                        _Tag(tr(context, '最快', 'Fastest'), p.good),
-                      ],
-                      if (bestForAi) ...[
-                        const SizedBox(width: 8),
-                        _Tag(tr(context, '适合 AI', 'Best for AI'), p.accent),
-                      ] else if (ai != null) ...[
-                        const SizedBox(width: 8),
-                        _Tag(
-                          ai!
-                              ? tr(context, 'AI 可用', 'AI works')
-                              : tr(context, 'AI 不可用', 'No AI'),
-                          ai! ? p.accent : p.muted,
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -763,8 +777,8 @@ extension on _ProxyCard {
     if (proxy.name == vpsSmartGroupName) {
       return TextSpan(
         text: using
-            ? tr(context, '使用中 · 自动选最快', 'In use · picks the fastest')
-            : tr(context, '推荐 · 自动选最快', 'Recommended · picks the fastest'),
+            ? tr(context, '使用中 · 自动选最快', 'In use · auto')
+            : tr(context, '推荐 · 自动选最快', 'Picks the fastest'),
       );
     }
     if (proxy.name == vpsAIGroupName) {
@@ -840,7 +854,7 @@ class _DelayCellState extends State<_DelayCell> {
       onExit: (_) => setState(() => _hover = false),
       child: VpsPressable(
         onTap: widget.testing ? null : widget.onRetest,
-        semanticLabel: tr(context, '重测这个节点', 'Test this server again'),
+        semanticLabel: tr(context, '重测这个节点', 'Test this node again'),
         child: SizedBox(
           width: 52,
           height: 28,
