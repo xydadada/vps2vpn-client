@@ -192,12 +192,16 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   }
 
   Future<void> _handleSaveEdit(BuildContext context, Uint8List data) async {
-    final issue = await globalState.safeRun(
-      () => ref
-          .read(profilesActionProvider.notifier)
-          .validateConfigWithData(data),
+    final validation = await globalState.safeRun(
+      () async => (
+        issue: await ref
+            .read(profilesActionProvider.notifier)
+            .validateConfigWithData(data),
+      ),
       silence: false,
     );
+    if (validation == null) return;
+    final issue = validation.issue;
     if (issue != null) {
       unawaited(
         dialogs.showAlert(
