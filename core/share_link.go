@@ -446,6 +446,9 @@ func encodeHysteria2(f proxyFields) string {
 		} else {
 			user = url.User(password)
 		}
+		if user.String() != password {
+			return ""
+		}
 	}
 	query := url.Values{}
 	setIf(query, "sni", f.str("sni"))
@@ -488,8 +491,7 @@ func encodeTuic(f proxyFields) string {
 	return shareURL("tuic", user, hostPort(f), query, f.str("name"))
 }
 
-// The converter reads the user info as base64 before falling back to plain
-// text, so it always carries the ":" that no base64 alphabet has.
+// The converter decodes base64 or splits plain user info, without URL-unescaping.
 func encodeSocks(f proxyFields, scheme string) string {
 	if f.flag("tls") && (scheme != "https" || !f.flag("skip-cert-verify") ||
 		f.str("sni") != "" || f.str("fingerprint") != "" || hasUnencodedTLSIdentity(f)) {
@@ -497,7 +499,18 @@ func encodeSocks(f proxyFields, scheme string) string {
 	}
 	var user *url.Userinfo
 	if username, password := f.str("username"), f.str("password"); username != "" || password != "" {
+		if strings.Contains(username, ":") || strings.Contains(password, ":") {
+			return ""
+		}
+		credentials := username + ":" + password
 		user = url.UserPassword(username, password)
+		if user.String() != credentials {
+			encoded := base64.RawStdEncoding.EncodeToString([]byte(credentials))
+			user = url.User(encoded)
+			if user.String() != encoded {
+				return ""
+			}
+		}
 	}
 	return shareURL(scheme, user, hostPort(f), url.Values{}, f.str("name"))
 }

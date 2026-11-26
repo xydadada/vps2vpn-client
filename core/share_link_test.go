@@ -532,3 +532,44 @@ func TestShareLinksKeepSupportedCertificatePolicies(t *testing.T) {
 		})
 	}
 }
+
+func TestHttpAndSocksShareLinksPreserveCredentials(t *testing.T) {
+	for _, kind := range []string{"http", "socks5"} {
+		for _, credentials := range [][2]string{
+			{"test-user", "test-pass"}, {"user@name", "p@ss%word"},
+			{"", "p@ss"}, {"user name", ""}, {"user", "口令"},
+		} {
+			t.Run(kind+"/"+credentials[0], func(t *testing.T) {
+				fields := proxyFields{
+					"name": "test", "type": kind, "server": "node.example", "port": 443,
+					"username": credentials[0], "password": credentials[1],
+				}
+				link := encodeShareLink(fields)
+				decoded := handleDecodeShareLinks(LinesParams{Lines: []string{link}})
+				if len(decoded) != 1 || len(decoded[0]) != 1 {
+					t.Fatalf("credentials did not round trip: %v", decoded)
+				}
+				for _, key := range []string{"username", "password"} {
+					if decoded[0][0][key] != fields[key] {
+						t.Errorf("%s changed after sharing", key)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestShareLinksRefuseCredentialsTheConverterCannotRepresent(t *testing.T) {
+	for _, fields := range []proxyFields{
+		{"type": "socks5", "username": "user:alias", "password": "pass"},
+		{"type": "http", "username": "user", "password": "pass:word"},
+		{"type": "socks5", "username": "???", "password": "???"},
+		{"type": "hysteria2", "password": "p@ss"},
+		{"type": "hysteria2", "password": "user:p@ss"},
+	} {
+		fields["name"], fields["server"], fields["port"] = "test", "node.example", 443
+		if link := encodeShareLink(fields); link != "" {
+			t.Errorf("%s exported credentials the converter would change", fields["type"])
+		}
+	}
+}
