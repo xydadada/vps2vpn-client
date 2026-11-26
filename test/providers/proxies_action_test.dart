@@ -370,6 +370,310 @@ void main() {
     );
   });
 
+  group('changeProxy request ownership', () {
+    late Map<String, Completer<ChangeProxyResult>> switches;
+
+    setUp(() {
+      switches = {};
+      when(() => core.changeProxy(any())).thenAnswer((invocation) {
+        final params =
+            invocation.positionalArguments.single as ChangeProxyParams;
+        return switches.putIfAbsent(params.proxyName, Completer.new).future;
+      });
+      when(core.closeConnections).thenAnswer((_) async => true);
+      when(core.resetConnections).thenAnswer((_) async => true);
+      addTearDown(() {
+        debouncer.cancel((FunctionTag.changeProxy, 'Proxy'));
+        debouncer.cancel((FunctionTag.changeProxy, 'Media'));
+        debouncer.cancel(FunctionTag.updateGroups);
+      });
+    });
+
+    void selectOtherProfile(ProviderContainer container) {
+      container
+          .read(profilesProvider.notifier)
+          .put(_selectedProfile('JP-00').copyWith(id: 2));
+      container.read(currentProfileIdProvider.notifier).value = 2;
+    }
+
+    test(
+      'a previous profile failure cannot roll back the current profile',
+      () async {
+        final container = buildContainer(profile: _selectedProfile('HK-00'));
+        final switching = actionOf(
+          container,
+        ).changeProxy(groupName: 'Proxy', proxyName: 'HK-01');
+        selectOtherProfile(container);
+
+        switches['HK-01']!.completeError(StateError('old profile failed'));
+        await switching;
+
+        expect(container.read(currentProfileProvider)?.selectedMap, {
+          'Proxy': 'JP-00',
+        });
+        verifyNever(core.closeConnections);
+        verifyNever(core.resetConnections);
+      },
+    );
+
+    test(
+      'a previous profile success cannot reset current connections',
+      () async {
+        final container = buildContainer(profile: _selectedProfile('HK-00'));
+        final switching = actionOf(
+          container,
+        ).changeProxy(groupName: 'Proxy', proxyName: 'HK-01');
+        selectOtherProfile(container);
+
+        switches['HK-01']!.complete(const ChangeProxyResult(changed: true));
+        await switching;
+
+        expect(container.read(currentProfileProvider)?.selectedMap, {
+          'Proxy': 'JP-00',
+        });
+        verifyNever(core.closeConnections);
+        verifyNever(core.resetConnections);
+        expect(container.read(routeTrackerProvider).picks, 0);
+      },
+    );
+
+    test('returning to a profile does not revive its old request', () async {
+      final container = buildContainer(profile: _selectedProfile('HK-00'));
+      final switching = actionOf(
+        container,
+      ).changeProxy(groupName: 'Proxy', proxyName: 'HK-01');
+      selectOtherProfile(container);
+      container.read(currentProfileIdProvider.notifier).value = 1;
+
+      switches['HK-01']!.completeError(StateError('old session failed'));
+      await switching;
+
+      expect(container.read(currentProfileProvider)?.selectedMap, {
+        'Proxy': 'HK-01',
+      });
+    });
+
+    test(
+      'an older failure cannot replace a newer accepted selection',
+      () async {
+        final container = buildContainer(profile: _selectedProfile('HK-00'));
+        final action = actionOf(container);
+        final first = action.changeProxy(
+          groupName: 'Proxy',
+          proxyName: 'HK-01',
+        );
+        final second = action.changeProxy(
+          groupName: 'Proxy',
+          proxyName: 'HK-02',
+        );
+        switches['HK-02']!.complete(const ChangeProxyResult(changed: true));
+        await second;
+
+        switches['HK-01']!.completeError(StateError('old selection failed'));
+        await first;
+
+        expect(container.read(currentProfileProvider)?.selectedMap, {
+          'Proxy': 'HK-02',
+        });
+        expect(container.read(routeTrackerProvider).picks, 1);
+      },
+    );
+
+    test('an older success does not reset a newer pending selection', () async {
+      final container = buildContainer(profile: _selectedProfile('HK-00'));
+      final action = actionOf(container);
+      final first = action.changeProxy(groupName: 'Proxy', proxyName: 'HK-01');
+      final second = action.changeProxy(groupName: 'Proxy', proxyName: 'HK-02');
+      switches['HK-01']!.complete(const ChangeProxyResult(changed: true));
+      await first;
+
+      expect(container.read(currentProfileProvider)?.selectedMap, {
+        'Proxy': 'HK-02',
+      });
+      verifyNever(core.closeConnections);
+      verifyNever(core.resetConnections);
+      expect(container.read(routeTrackerProvider).picks, 0);
+
+      switches['HK-02']!.complete(const ChangeProxyResult(changed: true));
+      await second;
+      expect(container.read(routeTrackerProvider).picks, 1);
+    });
+
+    test(
+      'a newer pending tap owns rollback while the first request fails',
+      () async {
+        final container = buildContainer(profile: _selectedProfile('HK-00'));
+        final action = actionOf(container);
+        final first = action.changeProxy(
+          groupName: 'Proxy',
+          proxyName: 'HK-01',
+        );
+        action.changeProxyDebounce('Proxy', 'HK-02');
+        switches['HK-01']!.completeError(StateError('old selection failed'));
+        await first;
+
+        expect(container.read(currentProfileProvider)?.selectedMap, {
+          'Proxy': 'HK-02',
+        });
+        final second = action.changeProxy(
+          groupName: 'Proxy',
+          proxyName: 'HK-02',
+        );
+        switches['HK-02']!.completeError(StateError('latest selection failed'));
+        await second;
+        expect(container.read(currentProfileProvider)?.selectedMap, {
+          'Proxy': 'HK-00',
+        });
+      },
+    );
+
+    test('a direct selection cancels the older pending tap', () async {
+      final container = buildContainer(profile: _selectedProfile('HK-00'));
+      final action = actionOf(container);
+      action.changeProxyDebounce('Proxy', 'HK-01');
+      final switching = action.changeProxy(
+        groupName: 'Proxy',
+        proxyName: 'HK-02',
+      );
+      switches['HK-02']!.complete(const ChangeProxyResult(changed: true));
+      await switching;
+
+      debouncer.flush((FunctionTag.changeProxy, 'Proxy'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(switches.keys, ['HK-02']);
+      expect(container.read(currentProfileProvider)?.selectedMap, {
+        'Proxy': 'HK-02',
+      });
+    });
+
+    test('a pending tap cannot select a node in another profile', () async {
+      final container = buildContainer(profile: _selectedProfile('HK-00'));
+      final action = actionOf(container);
+      action.changeProxyDebounce('Proxy', 'HK-01');
+      selectOtherProfile(container);
+
+      debouncer.flush((FunctionTag.changeProxy, 'Proxy'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(container.read(currentProfileProvider)?.selectedMap, {
+        'Proxy': 'JP-00',
+      });
+      verifyNever(() => core.changeProxy(any()));
+    });
+
+    test(
+      'each group keeps independent request ownership and rollback',
+      () async {
+        final container = buildContainer(
+          profile: _selectedProfile(
+            'HK-00',
+          ).copyWith(selectedMap: {'Proxy': 'HK-00', 'Media': 'US-00'}),
+        );
+        final action = actionOf(container);
+        final first = action.changeProxy(
+          groupName: 'Proxy',
+          proxyName: 'HK-01',
+        );
+        final second = action.changeProxy(
+          groupName: 'Media',
+          proxyName: 'US-01',
+        );
+        switches['US-01']!.complete(const ChangeProxyResult(changed: true));
+        await second;
+        switches['HK-01']!.completeError(StateError('one group failed'));
+        await first;
+
+        expect(container.read(currentProfileProvider)?.selectedMap, {
+          'Proxy': 'HK-00',
+          'Media': 'US-01',
+        });
+        expect(container.read(routeTrackerProvider).picks, 1);
+      },
+    );
+
+    for (final fails in [false, true]) {
+      test(
+        'a ${fails ? 'failed' : 'successful'} response is harmless after disposal',
+        () async {
+          final container = buildContainer(profile: _selectedProfile('HK-00'));
+          final switching = actionOf(
+            container,
+          ).changeProxy(groupName: 'Proxy', proxyName: 'HK-01');
+          container.dispose();
+
+          if (fails) {
+            switches['HK-01']!.completeError(StateError('disposed request'));
+          } else {
+            switches['HK-01']!.complete(const ChangeProxyResult(changed: true));
+          }
+          await expectLater(switching, completes);
+          verifyNever(core.closeConnections);
+          verifyNever(core.resetConnections);
+        },
+      );
+    }
+
+    test('disposal cancels a pending debounced selection', () async {
+      final container = buildContainer(profile: _selectedProfile('HK-00'));
+      actionOf(container).changeProxyDebounce('Proxy', 'HK-01');
+      container.dispose();
+
+      debouncer.flush((FunctionTag.changeProxy, 'Proxy'));
+      await Future<void>.delayed(Duration.zero);
+
+      verifyNever(() => core.changeProxy(any()));
+    });
+
+    test(
+      'a reset finishing after profile change does not announce a pick',
+      () async {
+        final reset = Completer<bool>();
+        final started = Completer<void>();
+        when(core.closeConnections).thenAnswer((_) {
+          started.complete();
+          return reset.future;
+        });
+        final container = buildContainer(profile: _selectedProfile('HK-00'));
+        container.read(appSettingProvider.notifier).value =
+            const AppSettingProps(closeConnections: true);
+        final switching = actionOf(
+          container,
+        ).changeProxy(groupName: 'Proxy', proxyName: 'HK-01');
+        switches['HK-01']!.complete(const ChangeProxyResult(changed: true));
+        await started.future;
+        selectOtherProfile(container);
+        reset.complete(true);
+        await switching;
+
+        expect(container.read(routeTrackerProvider).picks, 0);
+      },
+    );
+
+    test(
+      'a reset finishing after disposal does not access providers',
+      () async {
+        final reset = Completer<bool>();
+        final started = Completer<void>();
+        when(core.closeConnections).thenAnswer((_) {
+          started.complete();
+          return reset.future;
+        });
+        final container = buildContainer(profile: _selectedProfile('HK-00'));
+        container.read(appSettingProvider.notifier).value =
+            const AppSettingProps(closeConnections: true);
+        final switching = actionOf(
+          container,
+        ).changeProxy(groupName: 'Proxy', proxyName: 'HK-01');
+        switches['HK-01']!.complete(const ChangeProxyResult(changed: true));
+        await started.future;
+        container.dispose();
+        reset.complete(true);
+        await expectLater(switching, completes);
+      },
+    );
+  });
+
   group('proxyDelayTest', () {
     test('marks the node pending while it runs, then records it', () async {
       late ProviderContainer container;

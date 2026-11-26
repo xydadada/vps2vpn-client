@@ -41,9 +41,15 @@ class ProxiesAction extends _$ProxiesAction {
 
   final Map<String, String> _pendingSelectedRollback = {};
 
+  final Map<String, Object> _proxySelectionIntents = {};
+
   @override
   void build() {
-    ref.onDispose(() => _delayFlushTimer?.cancel());
+    ref.onDispose(() {
+      _delayFlushTimer?.cancel();
+      _cancelProxySelections();
+    });
+    ref.listen(currentProfileIdProvider, (_, _) => _cancelProxySelections());
     ref.listen(coreStatusProvider, (_, next) {
       if (next != CoreStatus.connected) {
         cancelDelayTests();
@@ -92,6 +98,21 @@ class ProxiesAction extends _$ProxiesAction {
   }
 
   void changeProxyDebounce(String groupName, String proxyName) {
+    if (!ref.mounted) return;
+    final intent = _beginProxySelection(groupName, proxyName);
+    debouncer.call((FunctionTag.changeProxy, groupName), () async {
+      if (!_ownsProxySelection(groupName, intent)) return;
+      await _changeProxy(groupName, proxyName, intent);
+      if (_ownsProxySelection(groupName, intent)) {
+        updateGroupsDebounce();
+      }
+    });
+  }
+
+  Object _beginProxySelection(String groupName, String proxyName) {
+    debouncer.cancel((FunctionTag.changeProxy, groupName));
+    final intent = Object();
+    _proxySelectionIntents[groupName] = intent;
     _pendingSelectedRollback.putIfAbsent(
       groupName,
       () => _currentSelectedName(groupName),
@@ -99,13 +120,19 @@ class ProxiesAction extends _$ProxiesAction {
     ref
         .read(profilesActionProvider.notifier)
         .updateCurrentSelectedMap(groupName, proxyName);
-    debouncer.call((FunctionTag.changeProxy, groupName), (
-      String groupName,
-      String proxyName,
-    ) async {
-      await changeProxy(groupName: groupName, proxyName: proxyName);
-      updateGroupsDebounce();
-    }, args: [groupName, proxyName]);
+    return intent;
+  }
+
+  bool _ownsProxySelection(String groupName, Object intent) {
+    return ref.mounted && identical(_proxySelectionIntents[groupName], intent);
+  }
+
+  void _cancelProxySelections() {
+    for (final groupName in _proxySelectionIntents.keys) {
+      debouncer.cancel((FunctionTag.changeProxy, groupName));
+    }
+    _proxySelectionIntents.clear();
+    _pendingSelectedRollback.clear();
   }
 
   String _currentSelectedName(String groupName) {
@@ -179,11 +206,18 @@ class ProxiesAction extends _$ProxiesAction {
     required String groupName,
     required String proxyName,
   }) async {
+    if (!ref.mounted) return;
+    final intent = _beginProxySelection(groupName, proxyName);
+    await _changeProxy(groupName, proxyName, intent);
+  }
+
+  Future<void> _changeProxy(
+    String groupName,
+    String proxyName,
+    Object intent,
+  ) async {
     final profilesAction = ref.read(profilesActionProvider.notifier);
-    final rollbackName =
-        _pendingSelectedRollback.remove(groupName) ??
-        _currentSelectedName(groupName);
-    profilesAction.updateCurrentSelectedMap(groupName, proxyName);
+    final rollbackName = _pendingSelectedRollback[groupName]!;
     final ChangeProxyResult result;
     try {
       result = await _core.changeProxy(
@@ -197,6 +231,8 @@ class ProxiesAction extends _$ProxiesAction {
         'changeProxy($groupName -> $proxyName) failed: $error',
         logLevel: coreFailureLogLevel(error),
       );
+      if (!_ownsProxySelection(groupName, intent)) return;
+      _pendingSelectedRollback.remove(groupName);
       profilesAction.updateCurrentSelectedMap(groupName, rollbackName);
       dialogs.showBanner(
         currentAppLocalizations.changeProxyFailedTip,
@@ -204,6 +240,8 @@ class ProxiesAction extends _$ProxiesAction {
       );
       return;
     }
+    if (!_ownsProxySelection(groupName, intent)) return;
+    _pendingSelectedRollback.remove(groupName);
     if (!result.changed) {
       return;
     }
@@ -220,7 +258,9 @@ class ProxiesAction extends _$ProxiesAction {
       );
     }
     // After the reset, which closes the probes out through the tunnel too.
-    ref.read(routeTrackerProvider.notifier).markPicked();
+    if (_ownsProxySelection(groupName, intent)) {
+      ref.read(routeTrackerProvider.notifier).markPicked();
+    }
   }
 
   Future<void> updateProvider(
