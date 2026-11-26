@@ -28,4 +28,4 @@ if sys.argv[2] == 'set':
 print(json.dumps({
     'selected': json.loads(profile['selected_map'] or '{}'),
     'traffic': profile.get('subscription_info'),
-}, ensure_ascii=False))
+}))
