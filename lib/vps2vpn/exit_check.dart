@@ -309,8 +309,8 @@ List<VpsFinding> vpsExitFindings(
             : local != null
             ? tr(
                 context,
-                '节点不走 IPv6，本机 IPv6 未外泄',
-                'node has no IPv6; yours stays home',
+                '节点不支持 IPv6，本机 IPv6 未外泄',
+                'the node has no IPv6; yours is not exposed',
               )
             : tr(context, '本机没有 IPv6', 'no IPv6 here'),
         leaks
@@ -396,7 +396,7 @@ String vpsExitVerdict(BuildContext context, List<VpsFinding> rows) {
   return tr(
     context,
     '${problems.length} 项有问题：${problems.join('；')}',
-    '${problems.length} to look at: ${problems.join('; ')}',
+    '${problems.length} issues: ${problems.join('; ')}',
   );
 }
 
@@ -476,7 +476,7 @@ class VpsFindingCard extends StatelessWidget {
                   child: Text(
                     settled
                         ? vpsExitVerdict(context, rows)
-                        : tr(context, '体检中…', 'Checking…'),
+                        : tr(context, '检测中…', 'Checking…'),
                     style: vpsText(
                       p,
                       size: 15,
@@ -494,7 +494,7 @@ class VpsFindingCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               VpsButton(
-                label: tr(context, '复制结果', 'Copy'),
+                label: tr(context, '复制结果', 'Copy results'),
                 onTap: !settled
                     ? null
                     : () async {

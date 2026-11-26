@@ -18,7 +18,7 @@ enum VpsLeg { network, dns, node, site }
 enum VpsLegState { waiting, running, ok, failed, skipped }
 
 String _legTitle(BuildContext context, VpsLeg leg) => switch (leg) {
-  VpsLeg.network => tr(context, '本机网络', 'This computer\'s network'),
+  VpsLeg.network => tr(context, '本机网络', 'This device\'s network'),
   VpsLeg.dns => tr(context, '域名解析（DNS）', 'Name lookup (DNS)'),
   VpsLeg.node => tr(context, '节点', 'Node'),
   VpsLeg.site => tr(context, '目标网站（Google）', 'A website (Google)'),
@@ -38,30 +38,30 @@ String vpsLegAdvice(
   ),
   VpsLeg.dns => tr(
     context,
-    '网能通，但查不到网站地址：断开再连接一次；还不行就重启电脑。',
-    'The network is up but names do not resolve: disconnect and connect again, or restart the computer.',
+    '网络已连通，但无法解析网站地址：请断开后重新连接；仍无法解决时请重启电脑。',
+    'The network is up but site names do not resolve: disconnect and connect again; if that fails, restart the computer.',
   ),
   VpsLeg.node =>
     on && subscriptionDown
         ? tr(
             context,
-            '本机网络正常，但线路和订阅地址都连不上：这是服务商那边的问题（服务器停了或换了地址），不是你的电脑断网。请联系提供者，拿到新链接后在「设置」的订阅卡上点"替换链接"。',
-            'Your network is fine, but neither the line nor the subscription address answers: the problem is on the provider\'s side (its server stopped or moved), not your computer. Contact your provider; with a new link, tap Replace link on the subscription in Settings.',
+            '本机网络正常，但节点和订阅链接都无法连接，问题在服务器一侧（服务器已停止或更换了地址），不是本机断网。请联系管理员获取新链接，然后在「设置」的订阅卡片上点击「替换链接」。',
+            'Your network is fine, but neither the node nor the subscription link answers: the problem is on the server\'s side (it stopped or moved), not this device. Ask the owner for a new link, then ${Platform.isAndroid ? 'tap' : 'click'} Replace link on the subscription card in Settings.',
           )
         : on
         ? tr(
             context,
-            '本机网络正常，但节点连不上：到「节点」换一个；都不行就联系管理员看看服务器。',
-            'Your network is fine but the node does not answer: pick another in Nodes, or ask the owner to check the server.',
+            '本机网络正常，但节点无法连接：请在「节点」中更换节点；都无法连接时，请联系管理员检查服务器。',
+            'Your network is fine but the node does not answer: pick another in Nodes; if none answers, ask the owner to check the server.',
           )
         : tr(
             context,
-            '本机网络正常，还没有连接：回到「概览」点"连接"。',
-            'Your network is fine; you are not connected yet: tap Connect on Overview.',
+            '本机网络正常，还没有连接：请回到「概览」点击「连接」。',
+            'Your network is fine; you are not connected yet: ${Platform.isAndroid ? 'tap' : 'click'} Connect on Overview.',
           ),
   VpsLeg.site => tr(
     context,
-    '节点能用，但这个网站打不开：可能是网站限制了这个地区，换个节点试试。',
+    '节点可用，但这个网站无法访问：网站可能限制了该地区，请更换节点后重试。',
     'The node works but this site does not open: it may block the region; try another node.',
   ),
 };
@@ -216,8 +216,8 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
               const SizedBox(width: 12),
               VpsButton(
                 label: _running
-                    ? tr(context, '诊断中…', 'Running…')
-                    : tr(context, '开始诊断', 'Diagnose'),
+                    ? tr(context, '诊断中…', 'Diagnosing…')
+                    : tr(context, '开始诊断', 'Run diagnosis'),
                 onTap: _running ? null : _start,
               ),
             ],
@@ -259,7 +259,7 @@ class _VpsDiagnoseCardState extends ConsumerState<VpsDiagnoseCard> {
                         VpsLegState.running => tr(context, '检查中…', 'Checking…'),
                         VpsLegState.ok => tr(context, '正常', 'OK'),
                         VpsLegState.failed => tr(context, '不通', 'Fails'),
-                        VpsLegState.skipped => tr(context, '没查', 'Skipped'),
+                        VpsLegState.skipped => tr(context, '已跳过', 'Skipped'),
                       },
                       color: switch (_states[leg]!) {
                         VpsLegState.ok => p.good,

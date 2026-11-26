@@ -450,7 +450,7 @@ class _ShotRun {
     await _settle(8000);
     await _round(
       'legend',
-      tabs: const [vpsTabHome, vpsTabServers, vpsTabMe],
+      tabs: _tabs.keys.toList(),
       sizes: const ['wide', 'default'],
     );
     // The default window shows the tiles only once scrolled to them.

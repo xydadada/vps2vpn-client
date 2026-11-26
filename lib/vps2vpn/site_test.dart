@@ -144,7 +144,7 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
                   on
                       ? tr(
                           context,
-                          '经当前节点测这些网站的延迟',
+                          '通过当前节点测试这些网站的延迟',
                           'Latency to these sites through your node',
                         )
                       : tr(context, '连接后可以测试', 'Connect to test'),
@@ -154,8 +154,8 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
               const SizedBox(width: 12),
               VpsButton(
                 label: _testing
-                    ? tr(context, '测试中…', 'Testing…')
-                    : tr(context, '全部测试', 'Test all'),
+                    ? tr(context, '测速中…', 'Testing…')
+                    : tr(context, '全部测速', 'Test all'),
                 icon: VpsIcon.bolt,
                 onTap: !on || _testing || picked == null ? null : _testAll,
               ),
@@ -252,7 +252,7 @@ class _SiteRowState extends State<_SiteRow> {
                   duration: VpsMotion.fast,
                   child: VpsPressable(
                     onTap: widget.onRemove,
-                    semanticLabel: tr(context, '删除', 'Remove'),
+                    semanticLabel: tr(context, '移除', 'Remove'),
                     child: SizedBox(
                       width: 28,
                       height: 28,
@@ -288,7 +288,7 @@ class _Delay extends ConsumerWidget {
     return switch (d) {
       null => VpsChip(label: tr(context, '未测', 'Not tested'), color: p.muted),
       0 => VpsChip(label: tr(context, '测试中…', 'Testing…'), color: p.muted),
-      < 0 => VpsChip(label: tr(context, '打不开', 'Fails'), color: p.bad),
+      < 0 => VpsChip(label: tr(context, '无法访问', 'Unreachable'), color: p.bad),
       final ms => VpsChip(
         label: '$ms ms',
         color: ms < 300 ? p.good : (ms < 800 ? p.warn : p.bad),

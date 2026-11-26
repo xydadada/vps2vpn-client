@@ -1922,11 +1922,11 @@ class _AiStripState extends ConsumerState<_AiStrip> {
                     ),
                     Text(
                       ref.watch(isStartProvider)
-                          ? tr(context, '经由当前线路', 'Through the current line')
+                          ? tr(context, '经由当前节点', 'Through the current node')
                           : tr(
                               context,
-                              '未连接 · 当前为直连结果',
-                              'Not connected · direct results',
+                              '未连接 · 以下为直连结果',
+                              'Not connected · direct results below',
                             ),
                       style: vpsText(p, size: 12.5, color: p.soft),
                     ),

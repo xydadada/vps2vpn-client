@@ -147,8 +147,8 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                     child: Text(
                       tr(
                         context,
-                        '未连接 · 以下为直连检测结果',
-                        'Not connected · results below are direct',
+                        '未连接 · 以下为直连结果',
+                        'Not connected · direct results below',
                       ),
                       style: vpsText(p, size: 13.5),
                     ),
@@ -313,7 +313,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
           const SizedBox(height: 22),
           VpsSectionTitle(
             name == '常用'
-                ? tr(context, '常用服务', 'Everyday')
+                ? tr(context, '常用服务', 'Everyday services')
                 : name == '影音'
                 ? tr(context, '流媒体', 'Streaming')
                 : name,
@@ -335,7 +335,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
         VpsSectionTitle(tr(context, '网站测试', 'Website test')),
         const VpsSiteTestCard(),
         const SizedBox(height: 22),
-        VpsSectionTitle(tr(context, '网络诊断', 'Diagnosis')),
+        VpsSectionTitle(tr(context, '网络诊断', 'Network diagnosis')),
         const VpsDiagnoseCard(),
       ],
     );

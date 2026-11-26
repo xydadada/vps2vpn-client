@@ -120,7 +120,7 @@ List<VpsFinding> vpsClaudeFindings(
   final status = claude.value?.status;
   rows.add(
     VpsFinding(
-      tr(context, 'Claude 能否打开', 'Claude opens'),
+      tr(context, 'Claude 能否打开', 'Can Claude open?'),
       statusText(context, claude),
       switch (status) {
         null => VpsFindingLevel.none,
@@ -166,11 +166,11 @@ List<VpsFinding> vpsClaudeFindings(
       VpsFinding(
         tr(context, 'Claude 各域名的出口', 'Exit for Claude\'s hosts'),
         split
-            ? tr(context, '网页和 API 出口不同', 'web and API leave apart')
+            ? tr(context, '网页和 API 出口不同', 'web and API use different exits')
             : missing
             ? tr(context, '有域名查不到', 'some hosts did not answer')
             : apart
-            ? tr(context, '同一专用出口', 'one exit of its own')
+            ? tr(context, '同一专用出口', 'one dedicated exit')
             : tr(context, '同一出口', 'one exit'),
         split
             ? VpsFindingLevel.bad
@@ -196,7 +196,7 @@ List<VpsFinding> vpsClaudeFindings(
         proxy == null
             ? tr(context, '没有设置', 'not set')
             : ours
-            ? tr(context, '指向本软件', 'points here')
+            ? tr(context, '指向 vps2vpn', 'points to vps2vpn')
             : tr(context, '指向别处', 'points elsewhere'),
         proxy == null
             ? VpsFindingLevel.none
@@ -204,7 +204,11 @@ List<VpsFinding> vpsClaudeFindings(
             ? VpsFindingLevel.good
             : VpsFindingLevel.warn,
         problem: proxy != null && !ours
-            ? tr(context, '终端代理没有指向本软件', 'the terminal proxy points elsewhere')
+            ? tr(
+                context,
+                '终端代理没有指向 vps2vpn',
+                'the terminal proxy does not point to vps2vpn',
+              )
             : null,
       ),
     );
@@ -261,7 +265,7 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
       title: tr(context, 'Claude 环境检查', 'Claude environment'),
       subtitle: tr(
         context,
-        '只看环境是否一致；Anthropic 没有公开它的判断规则',
+        '只检查环境是否一致；Anthropic 未公开其判断规则',
         'Checks only that things agree; Anthropic does not publish its rules',
       ),
       action: VpsButton(
@@ -274,7 +278,7 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
           VpsCard(
             onTap: () => vpsTab.value = vpsTabHome,
             child: Text(
-              tr(context, '先连接，再来这里检查', 'Connect first, then check here'),
+              tr(context, '请先连接，再进行检测', 'Connect first, then check'),
               style: vpsText(p, size: 14, color: p.warn),
             ),
           )
