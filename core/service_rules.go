@@ -314,6 +314,9 @@ func primeVideoResult(result *ProbeResult) ServiceCheckItem {
 
 func checkNetflix(env serviceEnv) ServiceCheckItem {
 	if item := netflixFromCdn(env); item.Status == serviceAvailable || item.Status == serviceBlocked {
+		if item.Status == serviceAvailable {
+			item.Region = netflixRegion(env)
+		}
 		return item
 	}
 
@@ -355,14 +358,36 @@ func netflixRegion(env serviceEnv) string {
 		url:        "https://www.netflix.com/title/80018499",
 		noRedirect: true,
 	})
-	if result == nil || result.Error != "" || result.header == nil {
+	if result == nil || result.Error != "" {
 		return ""
 	}
-	segments := strings.Split(result.header.Get("Location"), "/")
-	if len(segments) < 4 {
+	location := ""
+	if result.header != nil {
+		location = result.header.Get("Location")
+	}
+	return netflixRegionFrom(result.StatusCode, location)
+}
+
+var netflixLocalePattern = regexp.MustCompile(`^([a-z]{2})(?:-[a-z]{2})?$`)
+
+// Netflix keeps the US at unprefixed paths, other countries at /xx(-yy)/.
+func netflixRegionFrom(status int, location string) string {
+	if location == "" {
+		if status == http.StatusOK {
+			return "US"
+		}
 		return ""
 	}
-	return normalizeRegion(strings.Split(segments[3], "-")[0])
+	parsed, err := url.Parse(location)
+	if err != nil {
+		return ""
+	}
+	first, _, _ := strings.Cut(strings.TrimPrefix(parsed.Path, "/"), "/")
+	match := netflixLocalePattern.FindStringSubmatch(strings.ToLower(first))
+	if match == nil {
+		return ""
+	}
+	return normalizeRegion(match[1])
 }
 
 func netflixFromCdn(env serviceEnv) ServiceCheckItem {
@@ -387,7 +412,6 @@ func netflixFromCdn(env serviceEnv) ServiceCheckItem {
 		item.Status = serviceFailed
 		return item
 	}
-	item.Region = normalizeRegion(payload.Targets[0].Location.Country)
 	item.Status = serviceAvailable
 	return item
 }

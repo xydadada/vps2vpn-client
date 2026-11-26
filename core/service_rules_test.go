@@ -105,6 +105,26 @@ func TestBilibiliStatusReadsTheLeadingCode(t *testing.T) {
 	}
 }
 
+func TestNetflixRegionReadsTheCataloguePath(t *testing.T) {
+	cases := []struct {
+		status   int
+		location string
+		want     string
+	}{
+		{200, "", "US"},
+		{301, "https://www.netflix.com/gb/title/80018499", "GB"},
+		{302, "https://www.netflix.com/co-en/title/80018499", "CO"},
+		{302, "/jp/title/80018499", "JP"},
+		{302, "https://www.netflix.com/login", ""},
+		{403, "", ""},
+	}
+	for _, c := range cases {
+		if got := netflixRegionFrom(c.status, c.location); got != c.want {
+			t.Errorf("netflixRegionFrom(%d, %q) = %q, want %q", c.status, c.location, got, c.want)
+		}
+	}
+}
+
 func TestSpotifyRegionPrefersTheRedirectedPath(t *testing.T) {
 	redirected := &ProbeResult{Url: "https://www.spotify.com/de-de/", Body: `{"countryCode":"US"}`}
 	if got := spotifyRegion(redirected); got != "de" {

@@ -8,7 +8,13 @@ import 'dart:ui' as ui;
 
 import 'package:fl_clash/ui/fonts.dart';
 import 'package:prism_ui/prism_ui.dart'
-    show AppRadius, AppShape, BuildContextExtension, SpringCurve;
+    show
+        AppRadius,
+        AppShape,
+        BuildContextExtension,
+        InputDecoration,
+        SpringCurve,
+        TextField;
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -953,7 +959,134 @@ class VpsButton extends StatelessWidget {
   }
 }
 
-/// A smooth custom switch.
+/// A text field as tall as a [VpsButton] beside it, in its type size, its
+/// edge neutral until it has focus.
+class VpsField extends StatefulWidget {
+  const VpsField({
+    super.key,
+    required this.controller,
+    this.focusNode,
+    this.hint,
+    this.error,
+    this.errorMaxLines = 2,
+    this.keyboardType,
+    this.textInputAction,
+    this.minLines,
+    this.maxLines = 1,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final String? hint;
+  final String? error;
+  final int errorMaxLines;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final int? minLines;
+  final int? maxLines;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  State<VpsField> createState() => _VpsFieldState();
+}
+
+class _VpsFieldState extends State<VpsField> {
+  FocusNode? _own;
+
+  FocusNode get _focus => widget.focusNode ?? (_own ??= FocusNode());
+
+  void _changed() => setState(() {});
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(VpsField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final old = oldWidget.focusNode ?? _own;
+    if (old != _focus) {
+      old?.removeListener(_changed);
+      _focus.addListener(_changed);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_changed);
+    _own?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final error = widget.error;
+    final focused = _focus.hasFocus;
+    final edge = error != null
+        ? p.bad
+        : focused
+        ? p.accent
+        : p.line;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: VpsMotion.fast,
+          curve: VpsMotion.settle,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: ShapeDecoration(
+            color: p.card,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(VpsRadius.medium),
+              side: BorderSide(color: edge),
+            ),
+            shadows: [
+              BoxShadow(
+                color: edge.withValues(alpha: focused ? 0.16 : 0),
+                spreadRadius: 3,
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: widget.controller,
+            focusNode: _focus,
+            keyboardType: widget.keyboardType,
+            textInputAction: widget.textInputAction,
+            autocorrect: false,
+            minLines: widget.minLines,
+            maxLines: widget.maxLines,
+            onChanged: widget.onChanged,
+            onSubmitted: widget.onSubmitted,
+            cursorColor: p.accent,
+            style: vpsText(p, size: 13.5),
+            decoration: InputDecoration.collapsed(
+              hintText: widget.hint ?? '',
+              hintStyle: vpsText(p, size: 13.5, color: p.muted),
+            ),
+          ),
+        ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+            child: Text(
+              error,
+              maxLines: widget.errorMaxLines,
+              overflow: TextOverflow.ellipsis,
+              style: vpsText(p, size: 12, color: p.bad),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Scrolls [child]; an edge with more beyond it fades out, so a line is never
 /// cut in half there.
 class VpsFadingScroll extends StatefulWidget {
@@ -1005,6 +1138,7 @@ class _VpsFadingScrollState extends State<VpsFadingScroll> {
   }
 }
 
+/// A smooth custom switch.
 class VpsSwitch extends StatelessWidget {
   const VpsSwitch({super.key, required this.value, required this.onChanged});
 
@@ -1434,6 +1568,7 @@ enum VpsIcon {
   plus,
   chevron,
   tick,
+  close,
 }
 
 class VpsIconView extends StatelessWidget {
@@ -1694,6 +1829,10 @@ class _IconPainter extends CustomPainter {
           ]),
           p..strokeWidth = 2.6 * u,
         );
+      case VpsIcon.close:
+        canvas
+          ..drawLine(o(6.5, 6.5), o(17.5, 17.5), p)
+          ..drawLine(o(17.5, 6.5), o(6.5, 17.5), p);
     }
   }
 

@@ -525,14 +525,17 @@ class VpsFindingCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Flexible(
-                    child: VpsChip(
-                      label: r.value,
-                      color: switch (r.level) {
-                        VpsFindingLevel.good => p.good,
-                        VpsFindingLevel.warn => p.warn,
-                        VpsFindingLevel.bad => p.bad,
-                        VpsFindingLevel.none => p.soft,
-                      },
+                    child: Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: VpsChip(
+                        label: r.value,
+                        color: switch (r.level) {
+                          VpsFindingLevel.good => p.good,
+                          VpsFindingLevel.warn => p.warn,
+                          VpsFindingLevel.bad => p.bad,
+                          VpsFindingLevel.none => p.soft,
+                        },
+                      ),
                     ),
                   ),
                 ],

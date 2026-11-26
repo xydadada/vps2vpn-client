@@ -2,13 +2,13 @@
 // the node in use.
 
 import 'package:fl_clash/common/preferences.dart';
+import 'package:fl_clash/common/system.dart' show system;
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/home.dart' show mainGroup;
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart' show InputDecoration, TextField;
 
 typedef VpsSite = ({String name, String url});
 
@@ -163,49 +163,29 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
           ),
           const SizedBox(height: 6),
           for (final site in _sites)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      site.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: vpsText(p, size: 14, weight: FontWeight.w500),
-                    ),
-                  ),
-                  if (picked != null) _Delay(proxyName: picked, url: site.url),
-                  const SizedBox(width: 10),
-                  VpsPressable(
-                    onTap: () =>
-                        _save([..._sites.where((s) => s.url != site.url)]),
-                    child: Text(
-                      tr(context, '删除', 'Remove'),
-                      style: vpsText(p, size: 12.5, color: p.muted),
-                    ),
-                  ),
-                ],
-              ),
+            _SiteRow(
+              name: site.name,
+              delay: picked == null
+                  ? null
+                  : _Delay(proxyName: picked, url: site.url),
+              onRemove: () =>
+                  _save([..._sites.where((s) => s.url != site.url)]),
             ),
           const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: TextField(
+                child: VpsField(
                   controller: _input,
                   keyboardType: TextInputType.url,
-                  autocorrect: false,
                   onSubmitted: (_) => _add(),
-                  decoration: InputDecoration(
-                    hintText: tr(
-                      context,
-                      '添加网站，例如 github.com',
-                      'Add a site, e.g. github.com',
-                    ),
-                    errorText: _error,
+                  hint: tr(
+                    context,
+                    '添加网站，例如 github.com',
+                    'Add a site, e.g. github.com',
                   ),
+                  error: _error,
                 ),
               ),
               const SizedBox(width: 10),
@@ -217,6 +197,79 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A site; its remove x shows while the pointer is on the row, and always
+/// where there is no pointer.
+class _SiteRow extends StatefulWidget {
+  const _SiteRow({
+    required this.name,
+    required this.delay,
+    required this.onRemove,
+  });
+
+  final String name;
+  final Widget? delay;
+  final VoidCallback onRemove;
+
+  @override
+  State<_SiteRow> createState() => _SiteRowState();
+}
+
+class _SiteRowState extends State<_SiteRow> {
+  var _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final shown = _hover || !system.isDesktop;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: vpsText(p, size: 14, weight: FontWeight.w500),
+              ),
+            ),
+            ?widget.delay,
+            const SizedBox(width: 4),
+            ExcludeFocus(
+              excluding: !shown,
+              child: IgnorePointer(
+                ignoring: !shown,
+                child: AnimatedOpacity(
+                  opacity: shown ? 1 : 0,
+                  duration: VpsMotion.fast,
+                  child: VpsPressable(
+                    onTap: widget.onRemove,
+                    semanticLabel: tr(context, '删除', 'Remove'),
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: Center(
+                        child: VpsIconView(
+                          VpsIcon.close,
+                          size: 14,
+                          color: p.soft,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

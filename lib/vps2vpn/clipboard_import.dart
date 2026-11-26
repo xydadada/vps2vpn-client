@@ -7,7 +7,6 @@ import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart' show InputDecoration, TextField;
 
 enum VpsImportResult { added, failed }
 
@@ -350,27 +349,24 @@ class VpsImportFieldState extends ConsumerState<VpsImportField> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        TextField(
+        VpsField(
           controller: _controller,
           focusNode: _focus,
           minLines: 1,
           maxLines: 4,
           keyboardType: TextInputType.url,
-          autocorrect: false,
           textInputAction: TextInputAction.go,
           onSubmitted: (_) => _import(),
           onChanged: (_) {
             if (_error != null) setState(() => _error = null);
           },
-          decoration: InputDecoration(
-            hintText: tr(
-              context,
-              '粘贴或输入订阅链接',
-              'Paste or type your subscription link',
-            ),
-            errorText: _error,
-            errorMaxLines: 3,
+          hint: tr(
+            context,
+            '粘贴或输入订阅链接',
+            'Paste or type your subscription link',
           ),
+          error: _error,
+          errorMaxLines: 3,
         ),
         const SizedBox(height: 12),
         Wrap(
