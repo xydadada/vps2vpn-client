@@ -73,11 +73,11 @@ String? vpsLinkSource(String link) {
   return uri.host;
 }
 
-/// [link] when it is an http(s) address on this PC (127.0.0.1, localhost or
-/// ::1), else null.
+/// [link] when it is an http(s) address on this PC, written as 127.0.0.1 or
+/// ::1 (a hosts file can point "localhost" elsewhere), else null.
 String? vpsLoopbackLink(String? link) {
   final host = link == null ? null : vpsLinkSource(link);
-  const loopback = {'127.0.0.1', 'localhost', '::1'};
+  const loopback = {'127.0.0.1', '::1'};
   return host != null && loopback.contains(host) ? link!.trim() : null;
 }
 
@@ -1399,8 +1399,11 @@ VpsClientRelease? vpsReleaseFromGitHub(
   if (assets is List) {
     for (final a in assets) {
       if (a is! Map) continue;
+      // Parsed first, so "../" cannot step out of the repository.
       final url = Uri.tryParse('${a['browser_download_url'] ?? ''}');
-      if (url != null && url.isScheme('https')) listed['${a['name']}'] = url;
+      if (url != null && '$url'.startsWith(_releaseDownloads)) {
+        listed['${a['name']}'] = url;
+      }
     }
   }
   Uri file(String name) =>
@@ -1425,6 +1428,10 @@ VpsClientRelease? vpsReleaseFromGitHub(
 }
 
 const _testReleaseBody = 'Pre-release for the automated installer check';
+
+// Assets elsewhere are ignored even though the signature would refuse them.
+const _releaseDownloads =
+    'https://github.com/$vpsReleaseRepository/releases/download/';
 
 String? vpsReleaseSummary(String? notes, {required bool zh}) {
   if (notes == null) return null;

@@ -481,7 +481,13 @@ void main() {
         'assets': [
           {
             'name': 'vps2vpn-1.2.0-windows-amd64-setup.exe',
-            'browser_download_url': 'https://example.com/a/setup.exe',
+            'browser_download_url':
+                'https://github.com/$vpsReleaseRepository/releases/download/'
+                'v1.2.0/vps2vpn-1.2.0-windows-amd64-setup.exe?x=1',
+          },
+          {
+            'name': 'vps2vpn-1.2.0-windows-amd64-portable.zip',
+            'browser_download_url': 'https://example.com/a/portable.zip',
           },
         ],
       };
@@ -489,7 +495,8 @@ void main() {
       expect(installed.version, '1.2.0');
       expect(
         installed.files['windows'].toString(),
-        'https://example.com/a/setup.exe',
+        'https://github.com/$vpsReleaseRepository/releases/download/'
+        'v1.2.0/vps2vpn-1.2.0-windows-amd64-setup.exe?x=1',
       );
       final portable = vpsReleaseFromGitHub(json, installed: false)!;
       expect(
