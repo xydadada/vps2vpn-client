@@ -89,7 +89,7 @@ class ApplicationState extends ConsumerState<Application> {
     vpsBeforeSystemProxy = vpsNoteForeignProxy;
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       if (globalState.navigatorKey.currentContext != null) {
-        await bootstrap.attach();
+        if (!await bootstrap.attach() || !mounted) return;
       } else {
         exit(0);
       }
