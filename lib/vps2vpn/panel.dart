@@ -1325,6 +1325,11 @@ final _activeReleaseDownloads = <String>{};
 
 const vpsReleaseRepository = 'xydadada/vps2vpn-client';
 
+/// CI's stand-in for the releases API; only a loopback address is taken.
+final _releaseFeed = vpsLoopbackLink(
+  Platform.environment['VPS2VPN_RELEASE_FEED'],
+);
+
 /// Null when nothing is published. When the API's hourly quota is spent the
 /// tag comes from the release page's redirect.
 Future<VpsClientRelease?> vpsLatestGitHubRelease({
@@ -1334,12 +1339,15 @@ Future<VpsClientRelease?> vpsLatestGitHubRelease({
 }) async {
   final client = _client(proxyPort: proxyPort, proxyAuth: proxyAuth);
   try {
+    final feed = _releaseFeed;
     final api = await client
         .getUrl(
-          Uri.https(
-            'api.github.com',
-            '/repos/$vpsReleaseRepository/releases/latest',
-          ),
+          feed != null
+              ? Uri.parse(feed)
+              : Uri.https(
+                  'api.github.com',
+                  '/repos/$vpsReleaseRepository/releases/latest',
+                ),
         )
         .timeout(const Duration(seconds: 15));
     api.headers

@@ -239,6 +239,23 @@ void main() {
         expect(later.events, ['getConfigMap', 'getVersion']);
       });
 
+      test('an upgrade from before the takeover question skips it', () async {
+        Future<bool> asked(int from, {bool installed = true}) async {
+          final store = _FakeMigrationStore(
+            configMap: installed ? _createConfigMap() : null,
+            version: installed ? Migration.currentVersion : 0,
+            upgradeVersion: from,
+          );
+          await Migration(store: store).run();
+          return store.takeoverAsked;
+        }
+
+        expect(await asked(5), isTrue);
+        expect(await asked(0), isTrue);
+        expect(await asked(6), isFalse);
+        expect(await asked(0, installed: false), isFalse);
+      });
+
       test('keeps standard glass on the ultra tier it became, once', () async {
         Future<LiquidGlassMode> upgrade(String mode, int from) async {
           final configMap = _createConfigMap();
@@ -534,6 +551,7 @@ class _FakeMigrationStore implements MigrationStore {
   Config? savedConfig;
   MigrationData? restoredData;
   bool didClearClashConfig = false;
+  bool takeoverAsked = false;
 
   _FakeMigrationStore({
     required this.configMap,
@@ -600,5 +618,10 @@ class _FakeMigrationStore implements MigrationStore {
   Future<void> setUpgradeVersion(int version) async {
     events.add('setUpgradeVersion');
     upgradeVersion = version;
+  }
+
+  @override
+  Future<void> setTakeoverAsked() async {
+    takeoverAsked = true;
   }
 }
