@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -129,6 +130,34 @@ void main() {
       again.read(vpsRemovedProvider);
       await Future<void>.delayed(Duration.zero);
       expect(again.read(vpsRemovedProvider), {3});
+    });
+
+    test('a live restore wins over late saved removal state', () async {
+      final loading = Completer<String?>();
+      final saved = Completer<void>();
+      String? stored;
+      vpsRemovedLoad = () => loading.future;
+      vpsRemovedSave = (value) async {
+        stored = value;
+        saved.complete();
+      };
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final notifier = c.read(vpsRemovedProvider.notifier);
+      notifier.mark(3, false);
+      notifier.mark(4, true);
+      expect(stored, isNull);
+      loading.complete('[3,5]');
+      await saved.future;
+      expect(c.read(vpsRemovedProvider), {4, 5});
+      expect((jsonDecode(stored!) as List).toSet(), {4, 5});
+
+      vpsRemovedLoad = () async => stored;
+      final again = ProviderContainer();
+      addTearDown(again.dispose);
+      again.read(vpsRemovedProvider);
+      await Future<void>.delayed(Duration.zero);
+      expect(again.read(vpsRemovedProvider), {4, 5});
     });
   });
 
