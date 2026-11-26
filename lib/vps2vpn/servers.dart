@@ -769,11 +769,7 @@ extension on _ProxyCard {
       return TextSpan(text: tr(context, 'AI 服务固定出口', 'Steady exit for AI'));
     }
     final parts = <InlineSpan>[
-      if (using)
-        TextSpan(
-          text: tr(context, '使用中', 'In use'),
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+      if (using) TextSpan(text: tr(context, '使用中', 'In use')),
       if (protocol != null) TextSpan(text: protocol),
       if (rate != null)
         TextSpan(
