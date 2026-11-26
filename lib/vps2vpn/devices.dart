@@ -996,7 +996,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
       if (d.version.isNotEmpty) 'v${d.version}',
       if (d.ip.isNotEmpty) d.ip,
       _ago(context, d.lastSeen),
-    ].where((s) => s.isNotEmpty).join(' · ');
+    ].where((s) => s.isNotEmpty).toList();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1016,7 +1016,17 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                     style: vpsText(p, size: 14, weight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
-                  Text(meta, style: vpsText(p, size: 12, color: p.muted)),
+                  // Wraps between the parts, never inside "12 分钟前".
+                  Wrap(
+                    children: [
+                      for (final (i, part) in meta.indexed)
+                        Text(
+                          i == meta.length - 1 ? part : '$part · ',
+                          softWrap: false,
+                          style: vpsText(p, size: 12, color: p.muted),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),

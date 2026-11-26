@@ -375,11 +375,12 @@ class _ShotRun {
         );
         await close();
         dialogs.showBanner(
-          '订阅内容读不懂，可能链接不完整或服务器返回了错误页面。请向管理员确认链接。',
+          '订阅内容读不懂，链接可能不完整或服务器出错，请向管理员确认。',
           level: BannerLevel.error,
         );
         await _settle(1200);
         await _shoot('audit-banner-error-$tag');
+        await _settle(6000);
         dialogs.showBanner(vpsRemovedText(here()));
         await _settle(1200);
         await _shoot('audit-banner-removed-$tag');

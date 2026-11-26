@@ -38,7 +38,7 @@ String? vpsPlainError(String raw, AppLocalizations l10n) {
     'decrypt config',
   ])) {
     return say(
-      '订阅内容读不懂，可能链接不完整或服务器返回了错误页面。请向管理员确认链接。',
+      '订阅内容读不懂，链接可能不完整或服务器出错，请向管理员确认。',
       'The subscription could not be read; the link may be incomplete or the server sent an error page. Check the link with the owner.',
     );
   }
