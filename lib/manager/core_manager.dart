@@ -11,7 +11,6 @@ import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/providers/database.dart';
 import 'package:fl_clash/providers/route_state.dart';
 import 'package:fl_clash/providers/state.dart';
-import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/crash_restart.dart';
 import 'package:fl_clash/vps2vpn/devices.dart';
 import 'package:fl_clash/vps2vpn/feedback.dart';
@@ -34,6 +33,8 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     with CoreEventListener {
   CoreController get _core => ref.read(coreHandlerProvider);
   final _crashRestarts = VpsCrashRestarts();
+  Timer? _crashRestartTimer;
+  bool _recovering = false;
 
   // vps2vpn: see lib/common/tun_self_check.dart. Windows only, where FlClash
   // #3020 shows TUN "on" with no adapter.
@@ -184,6 +185,7 @@ class _CoreContainerState extends ConsumerState<CoreManager>
 
   @override
   void dispose() {
+    _crashRestartTimer?.cancel();
     _tunSelfCheck.dispose();
     coreEventManager.removeListener(this);
     super.dispose();
@@ -270,26 +272,44 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     }
     ref.read(coreStatusProvider.notifier).value = CoreStatus.disconnected;
     ref.read(coreStopReasonProvider.notifier).value = message;
-    final setup = ref.read(setupActionProvider.notifier)..onCoreLost();
+    ref.read(setupActionProvider.notifier).onCoreLost();
     if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
       dialogs.showBanner(message, level: BannerLevel.error);
     }
-    // vps2vpn: onCoreLost already put the system proxy back; restartCore
-    // brings the run back too, but only while wantsRunning.
-    if (system.isDesktop && setup.wantsRunning && _crashRestarts.take()) {
-      Future<void>.delayed(const Duration(seconds: 2), () {
-        if (!mounted ||
-            ref.read(coreStatusProvider) != CoreStatus.disconnected) {
-          return;
-        }
-        unawaited(
-          globalState.safeRun(
-            ref.read(coreActionProvider.notifier).restartCore,
-          ),
-        );
-      });
-    }
+    _scheduleCrashRestart(const Duration(seconds: 2));
     super.onCrash(message);
+  }
+
+  void _scheduleCrashRestart(Duration delay) {
+    if (!mounted ||
+        !system.isDesktop ||
+        _recovering ||
+        _crashRestartTimer != null ||
+        !ref.read(setupActionProvider.notifier).wantsRunning ||
+        ref.read(coreStatusProvider) != CoreStatus.disconnected) {
+      return;
+    }
+    _crashRestartTimer = Timer(delay, () async {
+      _crashRestartTimer = null;
+      if (!mounted ||
+          !ref.read(setupActionProvider.notifier).wantsRunning ||
+          ref.read(coreStatusProvider) != CoreStatus.disconnected ||
+          !_crashRestarts.take()) {
+        return;
+      }
+      _recovering = true;
+      try {
+        await ref.read(coreActionProvider.notifier).restartCore();
+      } catch (error) {
+        commonPrint.log(
+          'automatic Core restart failed: ${compactError(error)}',
+          logLevel: LogLevel.warning,
+        );
+      } finally {
+        _recovering = false;
+        _scheduleCrashRestart(delay * 2);
+      }
+    });
   }
 
   @override

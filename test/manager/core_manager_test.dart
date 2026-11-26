@@ -83,6 +83,44 @@ class _LostRecordingSetupAction extends SetupAction {
   void onCoreLost() => lostCount++;
 }
 
+class _RecoverySetupAction extends SetupAction {
+  bool runningIntent = true;
+  int resumes = 0;
+
+  @override
+  bool get wantsRunning => runningIntent;
+
+  @override
+  void onCoreLost() {}
+
+  @override
+  Future<bool> setRunning(bool running, {bool initialize = false}) async {
+    runningIntent = running;
+    if (running) resumes++;
+    return true;
+  }
+}
+
+class _RecoveryCoreAction extends CoreAction {
+  _RecoveryCoreAction({required this.failures});
+
+  final int failures;
+  int attempts = 0;
+
+  @override
+  Future<void> initCore() async {}
+
+  @override
+  Future<CoreLifecycleResult> restartLifecycle() async {
+    attempts++;
+    if (attempts <= failures) throw StateError('temporary launch failure');
+    return CoreLifecycleResult(
+      revision: attempts,
+      outcome: CoreLifecycleOutcome.applied,
+    );
+  }
+}
+
 _MockCoreHandlerInterface _coreInterface() {
   final coreInterface = _MockCoreHandlerInterface();
   when(() => coreInterface.startLog()).thenAnswer((_) async {});
@@ -270,6 +308,107 @@ void main() {
     expect(find.text('boom'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  group('automatic crash recovery', () {
+    late _RecoverySetupAction setup;
+    late _RecoveryCoreAction core;
+
+    Future<ProviderContainer> crash(
+      WidgetTester tester, {
+      int failures = 1,
+    }) async {
+      setup = _RecoverySetupAction();
+      core = _RecoveryCoreAction(failures: failures);
+      final container = await _pumpCoreManager(
+        tester,
+        _coreInterface(),
+        overrides: [
+          setupActionProvider.overrideWith(() => setup),
+          coreActionProvider.overrideWith(() => core),
+        ],
+      );
+      container.read(coreStatusProvider.notifier).value = CoreStatus.connected;
+      // Invoke the mounted listener in this test's clock zone.
+      final listener =
+          tester.state(find.byType(CoreManager)) as CoreEventListener;
+      listener.onCrash('boom');
+      await tester.pump();
+      expect(container.read(coreStatusProvider), CoreStatus.disconnected);
+      return container;
+    }
+
+    testWidgets('a transient launch failure retries with backoff', (
+      tester,
+    ) async {
+      final container = await crash(tester);
+      await tester.pump(const Duration(seconds: 2));
+      expect(core.attempts, 1);
+      expect(container.read(coreStatusProvider), CoreStatus.disconnected);
+      await tester.pump(const Duration(milliseconds: 3999));
+      expect(core.attempts, 1);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(core.attempts, 2);
+      expect(container.read(coreStatusProvider), CoreStatus.connected);
+      expect(setup.resumes, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('failed launches use only the existing three-attempt budget', (
+      tester,
+    ) async {
+      final container = await crash(tester, failures: 10);
+      for (final seconds in [2, 4, 8, 16, 32]) {
+        await tester.pump(Duration(seconds: seconds));
+      }
+      expect(core.attempts, 3);
+      expect(setup.resumes, 0);
+      expect(container.read(coreStatusProvider), CoreStatus.disconnected);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('stopping during the initial delay cancels recovery', (
+      tester,
+    ) async {
+      await crash(tester, failures: 0);
+      await setup.setRunning(false);
+      await tester.pump(const Duration(seconds: 2));
+      expect(core.attempts, 0);
+      expect(setup.resumes, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('stopping after a failed launch cancels its retry', (
+      tester,
+    ) async {
+      await crash(tester);
+      await tester.pump(const Duration(seconds: 2));
+      await setup.setRunning(false);
+      await tester.pump(const Duration(seconds: 4));
+      expect(core.attempts, 1);
+      expect(setup.resumes, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a newer Core start supersedes pending automatic recovery', (
+      tester,
+    ) async {
+      final container = await crash(tester, failures: 0);
+      container.read(coreStatusProvider.notifier).value = CoreStatus.connecting;
+      await tester.pump(const Duration(seconds: 2));
+      expect(core.attempts, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('disposing the manager cancels pending recovery', (
+      tester,
+    ) async {
+      await crash(tester);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 8));
+      expect(core.attempts, 1);
+    });
   });
 
   testWidgets('the log stream follows the openLogs setting', (tester) async {
