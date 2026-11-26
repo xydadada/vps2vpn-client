@@ -217,8 +217,8 @@ String vpsDayExpiryText(
   if (!withDate) return tr(context, '还剩 $days 天', '$days days left');
   return tr(
     context,
-    '还剩 $days 天 · ${date.month}月${date.day}日到期',
-    '$days days left · until ${_isoText(date)}',
+    '还剩 $days 天 · ${vpsDateText(context, date, now: today)}到期',
+    '$days days left · until ${vpsDateText(context, date, now: today)}',
   );
 }
 
@@ -226,13 +226,42 @@ String vpsResetText(BuildContext context, VpsDay day) => switch (day.date) {
   null => tr(context, '不按月重置', 'No monthly reset'),
   final d => tr(
     context,
-    '${d.month}月${d.day}日重置流量',
-    'Data resets on ${_isoText(d)}',
+    '${vpsDateText(context, d)}重置流量',
+    'Data resets on ${vpsDateText(context, d)}',
   ),
 };
 
-String _isoText(DateTime d) =>
-    '${d.year}-${'${d.month}'.padLeft(2, '0')}-${'${d.day}'.padLeft(2, '0')}';
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+extension VpsTrafficText on TrafficShow {
+  /// "15.3 GB": a space between the number and its unit, as everywhere here.
+  String get spaced => '$value $unit';
+}
+
+/// "11月26日" or "Nov 26" this year, with the year added for any other.
+String vpsDateText(BuildContext context, DateTime d, {DateTime? now}) {
+  final thisYear = d.year == (now ?? DateTime.now()).year;
+  return tr(
+    context,
+    thisYear ? '${d.month}月${d.day}日' : '${d.year}年${d.month}月${d.day}日',
+    thisYear
+        ? '${_months[d.month - 1]} ${d.day}'
+        : '${_months[d.month - 1]} ${d.day}, ${d.year}',
+  );
+}
 
 /// The panel's own calendar day first; a timestamp read in this computer's
 /// time zone may land a day early.
@@ -245,6 +274,9 @@ String? vpsMemberExpiryText(
     : m.expireAt != null
     ? vpsExpiryText(context, m.expireAt!)
     : null;
+
+DateTime? vpsMemberExpiryDate(VpsMember m) =>
+    m.expireDay != null ? m.expireDay!.date : m.expireAt;
 
 class VpsAccountCard extends ConsumerWidget {
   const VpsAccountCard({super.key});
@@ -296,13 +328,13 @@ class VpsAccountCard extends ConsumerWidget {
     final usage = m.unlimited
         ? tr(
             context,
-            '已用 ${m.used.traffic.show} · 不限量',
-            'Used ${m.used.traffic.show} · unlimited',
+            '已用 ${m.used.traffic.spaced} · 不限量',
+            'Used ${m.used.traffic.spaced} · unlimited',
           )
         : tr(
             context,
-            '已用 ${m.used.traffic.show} / ${quota.traffic.show}',
-            'Used ${m.used.traffic.show} of ${quota.traffic.show}',
+            '已用 ${m.used.traffic.spaced} / ${quota.traffic.spaced}',
+            'Used ${m.used.traffic.spaced} of ${quota.traffic.spaced}',
           );
     final expiry = vpsMemberExpiryText(context, m, withDate: true);
     final reset = m.nextResetDay == null

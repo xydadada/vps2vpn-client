@@ -966,8 +966,8 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                   Text(
                     tr(
                       context,
-                      '已用 ${used.traffic.show} / ${total.traffic.show}',
-                      '${used.traffic.show} of ${total.traffic.show} used',
+                      '已用 ${used.traffic.spaced} / ${total.traffic.spaced}',
+                      '${used.traffic.spaced} of ${total.traffic.spaced} used',
                     ),
                     style: vpsText(p, size: 12.5, color: p.soft),
                   ),

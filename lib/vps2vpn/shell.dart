@@ -392,7 +392,7 @@ class _SideStatus extends ConsumerWidget {
             if (hasProfile && line != null) ...[
               const SizedBox(height: 6),
               Text(
-                friendlyLineName(context, line),
+                vpsNodeLabel(context, friendlyLineName(context, line)),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: vpsText(p, size: 12, color: p.soft),
@@ -414,7 +414,7 @@ class _SideStatus extends ConsumerWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                '↓ ${now.down.traffic.show}/s',
+                                '↓ ${now.down.traffic.spaced}/s',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: small,
@@ -422,7 +422,7 @@ class _SideStatus extends ConsumerWidget {
                             ),
                             Expanded(
                               child: Text(
-                                '↑ ${now.up.traffic.show}/s',
+                                '↑ ${now.up.traffic.spaced}/s',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: small,

@@ -125,8 +125,12 @@ void main() {
         ),
       ),
     );
-    String iso(DateTime d) =>
-        '${d.year}-${'${d.month}'.padLeft(2, '0')}-${'${d.day}'.padLeft(2, '0')}';
+    const months = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec';
+    String iso(DateTime d) {
+      final text = '${months.split(' ')[d.month - 1]} ${d.day}';
+      return d.year == now.year ? text : '$text, ${d.year}';
+    }
+
     expect(find.text('12 days left · until ${iso(day)}'), findsOneWidget);
     expect(
       find.text(

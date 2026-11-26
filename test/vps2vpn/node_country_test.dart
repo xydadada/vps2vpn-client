@@ -43,6 +43,19 @@ void main() {
     expect(vpsNodeName('🇯🇵'), (name: '🇯🇵', rate: null));
   });
 
+  test('a node reads without its country code, its rate as ×', () {
+    expect(vpsNodeShown('us 洛杉矶 · 5.0x'), (name: '洛杉矶', code: 'US', rate: 5.0));
+    expect(vpsNodeShown('US-LA'), (name: 'LA', code: 'US', rate: null));
+    expect(vpsNodeShown('jp东京 1x'), (name: '东京', code: 'JP', rate: 1.0));
+    expect(vpsNodeShown('🇺🇸 洛杉矶'), (name: '洛杉矶', code: 'US', rate: null));
+    expect(vpsNodeShown('sg'), (name: '', code: 'SG', rate: null));
+    expect(vpsNodeShown('Hysteria2'), (
+      name: 'Hysteria2',
+      code: null,
+      rate: null,
+    ));
+  });
+
   test('nodes of one region stay apart', () {
     final names = {
       for (final n in ['🇸🇬 新加坡', '🇸🇬 新加坡2', '🇸🇬 新加坡(移动优化) · 2.0x'])

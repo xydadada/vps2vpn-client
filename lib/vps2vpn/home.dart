@@ -113,6 +113,32 @@ String? vpsGuessCountry(String name) {
 
 const _alsoEnglishWords = {'IN', 'MY', 'ID'};
 
+final _codeHead = RegExp(r'^([A-Za-z]{2})(?:[\s_|·-]+|(?=[^\x00-\x7F]))');
+
+/// "us 洛杉矶 · 5.0x" reads "洛杉矶 · 5×": the flag already names the country.
+String vpsNodeLabel(BuildContext context, String raw) {
+  final shown = vpsNodeShown(raw);
+  final name = shown.name.isNotEmpty
+      ? shown.name
+      : countryName(context, shown.code!);
+  final rate = shown.rate;
+  return rate == null || rate == 1 ? name : '$name · ${_rateText(rate)}×';
+}
+
+/// [vpsNodeName] less a leading country code; empty when the code was all.
+({String name, String? code, double? rate}) vpsNodeShown(String raw) {
+  final parsed = vpsNodeName(raw);
+  final code = vpsGuessCountry(raw);
+  var name = parsed.name;
+  final head = _codeHead.firstMatch(name);
+  if (code != null && head != null && head[1]!.toUpperCase() == code) {
+    name = name.substring(head.end).trim();
+  }
+  if (code != null && name.toUpperCase() == code) name = '';
+  if (code == null && name.isEmpty) name = parsed.name;
+  return (name: name, code: code, rate: parsed.rate);
+}
+
 String countryName(BuildContext context, String code) {
   final c = code.toUpperCase();
   return vpsZh(context) ? (_countryZh[c] ?? c) : c;
@@ -429,8 +455,8 @@ class _HeroState extends ConsumerState<_Hero> {
     final line = picked == null
         ? null
         : server != null && on
-        ? '${friendlyLineName(context, picked)} · $server'
-        : friendlyLineName(context, picked);
+        ? '${friendlyLineName(context, picked)} · ${vpsNodeLabel(context, server)}'
+        : vpsNodeLabel(context, friendlyLineName(context, picked));
     final dearRate =
         on &&
             picked == vpsSmartGroupName &&
@@ -1202,35 +1228,38 @@ class _Stats extends ConsumerWidget {
     // the account card in Settings never disagree.
     final member = ref.watch(vpsMemberProvider).value?.member;
     TrafficShow? left;
+    int? plan;
     String? expire;
+    DateTime? expireDate;
     if (member != null) {
       if (!member.unlimited) {
-        final quota = (math.max(0, member.quotaGb) * 1024 * 1024 * 1024)
-            .round();
-        left = math.max(0, quota - member.used).traffic;
+        plan = (math.max(0, member.quotaGb) * 1024 * 1024 * 1024).round();
+        left = math.max(0, plan - member.used).traffic;
       }
       expire = vpsMemberExpiryText(context, member);
+      expireDate = vpsMemberExpiryDate(member);
     } else {
       if (sub != null && sub.total > 0) {
+        plan = sub.total;
         final remain = math.max(0, sub.total - sub.upload - sub.download);
         left = remain.traffic;
       }
-      final expiry = sub?.expireDate;
-      if (expiry != null) {
-        expire = vpsExpiryText(context, expiry);
+      expireDate = sub?.expireDate;
+      if (expireDate != null) {
+        expire = vpsExpiryText(context, expireDate);
       }
     }
+    // A ring against a terabyte plan stays full and says nothing.
+    final hugePlan = plan != null && plan >= 1024 * 1024 * 1024 * 1024;
     final p = VpsPalette.of(context);
     final groups = ref.watch(currentGroupsStateProvider).value;
     final main = mainGroup(groups);
     if (main != null && on) vpsAutoTestOnce(ref, main);
     // Share of the plan still left, for the ring (null: unlimited/unknown).
     double? leftShare;
-    if (member != null && !member.unlimited) {
-      final quota = member.quotaGb * 1024 * 1024 * 1024;
-      leftShare = quota > 0 ? (1 - member.used / quota).clamp(0.0, 1.0) : 0.0;
-    } else if (member == null && sub != null && sub.total > 0) {
-      leftShare = (1 - (sub.upload + sub.download) / sub.total).clamp(0.0, 1.0);
+    if (plan != null && !hugePlan) {
+      final used = member != null ? member.used : sub!.upload + sub.download;
+      leftShare = plan > 0 ? (1 - used / plan).clamp(0.0, 1.0) : 0.0;
     }
     final tiles = <Widget>[
       // Down and up in one tile: one number big, the other its footnote.
@@ -1257,6 +1286,13 @@ class _Stats extends ConsumerWidget {
           label: tr(context, '剩余流量', 'Data left'),
           value: left.value,
           unit: left.unit,
+          foot: hugePlan
+              ? tr(
+                  context,
+                  '共 ${plan.traffic.value} ${plan.traffic.unit}',
+                  'of ${plan.traffic.value} ${plan.traffic.unit}',
+                )
+              : null,
           ring: leftShare,
           ringColor: leftShare == null
               ? p.accent
@@ -1271,6 +1307,13 @@ class _Stats extends ConsumerWidget {
           icon: VpsIcon.info,
           label: tr(context, '到期', 'Expires'),
           value: expire,
+          foot: expireDate == null
+              ? null
+              : tr(
+                  context,
+                  '${vpsDateText(context, expireDate)}到期',
+                  'Until ${vpsDateText(context, expireDate)}',
+                ),
         ),
       // Latency is not repeated here: the hero's capsule already shows it.
     ];
@@ -1360,6 +1403,22 @@ class _Stat extends StatelessWidget {
                   value: v,
                   color: ringColor ?? p.accent,
                   track: p.line,
+                ),
+                child: SizedBox.square(
+                  dimension: 46,
+                  child: Center(
+                    child: Text(
+                      '${(v * 100).round()}%',
+                      textScaler: TextScaler.noScaling,
+                      style: vpsText(
+                        p,
+                        size: 11,
+                        weight: FontWeight.w600,
+                        color: p.soft,
+                        tabular: true,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1521,22 +1580,36 @@ class _SparkPainter extends CustomPainter {
       ..lineTo(size.width, size.height)
       ..lineTo(0, size.height)
       ..close();
-    canvas.drawPath(
-      area,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0.14), color.withValues(alpha: 0)],
-        ).createShader(Offset.zero & size),
-    );
-    canvas.drawPath(
-      line,
-      Paint()
-        ..color = color.withValues(alpha: 0.55)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2,
-    );
+    // The numbers sit on the left: the curve fades out before it reaches them.
+    final bounds = Offset.zero & size;
+    canvas
+      ..saveLayer(bounds, Paint())
+      ..drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [color.withValues(alpha: 0.14), color.withValues(alpha: 0)],
+          ).createShader(bounds),
+      )
+      ..drawPath(
+        line,
+        Paint()
+          ..color = color.withValues(alpha: 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      )
+      ..drawRect(
+        bounds,
+        Paint()
+          ..blendMode = BlendMode.dstIn
+          ..shader = const LinearGradient(
+            colors: [Color(0x00000000), Color(0x00000000), Color(0xFF000000)],
+            stops: [0, 0.4, 0.8],
+          ).createShader(bounds),
+      )
+      ..restore();
   }
 
   @override

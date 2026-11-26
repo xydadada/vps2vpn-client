@@ -137,10 +137,8 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
         final en = <String>[];
         var warn = false;
         if (r.closed.isNotEmpty) {
-          zh.add('已为你关闭 ${r.closed.join('、')}，网络已由 vps2vpn 接管');
-          en.add(
-            'Closed ${r.closed.join(', ')}; vps2vpn now runs your network',
-          );
+          zh.add('已为你退出 ${r.closed.join('、')}，网络已由 vps2vpn 接管');
+          en.add('Quit ${r.closed.join(', ')}; vps2vpn now runs your network');
         }
         if (r.stillRunning.isNotEmpty) {
           warn = true;
@@ -275,11 +273,14 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                 else
                   VpsPressable(
                     onTap: () => setState(() => _dismissed = r),
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Text(
-                        '×',
-                        style: vpsText(p, size: 16, color: p.muted),
+                    semanticLabel: tr(context, '关闭提示', 'Dismiss'),
+                    child: SizedBox.square(
+                      dimension: 32,
+                      child: Center(
+                        child: Text(
+                          '×',
+                          style: vpsText(p, size: 18, color: p.muted),
+                        ),
                       ),
                     ),
                   ),
