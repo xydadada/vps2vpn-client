@@ -73,8 +73,8 @@ String? vpsImportNote(
   VpsImportResult.added => null,
   VpsImportResult.failed => tr(
     context,
-    '没有导入：请确认链接完整、服务器在线，然后再试一次。',
-    'Not added. Check the link is complete and the server is up, then try again.',
+    '导入失败：请确认链接完整、服务器在线，然后重试。',
+    'Not imported. Check the link is complete and the server is up, then try again.',
   ),
 };
 
@@ -180,7 +180,7 @@ class _VpsClipboardOfferState extends ConsumerState<VpsClipboardOffer> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _note ?? tr(context, '要导入它吗？', 'Add it?'),
+                        _note ?? tr(context, '是否导入？', 'Import it?'),
                         style: vpsText(
                           p,
                           size: 12.5,
@@ -204,7 +204,7 @@ class _VpsClipboardOfferState extends ConsumerState<VpsClipboardOffer> {
                 ),
                 VpsButton(
                   label: _busy
-                      ? tr(context, '导入中…', 'Adding…')
+                      ? tr(context, '导入中…', 'Importing…')
                       : tr(context, '导入', 'Import'),
                   filled: true,
                   onTap: _busy ? null : _import,
@@ -231,7 +231,7 @@ String? vpsLinkProblem(BuildContext context, String text) {
   if (value.contains(RegExp(r'\s'))) {
     return tr(
       context,
-      '一次只能导入一个链接，框里有空格或换行。请只留下一个链接。',
+      '一次只能导入一个链接。输入框里有空格或换行，请只保留一个链接。',
       'One link at a time: there is a space or a line break. Keep just one link.',
     );
   }
@@ -379,7 +379,7 @@ class VpsImportFieldState extends ConsumerState<VpsImportField> {
                         ? tr(context, '替换中…', 'Replacing…')
                         : tr(context, '替换', 'Replace'))
                   : _busy
-                  ? tr(context, '导入中…', 'Adding…')
+                  ? tr(context, '导入中…', 'Importing…')
                   : tr(context, '导入', 'Import'),
               filled: true,
               onTap: _busy ? null : _import,

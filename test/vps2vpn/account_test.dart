@@ -104,7 +104,7 @@ void main() {
       ),
     );
     expect(find.text('Ann'), findsOneWidget);
-    expect(find.text('Active'), findsOneWidget);
+    expect(find.text('Normal'), findsOneWidget);
     expect(find.textContaining('Used 2'), findsOneWidget);
     expect(find.text('12 days left'), findsOneWidget);
   });
@@ -368,7 +368,7 @@ void main() {
 
   group('updates are no server needed for updates', () {
     Future<void> check(WidgetTester tester) async {
-      await tester.tap(find.text('Check now'));
+      await tester.tap(find.text('Check for updates'));
       await tester.pumpAndSettle();
     }
 
@@ -410,7 +410,7 @@ void main() {
       await _pump(tester, const VpsUpdateCard(currentVersion: '1.0.0'), null);
       await check(tester);
       expect(find.textContaining('Check failed'), findsOneWidget);
-      expect(find.text('Check now'), findsOneWidget);
+      expect(find.text('Check for updates'), findsOneWidget);
 
       await _pump(
         tester,

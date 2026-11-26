@@ -50,7 +50,7 @@ class _LanCompatibilityRow extends ConsumerWidget {
       ),
       info: tr(
         context,
-        '用虚拟网卡时，虚拟机（VirtualBox、Hyper-V）或局域网里的打印机、NAS 连不上，就打开它。代价是少量请求（域名查询、IPv6）可能不经过你的服务器。',
+        '使用虚拟网卡时，如果虚拟机（VirtualBox、Hyper-V）或局域网中的打印机、NAS 无法连接，请打开此项。打开后，少量请求（域名查询、IPv6）可能不经过你的服务器。',
         'Turn on if, with the virtual adapter, VMs (VirtualBox, Hyper-V) or '
             'printers and NAS on your network stop working. Some lookups and '
             'IPv6 traffic may then skip your server.',
@@ -304,8 +304,9 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 title: tr(context, '智能线路', 'Smart line'),
                 subtitle: tr(
                   context,
-                  '自动用最快的服务器，不乱换出口 IP；AI 服务固定出口',
-                  'Fastest server, steady exit IP; steady exit for AI',
+                  '自动使用最快的节点，出口 IP 保持稳定；AI 服务使用固定出口',
+                  'Uses the fastest node and keeps the exit IP steady; AI '
+                      'services use a fixed exit',
                 ),
                 trailing: VpsSwitch(
                   value: smart,
@@ -395,7 +396,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 title: tr(context, '高级模式', 'Advanced mode'),
                 subtitle: tr(
                   context,
-                  '显示全部页面与专业设置',
+                  '显示全部页面和专业设置',
                   'Show every page and expert setting',
                 ),
                 trailing: VpsSwitch(
@@ -412,7 +413,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
           ),
         ),
         const SizedBox(height: 24),
-        VpsSectionTitle(tr(context, '共享与工具', 'Sharing & tools')),
+        VpsSectionTitle(tr(context, '共享和工具', 'Sharing and tools')),
         const _ShareTools(),
         const SizedBox(height: 24),
         const VpsCard(child: VpsFeedbackRow()),
@@ -593,7 +594,7 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
               subtitle: tr(
                 context,
                 '复制命令到终端，让 git、npm、pip 等也走代理（本窗口有效）',
-                'Paste into a terminal so git, npm, pip use the proxy',
+                'Paste into a terminal so git, npm, pip use the proxy (this window only)',
               ),
             ),
             Padding(
@@ -622,7 +623,7 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
               title: tr(context, '关闭窗口时留在托盘', 'Keep running in tray'),
               subtitle: tr(
                 context,
-                '点 × 只隐藏窗口，连接不中断',
+                '点击 × 只隐藏窗口，连接不中断',
                 'Closing the window keeps the connection',
               ),
               trailing: VpsSwitch(
@@ -884,7 +885,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                           tr(
                             context,
                             '上次更新：${_ago(context, updated)}',
-                            'updated ${_ago(context, updated)}',
+                            'Updated ${_ago(context, updated)}',
                           ),
                         if (!busy &&
                             health != null &&
@@ -994,7 +995,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                     tr(
                       context,
                       '已用 ${used.traffic.spaced} / ${total.traffic.spaced}',
-                      '${used.traffic.spaced} of ${total.traffic.spaced} used',
+                      'Used ${used.traffic.spaced} of ${total.traffic.spaced}',
                     ),
                     style: vpsText(p, size: 12.5, color: p.soft),
                   ),

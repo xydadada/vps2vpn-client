@@ -287,7 +287,7 @@ String vpsUpdateResultText(
         '新增 ${h.added.length} 个节点：${_names(context, h.added)}',
         '${h.added.length} new nodes: ${_names(context, h.added)}',
       ),
-    if (h.removed > 0) tr(context, '去掉 ${h.removed} 个', '${h.removed} removed'),
+    if (h.removed > 0) tr(context, '移除 ${h.removed} 个', '${h.removed} removed'),
   ];
   return parts.isEmpty
       ? tr(
@@ -316,10 +316,11 @@ String? vpsFailingText(BuildContext context, VpsProfileHealth? h) {
   if (h.deadAt(now)) {
     return tr(
       context,
-      '订阅地址可能已停用（已 ${_span(context, now.difference(h.failingSince!))}连不上）。现有线路仍可用，请向提供者要新链接后点"替换链接"',
-      'The subscription address may be gone (unreachable for '
-          '${_span(context, now.difference(h.failingSince!))}). Your lines '
-          'still work; ask your provider for a new link, then tap Replace link',
+      '订阅链接可能已失效（已有 ${_span(context, now.difference(h.failingSince!))}无法连接）。现有节点仍可使用，请向管理员获取新链接，然后点击「替换链接」',
+      'The subscription link may be gone (unreachable for '
+          '${_span(context, now.difference(h.failingSince!))}). Your nodes '
+          'still work; ask the admin for a new link, then '
+          '${Platform.isAndroid ? 'tap' : 'click'} Replace link',
     );
   }
   final since = h.failingSince == null
@@ -329,13 +330,13 @@ String? vpsFailingText(BuildContext context, VpsProfileHealth? h) {
     return since == null || h.failures < 2
         ? tr(
             context,
-            '订阅地址这次没连上，现有线路仍可用，稍后会再试',
-            'The subscription address did not answer this time; your lines still work and it is tried again later',
+            '本次未能连接订阅链接，现有节点仍可使用，稍后会重试',
+            'The subscription link did not answer this time; your nodes still work and it is tried again later',
           )
         : tr(
             context,
-            '订阅地址连不上（已 $since），现有线路仍可用',
-            'The subscription address has not answered for $since; your lines still work',
+            '订阅链接已有 $since 无法连接，现有节点仍可使用',
+            'The subscription link has not answered for $since; your nodes still work',
           );
   }
   return tr(

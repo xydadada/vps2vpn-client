@@ -94,7 +94,7 @@ class VpsQrPanel extends StatelessWidget {
         Text(
           tr(
             context,
-            '二维码就是你的订阅链接，别截图发给别人。',
+            '二维码等同于你的订阅链接，请勿截图分享给他人。',
             'This code is your subscription link; do not share a picture of it.',
           ),
           style: vpsText(p, size: 12, color: p.warn),

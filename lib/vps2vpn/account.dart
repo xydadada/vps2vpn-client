@@ -109,7 +109,7 @@ class VpsServerAiCard extends ConsumerWidget {
   static String _siteText(BuildContext context, String s) => switch (s) {
     'ok' => tr(context, '可用', 'OK'),
     'blocked' => tr(context, '封锁', 'Blocked'),
-    'unreachable' => tr(context, '连不上', 'Unreachable'),
+    'unreachable' => tr(context, '无法连接', 'Unreachable'),
     _ => tr(context, '未知', 'Unknown'),
   };
 }
@@ -352,12 +352,12 @@ class VpsAccountCard extends ConsumerWidget {
           : slowed
           ? p.warn
           : p.good,
-      title: m.name.isEmpty ? tr(context, '我的账户', 'My account') : m.name,
+      title: m.name.isEmpty ? tr(context, '我的账号', 'My account') : m.name,
       status: block != null
           ? vpsAccountBlockReason(context, block)
           : slowed
           ? tr(context, '已降速', 'Slowed down')
-          : tr(context, '正常', 'Active'),
+          : tr(context, '正常', 'Normal'),
       lines: [
         usage,
         ?expiry,
@@ -502,7 +502,7 @@ class VpsUpdateNotice extends ConsumerWidget {
                     tr(
                       context,
                       '新版本 $version 已下载并校验签名',
-                      'Version $version is downloaded and checked',
+                      'Version $version is downloaded and its signature checked',
                     ),
                     style: vpsText(p, size: 14, weight: FontWeight.w600),
                   ),
@@ -604,19 +604,19 @@ class VpsUpdateCard extends ConsumerWidget {
           ? tr(
               context,
               '当前 $version，更新会自动安装并重启 vps2vpn',
-              'You have $version; the update installs itself and '
+              'Current: $version; the update installs itself and '
                   'restarts vps2vpn',
             )
           : installer == null
           ? tr(
               context,
               '当前 $version，在下载页获取新版本',
-              'You have $version; get it from the download page',
+              'Current: $version; get it from the download page',
             )
           : tr(
               context,
               '当前 $version，下载并校验签名后会打开所在文件夹',
-              'You have $version; it is downloaded, its signature '
+              'Current: $version; it is downloaded, its signature '
                   'checked, and its folder opened',
             );
       action = VpsButton(
@@ -642,10 +642,10 @@ class VpsUpdateCard extends ConsumerWidget {
     } else {
       title = tr(context, '版本与更新', 'Version and updates');
       final status = switch (check.status) {
-        VpsUpdateStatus.checking => tr(context, '正在检查…', 'Checking…'),
+        VpsUpdateStatus.checking => tr(context, '检查中…', 'Checking…'),
         VpsUpdateStatus.latest when check.panelOnly => tr(
           context,
-          '已是最新（$at 检查；GitHub 暂时连不上，已从订阅服务器确认）',
+          '已是最新（$at 检查；暂时无法连接 GitHub，已从订阅服务器确认）',
           'Up to date (checked $at; GitHub was out of reach, the '
               'subscription server confirmed it)',
         ),
@@ -656,7 +656,7 @@ class VpsUpdateCard extends ConsumerWidget {
         ),
         VpsUpdateStatus.failed => tr(
           context,
-          '检查失败（$at）：连不上 GitHub，稍后会再试',
+          '检查失败（$at）：无法连接 GitHub，稍后会重试',
           'Check failed ($at): GitHub could not be reached; it is tried '
               'again later',
         ),
@@ -678,7 +678,7 @@ class VpsUpdateCard extends ConsumerWidget {
       action = VpsButton(
         label: checking
             ? tr(context, '检查中…', 'Checking…')
-            : tr(context, '检查更新', 'Check now'),
+            : tr(context, '检查更新', 'Check for updates'),
         onTap: checking || current == null
             ? null
             : () =>
@@ -752,8 +752,9 @@ class VpsUpdateCard extends ConsumerWidget {
                     TextSpan(
                       children: [
                         TextSpan(text: summary),
+                        const WidgetSpan(child: SizedBox(width: 8)),
                         TextSpan(
-                          text: tr(context, '  查看全部', '  See all'),
+                          text: tr(context, '查看全部', 'See all'),
                           style: TextStyle(color: p.accent),
                         ),
                       ],
