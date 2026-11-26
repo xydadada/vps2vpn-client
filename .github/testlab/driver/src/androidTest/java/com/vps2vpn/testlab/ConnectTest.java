@@ -110,7 +110,7 @@ public class ConnectTest {
         for (int i = 1; i <= 6; i++) {
             sleep(10_000);
             check(device.hasObject(By.pkg(PKG)) || device.getCurrentPackageName() != null, "the phone stopped answering after " + (i * 10) + " s");
-            int code = status("http://connectivitycheck.gstatic.com/generate_204");
+            int code = status("https://connectivitycheck.gstatic.com/generate_204");
             check(code == 204, "generate_204 through the VPN at " + (i * 10) + " s answered " + code);
             step("still up and answering at " + (i * 10) + " s");
         }
