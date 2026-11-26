@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/print.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +23,20 @@ void main() {
       type: DioExceptionType.connectionError,
     );
     expect(compactError(error), 'DioException(connectionError)');
+  });
+
+  test('compactError keeps a parser reason without its credential payload', () {
+    const corrupt = '{"password":"test-secret" trailing}';
+    try {
+      jsonDecode(corrupt);
+      fail('The fixture must fail JSON parsing');
+    } on FormatException catch (error) {
+      expect(error.toString(), contains('test-secret'));
+      final text = compactError(error);
+      expect(text, contains('Unexpected character'));
+      expect(text, isNot(contains('test-secret')));
+      expect(text, isNot(contains(corrupt)));
+    }
   });
 
   test('compactError keeps other exception messages', () {

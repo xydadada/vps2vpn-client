@@ -158,7 +158,7 @@ class Preferences {
       return configMap;
     } catch (e) {
       commonPrint.log(
-        'getConfigMap error ${e.toString()}',
+        'getConfigMap error (${e.runtimeType})',
         logLevel: LogLevel.warning,
       );
       return null;
@@ -173,7 +173,7 @@ class Preferences {
       return json.decode(clashConfigString);
     } catch (e) {
       commonPrint.log(
-        'getClashConfigMap error ${e.toString()}',
+        'getClashConfigMap error (${e.runtimeType})',
         logLevel: LogLevel.warning,
       );
       return null;
@@ -217,7 +217,7 @@ class Preferences {
       return SystemDnsRecord.fromJson(json.decode(raw));
     } catch (e) {
       commonPrint.log(
-        'getSystemDnsRecord error ${e.toString()}',
+        'getSystemDnsRecord error (${e.runtimeType})',
         logLevel: LogLevel.warning,
       );
       return null;
@@ -239,7 +239,7 @@ class Preferences {
       return BootRecord.fromJson(json.decode(raw));
     } catch (e) {
       commonPrint.log(
-        'getBootRecord error ${e.toString()}',
+        'getBootRecord error (${e.runtimeType})',
         logLevel: LogLevel.warning,
       );
       return null;
