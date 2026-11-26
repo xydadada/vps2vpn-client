@@ -1835,10 +1835,11 @@ NDK version stands in for the hook's cache.
 ## Local Plugins
 
 - `setup`: build-time harness for Go core artifacts and the Rust helper, driven by a Dart build hook; no runtime Dart API.
-- `rust_api`: runtime Flutter Rust Bridge FFI package built through Native Assets. See below.
-- `window`: desktop window control for Linux, macOS and Windows. Written for FlClash; replaced the
-  `window_manager` fork. See below.
+- `rust_api`: runtime Flutter Rust Bridge FFI package built through Native Assets, including the `window/` module
+  for desktop window control that replaced the `window_manager` fork. There is no separate `plugins/window` package.
 - `code_forge`: the text editor behind `EditorPage`, derived from upstream `code_forge`. See below.
+- `dynamic_color`: native system color lookup used during bootstrap.
+- `prism_ui`: UI component library, checked out as a Git submodule.
 
 ## code_forge Plugin
 

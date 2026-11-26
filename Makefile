@@ -79,7 +79,7 @@ site: ## Build the website into build/site
 fmt: ## Format Dart sources in place
 	dart format lib test tool plugins
 
-fmt-check: ## Fail on unformatted Dart sources, as CI does
+fmt-check: ## Fail on unformatted Dart sources
 	dart format --output=none --set-exit-if-changed lib test tool plugins
 
 analyze: ## flutter analyze --no-fatal-infos
@@ -88,7 +88,7 @@ analyze: ## flutter analyze --no-fatal-infos
 test: ## Run tests through tool/test.dart; TEST=paths, ARGS=flutter test arguments
 	dart run tool/test.dart $(TEST) $(if $(ARGS),-- $(ARGS))
 
-coverage: ## Run every test with coverage and hold it to CI's 75% floor
+coverage: ## Run every test with coverage and enforce the local 75% floor
 	dart run tool/test.dart -- --reporter expanded --coverage
 	dart run tool/check_coverage.dart coverage/lcov.info 75
 
@@ -112,7 +112,7 @@ plugins-check: ## Analyze and test every plugin package, as CI does
 setup-hooks-test: ## Test the setup_hooks package with dart test
 	cd plugins/setup/setup_hooks && dart test
 
-rust-check: ## Format check and test the Helper and rust_api crates, as CI does
+rust-check: ## Format check and test the Helper and rust_api crates
 	$(CARGO) fmt --manifest-path services/helper/Cargo.toml -- --check
 	$(CARGO) fmt --manifest-path plugins/rust_api/rust/Cargo.toml -- --check
 	$(CARGO) test --manifest-path services/helper/Cargo.toml
@@ -121,11 +121,11 @@ rust-check: ## Format check and test the Helper and rust_api crates, as CI does
 changelog-verify: ## Check changelog.json and CHANGELOG.md against the commits
 	dart run tool/changelog.dart verify
 
-check: hooks-test pub-get fmt-check analyze coverage ## Run CI's dart job: hooks, format, analyze, tests with coverage
+check: hooks-test pub-get fmt-check analyze coverage ## Run local root checks: hooks, format, analysis, tests and coverage floor
 
 ##@ Go core
 
-core-check: ## gofmt, go vet and the Android go vet of the core wrapper, as CI does
+core-check: ## gofmt, go vet and Android go vet of the core wrapper
 	cd core && files="$$(gofmt -l ./*.go ./cmd ./mobile ./platform ./timezone ./tun)"; \
 		test -z "$$files" || { echo "$$files" >&2; exit 1; }
 	cd core && CGO_ENABLED=0 go vet . ./cmd/...

@@ -1,6 +1,12 @@
 # Project Context
 
-FlClash is a multi-platform proxy client based on ClashMeta (mihomo), built with Flutter. It supports Android, Windows, macOS, and Linux, drawing its own components in the `prism_ui` package: a color system of its own with Apple's Human Interface interaction conventions.
+This repository is `xydadada/vps2vpn-client`, the vps2vpn fork of FlClash, on the `vps2vpn` branch. It is a Flutter
+proxy client based on ClashMeta (mihomo), focused on Windows with an Android build path. The inherited code also
+contains macOS and Linux support. Start with `HANDOFF.md`, `README.md`, and `DESIGN.md` for this fork's current
+status, user-facing behavior, and visual direction; `README_FlClash.md` preserves upstream documentation.
+
+The advanced interface uses the `prism_ui` package. The default vps2vpn interface has its own design and navigation;
+upstream UI conventions do not replace the fork's design requirements.
 
 ## Version Notes
 
@@ -21,21 +27,12 @@ FlClash is a multi-platform proxy client based on ClashMeta (mihomo), built with
 
 ## Forked Dependencies
 
-One `pubspec.yaml` dependency is pinned to a fork by commit SHA. The fork lives
-under `chen08209`, the same account that owns this repository, so it is
-maintained in-house rather than tracked from a third party: advancing a pin is a
-local decision, and there is no external maintainer to wait on for the patch
-itself. What the fork still waits on is the *upstream* fix that would let the pin
-be dropped entirely, recorded below.
+The root `pubspec.yaml` currently uses hosted packages and local plugin paths, with no Git dependency entry.
+`core/Clash.Meta` and `plugins/prism_ui` are Git submodules pinned by this repository. Review a submodule update
+against its recorded commit and the fork's callers and tests before advancing it.
 
-Each entry records what the fork changes and what has to be true before it can go
-back to the published package, so a future upgrade does not have to rediscover it.
-Re-verify a fork by diffing its pub cache checkout against the published version
-of the same number:
-
-```bash
-diff -ru ~/.pub-cache/hosted/pub.dev/<name>-<version> ~/.pub-cache/git/<name>-<sha>
-```
+The `chen08209` repositories below belong to the upstream FlClash maintainer, not this fork's owner. These notes
+record the origins of code that has since moved into this tree; they do not imply control of an upstream repository.
 
 The `window_manager` fork (`chen08209/window_manager`, tag `v0.5.1-flclash.3`)
 was replaced by an in-repo plugin, now rust_api's `window/` module; the behaviors
@@ -61,14 +58,13 @@ upstream's MIT notice stays in `plugins/code_forge/LICENSE`.
 
 ## Dependency Ceilings
 
-`flutter pub outdated` lists only upstream-held entries, so treat them as
-resolved-until-the-ceiling-moves rather than as debt:
+These notes record dependency constraints observed during previous upgrades. Run `flutter pub outdated` against
+the current lockfile before deciding whether they still apply:
 
 - `intl` is intentionally unbounded (`any`), which is not a bound this repository
   sets.
 
-The rest trail their latest releases only because the lock file was not
-refreshed, except for these:
+Other recorded upgrade constraints:
 
 - `flutter_riverpod` 3.5.0 depends on `material_ui`, so a plain
   `flutter pub upgrade` brings `material_ui` and `cupertino_ui` into the lock
