@@ -13,12 +13,29 @@ void main() {
       );
     });
 
-    test('isBeforeSecure keeps null as false and non-null as true', () {
+    test('isBeforeSecure compares a non-null date strictly', () {
       final dateTime = DateTime(2026, 5, 27);
 
       expect(dateTime.isBeforeSecure(null), isFalse);
-      expect(dateTime.isBeforeSecure(DateTime(2026, 5, 26)), isTrue);
+      expect(dateTime.isBeforeSecure(DateTime(2026, 5, 26)), isFalse);
+      expect(dateTime.isBeforeSecure(DateTime(2026, 5, 27)), isFalse);
       expect(dateTime.isBeforeSecure(DateTime(2026, 5, 28)), isTrue);
+    });
+
+    test('isBeforeSecure compares instants across UTC and local dates', () {
+      final utc = DateTime.utc(2026, 5, 27, 14, 3, 9);
+      final local = utc.toLocal();
+
+      expect(utc.isBeforeSecure(local), isFalse);
+      expect(local.isBeforeSecure(utc), isFalse);
+      expect(
+        local.isBeforeSecure(utc.add(const Duration(microseconds: 1))),
+        isTrue,
+      );
+      expect(
+        utc.isBeforeSecure(local.subtract(const Duration(microseconds: 1))),
+        isFalse,
+      );
     });
 
     test('formats date, full datetime, and time slices', () {
