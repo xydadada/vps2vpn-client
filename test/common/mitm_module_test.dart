@@ -783,6 +783,29 @@ DOMAIN,c.example,DIRECT
       },
     );
 
+    test('skips multi-script options while preserving other rewrites', () {
+      for (final action in [
+        'script("https://cdn.test/s.js") | script("https://cdn.test/s.js")',
+        'script(["https://cdn.test/s.js", "https://cdn.test/s.js"])',
+      ]) {
+        final line =
+            r'request if ${url} == "https://example.com/a" then '
+            '$action with tag="shared", timeout=10';
+        final content = read('''
+^https://example[.]com/b https://example.com/c 302
+$line
+^https://example[.]com/d https://example.com/e 302
+''');
+        expect(content.urlRewrite, [
+          r'^https://example[.]com/b https://example.com/c 302',
+          r'^https://example[.]com/d https://example.com/e 302',
+        ]);
+        expect(content.script, isEmpty);
+        expect(content.skipped.single.line, line);
+        expect(content.skipped.single.reason, MitmModuleSkipReason.conditional);
+      }
+    });
+
     test('turn URL conditions and actions into the Core lists', () {
       final content = read(r'''
 request if ${url} ~= /^https:\/\/old\.example\.com(\/.*)$/ as m then url.replace("https://new.example.com${m.1}")

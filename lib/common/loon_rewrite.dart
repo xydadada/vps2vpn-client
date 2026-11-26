@@ -808,6 +808,10 @@ class _Translator {
     if (!reader.done) {
       throw const FormatException();
     }
+    // The options describe one script; shared tags for a pipeline are ambiguous.
+    if (out.scripts.length != 1) {
+      throw const _Unsupported();
+    }
     final script = out.scripts.single;
     out.scripts
       ..clear()
