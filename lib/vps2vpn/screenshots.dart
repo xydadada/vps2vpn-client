@@ -373,6 +373,21 @@ class _ShotRun {
       tabs: const [vpsTabHome, vpsTabServers, vpsTabMe],
       sizes: const ['wide', 'default'],
     );
+    // The default window shows the tiles only once scrolled to them.
+    await desktopWindow.setSize(_sizes['default']!);
+    vpsTab.value = vpsTabHome;
+    for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+      _theme(theme);
+      for (final locale in const ['zh', 'en']) {
+        _locale(locale);
+        await _settle(1200);
+        final scroll = _scroller();
+        scroll?.position.jumpTo(scroll.position.maxScrollExtent);
+        await _settle(500);
+        await _shoot('legend-home-default-${theme.name}-$locale-tiles');
+        scroll?.position.jumpTo(0);
+      }
+    }
   }
 
   /// CI idles at 0 B/s: a still minute of browsing, about 14.7 KB/s.

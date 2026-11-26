@@ -1296,7 +1296,6 @@ class _Stats extends ConsumerWidget {
         final count = 2 + (left == null ? 0 : 1) + (expire == null ? 0 : 1);
         final cols = c.maxWidth >= 680 ? count : 2;
         const gap = 12.0;
-        final tileWidth = (c.maxWidth - gap * (cols - 1)) / cols;
         final tiles = <Widget>[
           // Down and up in one tile: one number big, the other its footnote.
           _Stat(
@@ -1309,7 +1308,7 @@ class _Stats extends ConsumerWidget {
                 : tr(context, '连接后显示', 'Shown once connected'),
             spark: on ? [for (final t in recent) t.down + t.up] : null,
             sparkColor: p.good,
-            width: tileWidth,
+            curveStrip: true,
           ),
           _Stat(
             icon: VpsIcon.sparkle,
@@ -1396,7 +1395,7 @@ class _Stat extends StatelessWidget {
     this.sparkColor,
     this.ring,
     this.ringColor,
-    this.width,
+    this.curveStrip = false,
   });
 
   final VpsIcon icon;
@@ -1413,78 +1412,91 @@ class _Stat extends StatelessWidget {
   final double? ring;
   final Color? ringColor;
 
-  final double? width;
+  /// A strip under the text for [spark], kept while there is nothing to
+  /// draw so the tiles keep their height on connect.
+  final bool curveStrip;
 
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final spark = this.spark;
     final ring = this.ring;
-    final width = this.width;
-    // Right of the numbers and inside the padding, clear of the corners.
-    final curve = spark != null && spark.length > 1 && width != null;
-    final text = Padding(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-      child: Row(
-        children: [
-          if (curve) ...[
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: width - 52),
-              child: _text(p),
+    final body = Row(
+      children: [
+        Expanded(child: _text(p)),
+        if (ring != null) ...[
+          const SizedBox(width: 10),
+          TweenAnimationBuilder<double>(
+            tween: Tween(end: ring),
+            duration: const Duration(milliseconds: 1100),
+            curve: VpsMotion.settle,
+            builder: (_, v, _) => CustomPaint(
+              size: const Size.square(46),
+              painter: _RingGauge(
+                value: v,
+                color: ringColor ?? p.accent,
+                track: p.line,
+              ),
+              child: SizedBox.square(
+                dimension: 46,
+                child: Center(
+                  child: Text(
+                    '${(v * 100).round()}%',
+                    textScaler: TextScaler.noScaling,
+                    style: vpsText(
+                      p,
+                      size: 11,
+                      weight: FontWeight.w600,
+                      color: p.soft,
+                      tabular: true,
+                    ),
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 16),
+          ),
+        ],
+      ],
+    );
+    if (!curveStrip) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        child: body,
+      );
+    }
+    // Full width under the text, 6px clear of the text and the card's edge.
+    return ClipRSuperellipse(
+      borderRadius: BorderRadius.circular(VpsRadius.large),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            body,
+            const SizedBox(height: 6),
             Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: SizedBox(
-                  height: 36,
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _SparkPainter(spark, sparkColor ?? p.accent),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ] else
-            Expanded(child: _text(p)),
-          if (ring != null) ...[
-            const SizedBox(width: 10),
-            TweenAnimationBuilder<double>(
-              tween: Tween(end: ring),
-              duration: const Duration(milliseconds: 1100),
-              curve: VpsMotion.settle,
-              builder: (_, v, _) => CustomPaint(
-                size: const Size.square(46),
-                painter: _RingGauge(
-                  value: v,
-                  color: ringColor ?? p.accent,
-                  track: p.line,
-                ),
-                child: SizedBox.square(
-                  dimension: 46,
-                  child: Center(
-                    child: Text(
-                      '${(v * 100).round()}%',
-                      textScaler: TextScaler.noScaling,
-                      style: vpsText(
-                        p,
-                        size: 11,
-                        weight: FontWeight.w600,
-                        color: p.soft,
-                        tabular: true,
-                      ),
-                    ),
-                  ),
+                  height: 22,
+                  child: spark == null || spark.length < 2
+                      ? null
+                      : IgnorePointer(
+                          child: CustomPaint(
+                            size: Size.infinite,
+                            painter: _SparkPainter(
+                              spark,
+                              sparkColor ?? p.accent,
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
-    return text;
   }
 
   Widget _text(VpsPalette p) {
@@ -1610,7 +1622,7 @@ class _SparkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width < 32) return;
+    if (size.width < 40 || size.height < 20) return;
     // About 3px a sample, so a narrow tile shows the last few seconds.
     final keep = math.max(8, size.width ~/ 3);
     final values = this.values.length > keep
@@ -1643,7 +1655,7 @@ class _SparkPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0)],
+            colors: [color.withValues(alpha: 0.10), color.withValues(alpha: 0)],
           ).createShader(bounds),
       )
       ..drawPath(
