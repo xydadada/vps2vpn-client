@@ -762,7 +762,9 @@ extension on _ProxyCard {
     }
     if (proxy.name == vpsSmartGroupName) {
       return TextSpan(
-        text: tr(context, '推荐 · 自动选最快', 'Recommended · picks the fastest'),
+        text: using
+            ? tr(context, '使用中 · 自动选最快', 'In use · picks the fastest')
+            : tr(context, '推荐 · 自动选最快', 'Recommended · picks the fastest'),
       );
     }
     if (proxy.name == vpsAIGroupName) {
@@ -773,7 +775,7 @@ extension on _ProxyCard {
       if (protocol != null) TextSpan(text: protocol),
       if (rate != null)
         TextSpan(
-          text: '×${rate == rate.roundToDouble() ? rate.round() : rate}',
+          text: '${rate == rate.roundToDouble() ? rate.round() : rate}×',
           style: rate >= 2 ? TextStyle(color: p.warn) : null,
         ),
     ];
