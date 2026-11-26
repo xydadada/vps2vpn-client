@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'l10n.dart';
 
 // ignore_for_file: type=lint
@@ -147,7 +148,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tun => 'TUN';
 
   @override
-  String get tunDesc => 'TUN works only in administrator mode.';
+  String get tunDesc =>
+      'TUN needs permission to manage network traffic. Follow the system authorization prompt when asked.';
 
   @override
   String get minimizeOnExit => 'Minimize on exit';
@@ -3180,8 +3182,7 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other:
           '$label SUB-RULE rules were dropped, since custom profiles do not support sub-rules',
-      one:
-          '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
+      one: '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
     );
     return '$_temp0';
   }
