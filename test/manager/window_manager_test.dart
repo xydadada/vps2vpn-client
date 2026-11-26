@@ -21,6 +21,41 @@ import '../helpers/glyph_finders.dart';
 import '../helpers/test_app.dart';
 import '../helpers/test_profiles.dart';
 
+class _DelayedCaptionWindow extends FakeDesktopWindow {
+  final pinSnapshot = Completer<bool>();
+  final maximizeSnapshot = Completer<bool>();
+  final fullScreenSnapshot = Completer<bool>();
+  var _pinReads = 0;
+  bool pinned = false;
+  bool rejectsPin = false;
+
+  @override
+  Future<bool> isAlwaysOnTop() =>
+      _pinReads++ == 0 ? pinSnapshot.future : Future.value(pinned);
+
+  @override
+  Future<bool> isMaximized() => maximizeSnapshot.future;
+
+  @override
+  Future<bool> isFullScreen() => fullScreenSnapshot.future;
+
+  @override
+  Future<void> setAlwaysOnTop(bool value) async {
+    if (rejectsPin) throw StateError('pin was rejected');
+    pinned = value;
+  }
+
+  void finish({
+    bool pin = false,
+    bool maximize = false,
+    bool fullScreen = false,
+  }) {
+    pinSnapshot.complete(pin);
+    maximizeSnapshot.complete(maximize);
+    fullScreenSnapshot.complete(fullScreen);
+  }
+}
+
 class _RecordingSystemAction extends SystemAction {
   static final calls = <String>[];
 
@@ -569,6 +604,78 @@ void main() {
         caption.value,
         const WindowCaptionState(isPinned: true, isMaximized: true),
       );
+    });
+
+    testWidgets('late initial reads preserve newer maximize and fullscreen '
+        'events without dropping the initial pin', (tester) async {
+      final delayed = _DelayedCaptionWindow()..install();
+      final caption = await pumpController(tester);
+      delayed.emit(WindowEvent.maximize);
+      delayed.emit(WindowEvent.enterFullScreen);
+      delayed.finish(pin: true);
+      await tester.pump();
+
+      expect(
+        caption.value,
+        const WindowCaptionState(
+          isPinned: true,
+          isMaximized: true,
+          isFullScreen: true,
+        ),
+      );
+    });
+
+    testWidgets('late initial reads preserve newer restore events', (
+      tester,
+    ) async {
+      final delayed = _DelayedCaptionWindow()..install();
+      final caption = await pumpController(tester);
+      delayed.emit(WindowEvent.unmaximize);
+      delayed.emit(WindowEvent.leaveFullScreen);
+      delayed.finish(maximize: true, fullScreen: true);
+      await tester.pump();
+
+      expect(caption.value, const WindowCaptionState());
+    });
+
+    testWidgets('late initial pin reads do not undo a completed pin toggle', (
+      tester,
+    ) async {
+      final delayed = _DelayedCaptionWindow()..install();
+      final caption = await pumpController(tester);
+      await caption.togglePin();
+      delayed.finish();
+      await tester.pump();
+
+      expect(caption.value.isPinned, isTrue);
+    });
+
+    testWidgets('a failed pin change still accepts the initial pin state', (
+      tester,
+    ) async {
+      final delayed = _DelayedCaptionWindow()..rejectsPin = true;
+      delayed.install();
+      final caption = await pumpController(tester);
+      await expectLater(caption.togglePin(), throwsStateError);
+      delayed.finish(pin: true);
+      await tester.pump();
+
+      expect(caption.value.isPinned, isTrue);
+    });
+
+    testWidgets('an initial platform read failure leaves newer events usable', (
+      tester,
+    ) async {
+      final delayed = _DelayedCaptionWindow()..install();
+      final caption = await pumpController(tester);
+      delayed.pinSnapshot.completeError(StateError('window is unavailable'));
+      delayed.maximizeSnapshot.complete(false);
+      delayed.fullScreenSnapshot.complete(false);
+      await tester.pump();
+      delayed.emit(WindowEvent.maximize);
+
+      expect(tester.takeException(), isNull);
+      expect(caption.value.isMaximized, isTrue);
     });
 
     testWidgets('a maximize request only shows once the window reports it', (
