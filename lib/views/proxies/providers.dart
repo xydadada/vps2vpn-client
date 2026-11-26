@@ -110,6 +110,7 @@ class ProviderItem extends ConsumerStatefulWidget {
 class _ProviderItemState extends ConsumerState<ProviderItem> {
   _ProviderFile _file = _ProviderFile.binary;
   bool _isAppRuleSet = false;
+  int _probeGeneration = 0;
 
   ExternalProvider get provider => widget.provider;
 
@@ -131,13 +132,18 @@ class _ProviderItemState extends ConsumerState<ProviderItem> {
   }
 
   Future<void> _probeFile() async {
+    final generation = ++_probeGeneration;
+    final target = provider;
     final clashProvidersAction = ref.read(
       clashProvidersActionProvider.notifier,
     );
-    final file = await _probeProviderFile(provider.path);
+    final file = await _probeProviderFile(target.path);
+    if (!mounted || generation != _probeGeneration) return;
     final isAppRuleSet =
-        await clashProvidersAction.remoteProviderOf(provider) != null;
-    if (!mounted || (file == _file && isAppRuleSet == _isAppRuleSet)) {
+        await clashProvidersAction.remoteProviderOf(target) != null;
+    if (!mounted ||
+        generation != _probeGeneration ||
+        (file == _file && isAppRuleSet == _isAppRuleSet)) {
       return;
     }
     setState(() {
