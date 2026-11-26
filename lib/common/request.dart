@@ -86,31 +86,6 @@ class Request {
     return FlClashHttpOverrides.findProxyForReader(read, uri);
   }
 
-  Future<Response<T>> _download<T>(
-    String url,
-    ResponseType responseType, {
-    Dio? via,
-  }) {
-    final target = downloadTarget(url);
-    final cancelToken = CancelToken();
-    return (via ?? clashDio)
-        .getUri<T>(
-          target.uri,
-          options: Options(responseType: responseType, headers: target.headers),
-          cancelToken: cancelToken,
-        )
-        .timeout(
-          downloadTimeoutDuration,
-          onTimeout: () {
-            cancelToken.cancel();
-            throw DioException.receiveTimeout(
-              timeout: downloadTimeoutDuration,
-              requestOptions: RequestOptions(path: url),
-            );
-          },
-        );
-  }
-
   /// Counts bytes after HttpClient's gzip decoding, not by Content-Length.
   Future<Response<Uint8List>> _downloadCapped(
     String url,
@@ -239,9 +214,24 @@ class Request {
     }
   }
 
-  Future<Response<String>> getTextResponseForUrl(String url) async {
+  Future<Response<String>> getTextResponseForUrl(
+    String url, {
+    int maxBytes = maxSubscriptionBytes,
+  }) async {
     try {
-      return await _download<String>(url, ResponseType.plain);
+      final response = await _downloadCapped(url, maxBytes);
+      return Response<String>(
+        data: utf8.decode(response.data!, allowMalformed: true),
+        requestOptions: response.requestOptions,
+        headers: response.headers,
+        statusCode: response.statusCode,
+        statusMessage: response.statusMessage,
+        isRedirect: response.isRedirect,
+        redirects: response.redirects,
+        extra: response.extra,
+      );
+    } on SubscriptionTooLargeException catch (error) {
+      throw ResourceTooLargeException(error.limit);
     } catch (e) {
       commonPrint.log(
         'getTextResponseForUrl error ${compactError(e)}',

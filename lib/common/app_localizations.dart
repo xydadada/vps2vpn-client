@@ -151,6 +151,7 @@ String userFacingErrorMessage(Object error, AppLocalizations appLocalizations) {
         ReleaseNotVerifiedException() => appLocalizations.updateNotVerified,
         SubscriptionTooLargeException() =>
           appLocalizations.subscriptionTooLarge,
+        ResourceTooLargeException() => appLocalizations.resourceTooLarge,
         SystemDownloadException() => appLocalizations.updateDownloadFailed,
         CoreMethodException(code: 'rule_set_empty') =>
           appLocalizations.ruleSetEmptyTip,

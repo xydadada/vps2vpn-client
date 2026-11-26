@@ -38,3 +38,12 @@ final class SubscriptionTooLargeException implements Exception {
   @override
   String toString() => 'SubscriptionTooLargeException: over $limit bytes';
 }
+
+final class ResourceTooLargeException implements Exception {
+  final int limit;
+
+  const ResourceTooLargeException(this.limit);
+
+  @override
+  String toString() => 'ResourceTooLargeException: over $limit bytes';
+}

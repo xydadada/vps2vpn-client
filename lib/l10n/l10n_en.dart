@@ -3984,6 +3984,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subscriptionTooLarge => 'The subscription is too large to load';
 
   @override
+  String get resourceTooLarge => 'The downloaded file is too large to load';
+
+  @override
   String get subscriptionAnnounce => 'Notice from your provider';
 
   @override

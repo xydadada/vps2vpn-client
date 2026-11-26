@@ -1261,6 +1261,7 @@
   "subscriptionEmpty": "The subscription returned an empty config",
   "subscriptionUpdateKeptLast": "Couldn't update {label}; still using the last working config",
   "subscriptionTooLarge": "The subscription is too large to load",
+  "resourceTooLarge": "The downloaded file is too large to load",
   "subscriptionAnnounce": "Notice from your provider",
   "subscriptionWebPage": "My page",
   "subscriptionSupport": "Contact support",
