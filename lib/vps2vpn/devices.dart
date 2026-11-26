@@ -18,7 +18,8 @@ import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart' show AlertDialog, TextButton;
+import 'package:prism_ui/prism_ui.dart'
+    show AlertDialog, ButtonStyle, TextButton;
 
 enum VpsDeviceOutcome {
   ok,
@@ -752,25 +753,9 @@ Future<bool> vpsAskRemoveProfile(BuildContext context) async =>
     ) ==
     true;
 
-Future<void> vpsShowDevices() =>
-    dialogs.showCommonDialog<void>(child: const _DevicesDialog());
-
-Future<bool> vpsAskKick(BuildContext context) async =>
-    await dialogs.showMessage(
-      context: context,
-      title: tr(context, '踢掉其他所有设备', 'Sign out every other device'),
-      message: TextSpan(
-        text: tr(
-          context,
-          '你的其他所有设备（包括手机上用别的软件的）都会立刻断开，要用的话得重新导入新链接。',
-          'Every other device (phones using other apps too) disconnects at '
-              'once, and has to import the new link to come back.',
-        ),
-      ),
-      confirmText: tr(context, '踢掉', 'Sign them out'),
-      destructive: true,
-    ) ==
-    true;
+/// [confirmKick] opens it on the question before signing others out.
+Future<void> vpsShowDevices({bool confirmKick = false}) => dialogs
+    .showCommonDialog<void>(child: _DevicesDialog(confirmKick: confirmKick));
 
 class VpsDevicesRow extends ConsumerWidget {
   const VpsDevicesRow({super.key});
@@ -806,7 +791,9 @@ class VpsDevicesRow extends ConsumerWidget {
 }
 
 class _DevicesDialog extends ConsumerStatefulWidget {
-  const _DevicesDialog();
+  const _DevicesDialog({this.confirmKick = false});
+
+  final bool confirmKick;
 
   @override
   ConsumerState<_DevicesDialog> createState() => _DevicesDialogState();
@@ -815,6 +802,8 @@ class _DevicesDialog extends ConsumerStatefulWidget {
 class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   Future<VpsDeviceList>? _list;
   var _busy = false;
+  var _listed = false;
+  late var _confirming = widget.confirmKick;
   String? _error;
   VpsKickResult? _kicked;
 
@@ -832,7 +821,15 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   void _reload() {
     final call = _call();
     if (call == null) return;
-    _list = vpsDeviceId().then((id) => vpsListDevices(call, id));
+    final list = _list = vpsDeviceId().then((id) => vpsListDevices(call, id));
+    _listed = false;
+    unawaited(
+      list.then((l) {
+        if (mounted && _list == list) {
+          setState(() => _listed = l.outcome == VpsDeviceOutcome.ok);
+        }
+      }),
+    );
   }
 
   Future<void> _run(Future<String?> Function() action) async {
@@ -863,7 +860,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   });
 
   Future<void> _kick() async {
-    if (!await vpsAskKick(context) || !mounted) return;
+    setState(() => _confirming = false);
     await _run(() async {
       final profile = ref.read(currentProfileProvider);
       final base = vpsApiBase(profile?.url ?? '');
@@ -1017,22 +1014,97 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
     );
   }
 
+  Widget _skeleton(VpsPalette p) {
+    Widget bar(double width, double height) => Container(
+      width: width,
+      height: height,
+      decoration: ShapeDecoration(
+        color: p.track,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(height / 2),
+        ),
+      ),
+    );
+    return Semantics(
+      label: tr(context, '正在读取', 'Loading'),
+      child: VpsBreathe(
+        active: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final width in const [150.0, 120.0, 170.0])
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          bar(width, 14),
+                          const SizedBox(height: 6),
+                          bar(width + 60, 10),
+                        ],
+                      ),
+                    ),
+                    bar(52, 30),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final kicked = _kicked;
+    if (_confirming && kicked == null) {
+      return AlertDialog(
+        title: tr(context, '踢掉其他所有设备', 'Sign out every other device'),
+        destructive: true,
+        actions: [
+          TextButton(
+            onPressed: () => setState(() => _confirming = false),
+            child: Text(tr(context, '取消', 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => unawaited(_kick()),
+            child: Text(tr(context, '踢掉', 'Sign them out')),
+          ),
+        ],
+        child: Text(
+          tr(
+            context,
+            '其他设备（包括手机上的其他软件）会立刻断开，需要重新导入新链接才能继续使用。',
+            'Every other device, other apps on phones included, disconnects '
+                'at once and needs the new link imported to keep working.',
+          ),
+        ),
+      );
+    }
     return AlertDialog(
       title: tr(context, '设备管理', 'Devices'),
       actions: [
+        if (kicked == null)
+          TextButton(
+            style: ButtonStyle(
+              foregroundColor: WidgetStateProperty<Color?>.fromMap({
+                WidgetState.disabled: p.bad.withValues(alpha: 0.38),
+                WidgetState.any: p.bad,
+              }),
+            ),
+            onPressed: _busy || !_listed
+                ? null
+                : () => setState(() => _confirming = true),
+            child: Text(tr(context, '踢掉其他所有设备', 'Sign out other devices')),
+          ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(tr(context, '关闭', 'Close')),
         ),
-        if (kicked == null)
-          TextButton(
-            onPressed: _busy ? null : () => unawaited(_kick()),
-            child: Text(tr(context, '踢掉其他所有设备', 'Sign out other devices')),
-          ),
       ],
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
@@ -1052,15 +1124,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                   future: _list,
                   builder: (context, snap) {
                     final list = snap.data;
-                    if (list == null) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Text(
-                          tr(context, '正在读取…', 'Loading…'),
-                          style: vpsText(p, size: 13, color: p.muted),
-                        ),
-                      );
-                    }
+                    if (list == null) return _skeleton(p);
                     if (list.outcome != VpsDeviceOutcome.ok) {
                       return Text(
                         _outcomeText(context, list.outcome),

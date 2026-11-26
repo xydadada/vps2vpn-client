@@ -9,6 +9,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/widgets/alert_scrim.dart';
 import 'package:fl_clash/vps2vpn/shell.dart' show VpsTitleBarBackdrop;
 import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -531,6 +532,7 @@ class WindowHeaderBar extends StatelessWidget {
                   child: actions!,
                 ),
               ),
+            const Positioned.fill(child: AlertScrim()),
           ],
         ),
       ),

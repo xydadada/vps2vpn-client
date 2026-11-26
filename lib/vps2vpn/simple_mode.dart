@@ -30,9 +30,16 @@ Widget vpsDressAlert(BuildContext context, Widget child) {
   final theme = Theme.of(context);
   return Theme(
     data: theme.copyWith(
+      // Alerts sit on the cards' own surface, not the seed's tinted one.
       colorScheme: theme.colorScheme.copyWith(
         primary: p.accent,
         onPrimary: p.accentInk,
+        surfaceBright: p.card,
+        surfaceContainer: p.dark ? theme.colorScheme.surfaceContainer : p.track,
+        surfaceContainerHigh: p.dark
+            ? p.card
+            : theme.colorScheme.surfaceContainerHigh,
+        surfaceContainerHighest: p.dark ? p.thumb : p.track,
       ),
     ),
     child: child,

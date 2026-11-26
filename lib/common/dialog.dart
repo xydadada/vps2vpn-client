@@ -43,9 +43,11 @@ class Dialogs {
     final dress = this.dress;
     return showFloatingDialog<T>(
       context: context ?? _context,
-      child: dress == null
-          ? child
-          : Builder(builder: (context) => dress(context, child)),
+      child: AlertScrimSource(
+        child: dress == null
+            ? child
+            : Builder(builder: (context) => dress(context, child)),
+      ),
       dismissible: dismissible ?? true,
     );
   }

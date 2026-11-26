@@ -320,8 +320,8 @@ class _ShotRun {
         await shot('feedback', vpsShowFeedback);
         await close();
         await shot('devices', vpsShowDevices);
-        await shot('kick', () => vpsAskKick(here()));
         await close();
+        await shot('kick', () => vpsShowDevices(confirmKick: true));
         await close();
         await shot('remove-subscription', () => vpsAskRemoveProfile(here()));
         await close();

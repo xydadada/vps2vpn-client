@@ -1,4 +1,5 @@
 export 'active_polling.dart';
+export 'alert_scrim.dart';
 export 'chip_title.dart';
 export 'config_item.dart';
 export 'icon.dart';
