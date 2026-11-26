@@ -301,6 +301,63 @@ rule-providers:
   });
 
   group('proxies and groups', () {
+    test('empty fallback follows an existing proxy under its app name', () {
+      final config = _read(
+        '''
+proxies:
+  - {name: Imported, type: ss, server: node.example.com, port: 443}
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies: [Imported]
+    default-selected: Imported
+    empty-fallback: Imported
+''',
+        _app(
+          proxies: [
+            {
+              'name': 'Saved',
+              'type': 'ss',
+              'server': 'node.example.com',
+              'port': 443,
+            },
+          ],
+        ),
+      );
+      final group = config.proxyGroups.single;
+      expect(config.proxies, isEmpty);
+      expect(group.proxies, ['Saved']);
+      expect(group.defaultSelected, 'Saved');
+      expect(group.emptyFallback, 'Saved');
+    });
+
+    test('empty fallback follows a renamed proxy after a name collision', () {
+      final config = _read(
+        '''
+proxies:
+  - {name: Node, type: ss, server: new.example.com, port: 443}
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies: [Node]
+    empty-fallback: Node
+''',
+        _app(
+          proxies: [
+            {
+              'name': 'Node',
+              'type': 'ss',
+              'server': 'old.example.com',
+              'port': 443,
+            },
+          ],
+        ),
+      );
+      expect(config.proxies.single['name'], 'Node-01');
+      expect(config.proxyGroups.single.proxies, ['Node-01']);
+      expect(config.proxyGroups.single.emptyFallback, 'Node-01');
+    });
+
     test('keeps a proxy the app holds as it is under the app name', () {
       final config = _read(
         '''
