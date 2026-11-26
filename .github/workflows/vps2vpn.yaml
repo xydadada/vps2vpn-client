@@ -7,7 +7,8 @@ name: vps2vpn Windows
 # check of an installer built elsewhere is e2e.yaml.
 # With "publish", a build that passed its checks is signed with the update key
 # (secret UPDATE_SIGNING_KEY) and uploaded as the pre-release test-<version>.
-# It becomes the latest release only by hand, after e2e.yaml passes on it.
+# It becomes the latest release only by hand, after e2e.yaml's gate job
+# passes on it.
 on:
   workflow_dispatch:
     inputs:
