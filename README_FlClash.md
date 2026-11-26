@@ -1,3 +1,7 @@
+> 以下保留的是原上游 FlClash 的参考说明，下载链接、平台支持和构建说明描述上游项目。本分支 vps2vpn 的当前用法与构建方式请看 [README](README.md)。
+>
+> This file preserves the original upstream FlClash reference. Its downloads, supported platforms and build instructions describe the upstream project. For this vps2vpn fork, use the current [README](README.md#english).
+
 <div align="center">
 
 <img src="assets/images/icon.png" alt="FlClash" width="88">
@@ -6,7 +10,7 @@
 
 A multi-platform proxy client based on ClashMeta. Simple to use, open source and ad-free.
 
-**English** · [简体中文](README_zh_CN.md)
+**Upstream English reference** · [vps2vpn 简体中文](README.md) · [vps2vpn English](README.md#english)
 
 [![Release](https://img.shields.io/github/v/release/chen08209/FlClash?style=flat-square&label=release)](https://github.com/chen08209/FlClash/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/chen08209/FlClash/total?style=flat-square&logo=github)](https://github.com/chen08209/FlClash/releases)

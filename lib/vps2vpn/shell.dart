@@ -1,5 +1,5 @@
 // vps2vpn simple-mode window: our own sidebar (wide) or floating tab bar
-// (narrow) around four pages. Replaces FlClash's shell while advanced mode
+// (narrow) around five pages. Replaces FlClash's shell while advanced mode
 // is off.
 
 import 'dart:io';
