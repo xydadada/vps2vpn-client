@@ -377,6 +377,48 @@ func TestVps2vpnSmartReusesTheSubscriptionsServerGroups(t *testing.T) {
 	}
 }
 
+func TestVps2vpnSmartReservesBuiltinAndPendingGroupNames(t *testing.T) {
+	for _, stem := range []string{
+		"DIRECT", "REJECT", "REJECT-DROP", "COMPATIBLE", "PASS", "PASS-RULE", "GLOBAL", vpsSmartGroup,
+	} {
+		t.Run(stem, func(t *testing.T) {
+			vpsOn(t)
+			raw := config.DefaultRawConfig()
+			first, second := stem+" · Reality", stem+" · Hysteria2"
+			raw.Proxy = []map[string]any{
+				vpsReality(first, "192.0.2.1"),
+				vpsHy2(second, "192.0.2.1"),
+				vpsHy2("Other", "192.0.2.2"),
+			}
+			raw.ProxyGroup = []map[string]any{
+				{"name": "Proxy", "type": "select", "proxies": []any{first, second, "Other"}},
+			}
+			raw.Rule = []string{"MATCH,Proxy"}
+			vps2vpnEnhance(raw, 0)
+
+			smart := vpsGroup(raw, vpsSmartGroup)
+			if smart == nil || smart["type"] != "url-test" {
+				t.Fatalf("smart group = %v", smart)
+			}
+			members := smart["proxies"].([]string)
+			if len(members) != 2 || members[0] == stem {
+				t.Fatalf("smart members = %v, want an unreserved server group and Other", members)
+			}
+			server := vpsGroup(raw, members[0])
+			if server == nil || !slices.Equal(server["proxies"].([]string), []string{second, first}) {
+				t.Fatalf("server group = %v", server)
+			}
+			cfg, err := vpsParse(t, raw)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if cfg.Proxies["GLOBAL"].Type().String() != "Selector" {
+				t.Fatal("enhancement replaced the built-in global selector")
+			}
+		})
+	}
+}
+
 func TestVpsLineRate(t *testing.T) {
 	for name, want := range map[string]float64{
 		"🇹🇼 台湾 ×5":            5,

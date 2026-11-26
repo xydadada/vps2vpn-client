@@ -261,6 +261,10 @@ func vpsProxyServer(p map[string]any) string {
 }
 
 func vpsNameTaken(raw *config.RawConfig, name string) bool {
+	switch name {
+	case "DIRECT", "REJECT", "REJECT-DROP", "COMPATIBLE", "PASS", "PASS-RULE", "GLOBAL":
+		return true
+	}
 	if _, exists := raw.ProxyProvider[name]; exists {
 		return true
 	}
@@ -819,7 +823,7 @@ func vpsServerGroup(raw *config.RawConfig, names []string) string {
 		}
 	}
 	name := stem
-	for i := 1; vpsNameTaken(raw, name); i++ {
+	for i := 1; name == vpsSmartGroup || vpsNameTaken(raw, name); i++ {
 		name = "⚡ " + stem
 		if i > 1 {
 			name = fmt.Sprintf("⚡ %s (%d)", stem, i)
