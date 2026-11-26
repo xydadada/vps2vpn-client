@@ -22,6 +22,7 @@ import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/local_network.dart';
 import 'package:fl_clash/vps2vpn/node_status.dart';
+import 'package:fl_clash/vps2vpn/notice.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/screenshots.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
@@ -407,9 +408,15 @@ class _HeroState extends ConsumerState<_Hero> {
       final recent =
           last != null &&
           DateTime.now().difference(last.at) < const Duration(seconds: 30);
-      _failure = recent
-          ? last.text
-          : tr(context, '请再试一次。', 'Please try again.');
+      _failure = !recent
+          ? tr(context, '请再试一次。', 'Please try again.')
+          : vpsPageError.value == last.text
+          ? tr(
+              context,
+              '原因写在上方，处理好后再连接。',
+              'The reason is above; sort it out, then connect again.',
+            )
+          : last.text;
     }
     _tappedConnect = false;
     _tappedStop = false;

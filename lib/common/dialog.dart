@@ -16,6 +16,9 @@ class Dialogs {
   /// vps2vpn: lets simple mode dress an alert in its own accent.
   Widget Function(BuildContext context, Widget child)? dress;
 
+  /// vps2vpn: true when simple mode shows the error in the page instead.
+  bool Function(String text)? pinError;
+
   // Focus sits in the route the user acts in, so an alert raised from a form
   // sheet, or a page pushed inside one, opens over it, beside the navigation
   // as the sheet sits.
@@ -245,6 +248,9 @@ class Dialogs {
     commonPrint.log('banner: $text');
     if (level == BannerLevel.error) {
       lastErrorBanner = (text: text, at: DateTime.now());
+      if (onTap == null && pinError?.call(text) == true) {
+        return;
+      }
     }
     final context = rootNavigatorKey.currentContext;
     if (context == null) {

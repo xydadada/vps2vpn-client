@@ -14,6 +14,7 @@ import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/vps2vpn/auto_update.dart';
 import 'package:fl_clash/vps2vpn/kit.dart' show VpsAccentScope;
+import 'package:fl_clash/vps2vpn/notice.dart' show vpsPinError;
 import 'package:fl_clash/vps2vpn/panel.dart'
     show vpsLinkSource, vpsSubscriptionLink;
 import 'package:fl_clash/vps2vpn/screenshots.dart';
@@ -85,6 +86,7 @@ class ApplicationState extends ConsumerState<Application> {
     super.initState();
     SystemNavigator.setFrameworkHandlesBack(true);
     dialogs.dress = vpsDressAlert;
+    dialogs.pinError = vpsPinError;
     vpsAskTakeover = vpsShowTakeoverAsk;
     vpsBeforeSystemProxy = vpsNoteForeignProxy;
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {

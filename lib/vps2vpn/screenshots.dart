@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:fl_clash/common/app_localizations.dart'
+    show currentAppLocalizations, userFacingErrorMessage;
 import 'package:fl_clash/common/constant.dart'
     show defaultPrimaryColor, trafficSampleLength;
 import 'package:fl_clash/common/dialog.dart' show dialogs;
@@ -15,6 +17,7 @@ import 'package:fl_clash/vps2vpn/devices.dart';
 import 'package:fl_clash/vps2vpn/feedback.dart';
 import 'package:fl_clash/vps2vpn/home.dart' show mainGroup;
 import 'package:fl_clash/vps2vpn/mine.dart' show vpsThemeColors;
+import 'package:fl_clash/vps2vpn/notice.dart' show vpsPageError;
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/vps2vpn/takeover.dart'
@@ -121,6 +124,7 @@ class _ShotRun {
       _releaseSpeed();
       await _keyframes('disconnect');
       await _until(() => !container.read(isStartProvider), 30);
+      await _banners();
     } catch (e, s) {
       _log.writeln('failed: $e\n$s');
     } finally {
@@ -374,17 +378,38 @@ class _ShotRun {
           ),
         );
         await close();
-        dialogs.showBanner(
-          '订阅内容读不懂，链接可能不完整或服务器出错，请向管理员确认。',
-          level: BannerLevel.error,
-        );
-        await _settle(1200);
-        await _shoot('audit-banner-error-$tag');
-        await _settle(6000);
-        dialogs.showBanner(vpsRemovedText(here()));
-        await _settle(1200);
-        await _shoot('audit-banner-removed-$tag');
-        await _settle(6000);
+      }
+    }
+  }
+
+  /// Shot disconnected, as both leave the app.
+  Future<void> _banners() async {
+    final id = container.read(currentProfileProvider)?.id;
+    for (final size in const ['default', 'wide']) {
+      await desktopWindow.setSize(_sizes[size]!);
+      for (final theme in const [ThemeMode.light, ThemeMode.dark]) {
+        _theme(theme);
+        for (final locale in const ['zh', 'en']) {
+          _locale(locale);
+          vpsTab.value = vpsTabHome;
+          await _settle(1200);
+          final tag = '$size-${theme.name}-$locale';
+          dialogs.showBanner(
+            userFacingErrorMessage(
+              Exception('yaml: unmarshal errors'),
+              currentAppLocalizations,
+            ),
+            level: BannerLevel.error,
+          );
+          await _settle(1200);
+          await _shoot('audit-banner-error-$tag');
+          vpsPageError.value = null;
+          if (id == null) continue;
+          container.read(vpsRemovedProvider.notifier).mark(id, true);
+          await _settle(1200);
+          await _shoot('audit-banner-removed-$tag');
+          container.read(vpsRemovedProvider.notifier).mark(id, false);
+        }
       }
     }
   }

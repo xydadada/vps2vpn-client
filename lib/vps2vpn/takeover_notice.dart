@@ -4,6 +4,7 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/window.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/notice.dart';
 import 'package:fl_clash/vps2vpn/takeover.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -140,9 +141,9 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
         final en = <String>[];
         var warn = false;
         if (r.closed.isNotEmpty) {
-          zh.add('已为你退出 ${r.closed.join('、')}，网络已由 vps2vpn 接管');
+          zh.add('已为你关闭 ${r.closed.join('、')}，网络已由 vps2vpn 接管');
           en.add(
-            '${r.closed.join(', ')} closed. vps2vpn now runs your network',
+            'Closed ${r.closed.join(', ')}; vps2vpn now runs your network',
           );
         }
         if (r.stillRunning.isNotEmpty) {
@@ -228,70 +229,16 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
         }
         final color = warn ? p.warn : p.good;
         final canQuit = r.running.isNotEmpty && !r.dryRun && !takeover;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: VpsCard(
-            padding: const EdgeInsets.fromLTRB(18, 14, 12, 14),
-            child: Row(
-              crossAxisAlignment: zh.length == 1
-                  ? CrossAxisAlignment.center
-                  : CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(top: zh.length == 1 ? 0 : 5),
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: color,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final (i, line) in zh.indexed)
-                        Padding(
-                          padding: EdgeInsets.only(top: i == 0 ? 0 : 4),
-                          child: Text(
-                            tr(context, line, en[i]),
-                            style: vpsText(
-                              p,
-                              size: 13,
-                              color: i == 0 ? p.text : p.soft,
-                              height: 1.45,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (canQuit)
-                  VpsButton(
-                    label: tr(context, '一键退出', 'Quit them'),
-                    onTap: _busy ? null : _quit,
-                  )
-                else
-                  VpsPressable(
-                    onTap: () => setState(() => _dismissed = r),
-                    semanticLabel: tr(context, '关闭提示', 'Dismiss'),
-                    child: SizedBox.square(
-                      dimension: 32,
-                      child: Center(
-                        child: Text(
-                          '×',
-                          style: vpsText(p, size: 18, color: p.muted),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        return VpsNotice(
+          color: color,
+          lines: [for (final (i, line) in zh.indexed) tr(context, line, en[i])],
+          action: canQuit
+              ? VpsButton(
+                  label: tr(context, '一键退出', 'Quit them'),
+                  onTap: _busy ? null : _quit,
+                )
+              : null,
+          onDismiss: () => setState(() => _dismissed = r),
         );
       },
     );

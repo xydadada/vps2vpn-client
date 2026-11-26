@@ -15,6 +15,7 @@ import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/local_network.dart';
 import 'package:fl_clash/vps2vpn/mine.dart';
+import 'package:fl_clash/vps2vpn/notice.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:flutter/widgets.dart';
@@ -685,6 +686,7 @@ class VpsPage extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 22),
+                  const VpsErrorNotice(),
                   // Blocks arrive one after another, top to bottom.
                   for (final (i, child) in children.indexed)
                     VpsEnter(index: i, child: child),

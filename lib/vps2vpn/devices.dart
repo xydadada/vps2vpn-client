@@ -14,6 +14,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/ui.dart' show QrCodeView;
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/notice.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -583,10 +584,7 @@ final vpsDeviceSyncProvider = Provider.autoDispose<void>((ref) {
         );
       },
     );
-    if (!told) return;
-    final context = globalState.navigatorKey.currentContext;
-    if (context == null || !context.mounted) return;
-    dialogs.showBanner(vpsRemovedText(context));
+    if (told) vpsRemovedDismissed.value = null;
   }
 
   unawaited(beat());
@@ -598,7 +596,10 @@ final vpsDeviceSyncProvider = Provider.autoDispose<void>((ref) {
 });
 
 String vpsRemovedText(BuildContext context) =>
-    tr(context, '此设备已被账号所有者移除', 'This device was removed by the owner');
+    tr(context, '此设备已被账号所有者移除', 'This device was removed by the account owner');
+
+/// The profile whose removed notice was closed with ×.
+final vpsRemovedDismissed = ValueNotifier<int?>(null);
 
 String _ago(BuildContext context, DateTime? at) {
   if (at == null) return '';
@@ -684,54 +685,33 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final p = VpsPalette.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: VpsCard(
-        highlight: true,
-        padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                VpsIconView(VpsIcon.shield, size: 19, color: p.bad),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    vpsRemovedText(context),
-                    style: vpsText(p, size: 14, weight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              tr(
-                context,
-                '此设备已被移除，这个订阅在本机已停用。账号所有者恢复后即可重新连接。',
-                'This device was removed, so this subscription is off here '
-                    'until the owner restores it; then connect again.',
-              ),
-              style: vpsText(p, size: 13, color: p.soft, height: 1.5),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                VpsButton(
-                  label: tr(context, '联系所有者恢复', 'Ask the owner to restore'),
-                  filled: true,
-                  onTap: () => unawaited(_copyRestoreNote(context)),
-                ),
-                VpsButton(
-                  label: tr(context, '移除这个订阅', 'Remove this subscription'),
-                  onTap: () => unawaited(_removeProfile(ref, profile.id)),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return ValueListenableBuilder<int?>(
+      valueListenable: vpsRemovedDismissed,
+      builder: (context, dismissed, child) =>
+          dismissed == profile.id ? const SizedBox.shrink() : child!,
+      child: VpsNotice(
+        color: p.bad,
+        lines: [
+          vpsRemovedText(context),
+          tr(
+            context,
+            '这个订阅在本机已停用，账号所有者恢复后即可重新连接。',
+            'This subscription is off here until the owner restores it; then '
+                'connect again.',
+          ),
+        ],
+        actions: [
+          VpsButton(
+            label: tr(context, '联系所有者恢复', 'Ask the owner to restore'),
+            filled: true,
+            onTap: () => unawaited(_copyRestoreNote(context)),
+          ),
+          VpsButton(
+            label: tr(context, '移除这个订阅', 'Remove this subscription'),
+            onTap: () => unawaited(_removeProfile(ref, profile.id)),
+          ),
+        ],
+        onDismiss: () => vpsRemovedDismissed.value = profile.id,
       ),
     );
   }
@@ -993,10 +973,10 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   Widget _deviceRow(VpsPalette p, VpsDevice d) {
     final meta = [
       vpsPlatformLabel(d.platform),
-      if (d.version.isNotEmpty) 'v${d.version}',
+      if (d.version.isNotEmpty) d.version.replaceFirst(RegExp('^v'), ''),
       if (d.ip.isNotEmpty) d.ip,
-      _ago(context, d.lastSeen),
-    ].where((s) => s.isNotEmpty).toList();
+    ].where((s) => s.isNotEmpty).join(' · ');
+    final seen = _ago(context, d.lastSeen);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1016,17 +996,14 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                     style: vpsText(p, size: 14, weight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
-                  // Wraps between the parts, never inside "12 分钟前".
-                  Wrap(
-                    children: [
-                      for (final (i, part) in meta.indexed)
-                        Text(
-                          i == meta.length - 1 ? part : '$part · ',
-                          softWrap: false,
-                          style: vpsText(p, size: 12, color: p.muted),
-                        ),
-                    ],
+                  Text(
+                    meta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: vpsText(p, size: 12, color: p.muted),
                   ),
+                  if (seen.isNotEmpty)
+                    Text(seen, style: vpsText(p, size: 12, color: p.muted)),
                 ],
               ),
             ),
@@ -1169,8 +1146,8 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                           Text(
                             tr(
                               context,
-                              '在线 IP ${list.onlineIps} / 最多 ${list.maxIps}',
-                              'Online IPs ${list.onlineIps} of ${list.maxIps}',
+                              '同时在线 ${list.onlineIps} / 上限 ${list.maxIps}',
+                              'Online now ${list.onlineIps} / limit ${list.maxIps}',
                             ),
                             style: vpsText(p, size: 13, color: p.soft).copyWith(
                               fontFeatures: const [

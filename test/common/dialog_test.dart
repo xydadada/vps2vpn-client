@@ -442,6 +442,27 @@ void main() {
     },
   );
 
+  testWidgets('an error the page pins does not also float', (tester) async {
+    await _pumpBannerHost(tester);
+    final pinned = <String>[];
+    dialogs.pinError = (text) {
+      pinned.add(text);
+      return true;
+    };
+    addTearDown(() => dialogs.pinError = null);
+
+    dialogs.showBanner('could not read it', level: BannerLevel.error);
+    dialogs.showBanner('copied');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(pinned, ['could not read it']);
+    expect(dialogs.lastErrorBanner?.text, 'could not read it');
+    expect(find.text('could not read it'), findsNothing);
+    expect(find.text('copied'), findsOneWidget);
+    expect(tester.takeException(), null);
+  });
+
   testWidgets('showBanner drops empty text before reaching the host', (
     tester,
   ) async {
