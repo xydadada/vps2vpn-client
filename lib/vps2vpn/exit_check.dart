@@ -270,7 +270,7 @@ List<VpsFinding> vpsExitFindings(
         tr(context, 'IP 类型', 'IP type'),
         [
           type,
-          if (flagged) tr(context, '被标记为代理', 'flagged as a proxy'),
+          if (flagged) tr(context, '被标记为代理', 'proxy-flagged'),
           if (risky) tr(context, '有滥用记录', 'abuse on record'),
         ].join(tr(context, '，', ', ')),
         risky
@@ -547,19 +547,14 @@ class VpsFindingCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Flexible(
-                    child: Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: VpsChip(
-                        label: r.value,
-                        color: switch (r.level) {
-                          VpsFindingLevel.good => p.good,
-                          VpsFindingLevel.warn => p.warn,
-                          VpsFindingLevel.bad => p.bad,
-                          VpsFindingLevel.none => p.soft,
-                        },
-                      ),
-                    ),
+                  VpsChip(
+                    label: r.value,
+                    color: switch (r.level) {
+                      VpsFindingLevel.good => p.good,
+                      VpsFindingLevel.warn => p.warn,
+                      VpsFindingLevel.bad => p.bad,
+                      VpsFindingLevel.none => p.soft,
+                    },
                   ),
                 ],
               ),
