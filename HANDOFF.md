@@ -1,24 +1,16 @@
 # vps2vpn 客户端交接文档
 
-更新时间：2026-11-23。仓库：`xydadada/vps2vpn-client`，主分支 `vps2vpn`（上游 FlClash 的 `main` 不用来发布）。
+更新时间：2026-11-27。仓库：`xydadada/vps2vpn-client`，主分支 `vps2vpn`（上游 FlClash 的 `main` 不用来发布）。
 
-## 0. 暂停时的进度（2026-11-26，额度用完）
+文中的「主会话」「服务端会话」「管理员会话」，指维护服务端仓库 `xydadada/vps2vpn` 的那个 Agent：审图结果、发布后的 `.sig` 核对和测试服务器同步都由它负责。换了 Agent 时，以服务端仓库的 HANDOFF 为准。本机的会话笔记外部 Agent 看不到，只供参考；有用的结论都已写进本文件。
 
-逐页 UI 审查按顺序合并：ui-home → ui-dialogs → ui-nodes → ui-check → ui-settings → copy-fixes，每合一个先等 `verify.yaml` 通过，再合下一个。合并要等审图通过；截图由 `screenshots.yaml` 生成，每页都拍中英、深浅、宽/默认/最窄三种窗口、125%/150% 缩放。
+## 0. 当前进度（2026-11-27）
 
-| 分支 | 头 | 状态 |
-|---|---|---|
-| `ui-home` | `fb57ca12` | **已合入 `vps2vpn`**（verify 45919616693 通过） |
-| `ui-dialogs` | `1ec33153` | 待审。错误提示固定在页面标题下；设备被移除时电源键变灰不能点；按钮改为「复制求助信息」，并提示所有者去恢复。截图 run 45921277202。基于旧 `vps2vpn`，合并前要 rebase |
-| `ui-nodes` | `c37cbaf5` | 待审。分组超过两行改成一行横向滚动（边缘渐隐、支持滚轮、选中项自动滚到可见处）；英文节点名只按城市/国家对照表翻译开头。截图 run 45921449592 |
-| `ui-check` | `3a8a3f3c` | 待审。已 rebase 到 `fb57ca12`。最后两个提交：检测卡标题只显示问题数，每个问题各占一行；结果胶囊按完整宽度显示。这两个提交的截图正在重拍 |
-| `ui-settings` | `ce87beb7` | 待审，截图已出未看。基于旧的 ui-check，合并前要 rebase |
-| `copy-fixes` | `2cfc6f12` | 待审。合并前要 rebase，`servers.dart`、`home.dart` 会和 ui-nodes 冲突 |
-| `upgrade-legend` | `b7844f16` | 发布关口（`e2e.yaml` 的 gate）和测试用覆盖源的修复。gate 已全绿（run 45919510339）：install、legend、从 v1.0.33 升级，在 windows-2025/2022 都通过。还没合，合进 1.0.34 前先和服务端确认 |
+正在发布 1.0.34。逐页 UI 审查的分支按这个顺序合进 `vps2vpn`：ui-home → ui-dialogs → ui-nodes → ui-check → ui-settings → copy-fixes，最后合 upgrade-legend。每合一个都要等 `verify.yaml` 通过，再合下一个。各分支的状态见第 3 节。
 
-1.0.34 发布顺序：分支全部合完 → 改版本号 → 用 `vps2vpn.yaml` 加 `publish=true` 打出 `test-1.0.34` → 以 `tag=test-1.0.34` 跑 `e2e.yaml`，gate 必须全绿 → 手动转为 Latest。
+全部合完以后按第 2 节发布。1.0.34 转为 Latest 之前，`e2e.yaml` 的 gate 必须全绿（第 2 节第 5 步）。
 
-1.0.35（外部审查核实）：只读了 issue #92（崩溃后丢失连接前的系统代理设置）、#101（SAFE_MODE 构建启动时仍会清理系统代理），以及离线补丁包 B、C 的 CHANGES.md，**还没改代码**。其余 PR 和 issue 还没看，`external-triage-client.md` 还没写。
+1.0.35 做外部审查里核实过的修复，分拣结论见第 7 节。
 
 ## 1. 当前版本
 
@@ -26,7 +18,7 @@
 |---|---|
 | 最新正式版（Latest） | **v1.0.33**，commit `9b2456ca0454990e4ee63fb6ca3a87d66f92caf1`（2026-11-25 发布；首页标题在智能线路切换时不再来回跳，窄窗口页面底部不再被底部导航栏挡住，标题栏和宽窗口侧边栏顶边与背景连成一片；升级测试 66、共存测试 94、harsh 309 全部通过，背景粗糙度 2.8；等服务端核对 SHA256 和 `.sig` 并同步 clientsync） |
 | 上一版 | v1.0.32，commit `3439ae243eb79de536a9bacabc6f9ca29bc8d083`（修 1.0.31 背景雪花噪点）。v1.0.31 因背景雪花已撤回为预发布 |
-| `vps2vpn` 分支头 | `77f7274c`（v1.0.32 之后只加了截图背景粗糙度检查） |
+| `vps2vpn` 分支头 | 不在这里记，以 `git log private/vps2vpn` 为准。下一版 1.0.34 正在合分支（第 0 节） |
 | 安卓 | 还没有正式 APK，服务端 `files.android` 仍未配置。模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试结果见第 5 节"Firebase Test Lab"。预发布 `test-android-1.0.26` 只当预发布，不转正 |
 
 **English summary.** Latest client is v1.0.33 (the Home title holds the exit country while the smart line settles, narrow pages end above the floating tab bar, the title bar and the wide sidebar's top edge blend into the backdrop; upgrade test from v1.0.32 66 PASS, coexist 94 PASS, harsh 309 PASS with no FAIL, background roughness 2.8; the server still has to re-check SHA256 and `.sig`). v1.0.32 fixed the background static of 1.0.31. v1.0.31 was pulled back to a prerelease because the page background was covered in static (grain pixels not premultiplied); 1.0.32 fixes that and `screenshots.yaml` now fails when the background outside the cards is rough. 1.0.29 and 1.0.30 were never released on their own: harsh dirty caught a takeover regression in 1.0.30 (a bare core on the system proxy port could be spared when the takeover read the system proxy after ours was on), and the fix shipped in 1.0.31 with the smart line by billing rate, node status, config_version refetch, expiry days, local-network checks, feedback and device management. Android has no release: the emulator freezes about a second after connecting; real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
@@ -52,22 +44,26 @@
    ```
    gh workflow run vps2vpn.yaml --ref vps2vpn -f publish=true
    ```
-   会生成预发布 `test-<版本>`，带安装包、便携 zip、每个文件的 `.sig`、`SHA256SUMS.txt`。签名私钥只在 GitHub secret `UPDATE_SIGNING_KEY` 里用。构建日志里要看到 `Core controller patch applied and verified`（Mihomo 补丁，见第 9 节 C8-02）。
+   会生成预发布 `test-<版本>`（同名的 `test-*` 预发布会被这次替换掉；同名的不是预发布就停下，`v*` 正式版任何时候都不能删），带安装包、便携 zip、每个文件的 `.sig`、`SHA256SUMS.txt`。签名私钥只在 GitHub secret `UPDATE_SIGNING_KEY` 里用。构建日志里要看到 `Core controller patch applied and verified`（Mihomo 补丁，见第 9 节 C8-02）。
 4. **独立校验**（下载到一个新的空目录，Python 一律用 `-I`）：
    - `sha256sum -c SHA256SUMS.txt`
    - 用服务端仓库的 `vps2vpn.clientsync.signature_ok(name, sha256, size, sig)` 逐个验 `.exe` / `.zip` 的 `.sig`，只读服务端代码，`python -I -B`。
    - `python -I -B tool/check_load_flags.py <便携 zip>`，要 0 个问题。
-5. **安装器 + 升级测试**：
+5. **安装器、legend 升级、应用内升级（`e2e.yaml`，最后的 gate）**：
    ```
-   gh workflow run e2e.yaml --ref vps2vpn -f tag=test-<新版本> -f from=v<上一版>
+   gh workflow run e2e.yaml --ref vps2vpn -f tag=test-<新版本>
    ```
-   要求全部 PASS（1.0.27 时 66 项）。
+   - `from` 默认 `latest`：从当前 Latest 走应用内更新升级到新版本。
+   - `legend` 默认 `v1.0.27`：从真实的 v1.0.27 手动运行新安装包升级，订阅用 legend 形状的数据，并确认测试用的假发布永远不会被当成可安装的版本。用户还在用 1.0.27，这一项不能跳过。
+   - `gate` 这个 job 要求 install（`e2e`）、`legend`、`upgrade` 三个都跑过并且成功。任何一个被跳过都算失败。gate 不绿不能转正。
+   - 以前的升级测试（`-f from=v<上一版>`）现在就是这里的 `upgrade`。
+
 6. **共存测试**（和 FlClash、Clash Verge 共存、接管、重启、TUN、两次同时启动、卸载）：
    ```
    gh workflow run coexist.yaml --ref vps2vpn -f tag=test-<新版本> -f rounds=3
    ```
    要求没有 FAIL（1.0.27 时 94 项）。之后再跑一遍 `harsh.yaml`（第 6a 节）。
-7. **转正**：全部通过后
+7. **转正**：gate 全绿、共存和 harsh 都通过后
    ```
    gh release edit test-<版本> --tag v<版本> --target <commit> --title v<版本> --prerelease=false --latest --notes-file <说明文件>
    ```
@@ -80,16 +76,19 @@
 
 ## 3. 分支
 
-| 分支 | 状态 |
-|---|---|
-| `c17-pipe-acl` | 已并入 1.0.24，可以删 |
-| `disclaimer-checkbox-wip` | 半成品，最终做法不同（见第 4 节），已由 1.0.24 的 `a75a8410` 取代，可以删 |
-| `audit7` | 已并入 1.0.25，可以删 |
-| `c32-autostart-hidden` | 已 cherry-pick 进 `vps2vpn`（`79da5f13`），可以删 |
-| `android-ci` | 早期安卓 CI 工作分支，内容都已进 `vps2vpn`，可以删 |
-| `audit/*` 一大批 | 以前的审计补丁分支，已处理或判定不适用，不要直接合 |
+1.0.34 的页面分支（2026-11-27）。每页截图由 `screenshots.yaml` 生成，审图要求见 `.agents/vps2vpn.md`。
 
-没有 stash，没有未推送的改动。
+| 分支 | 内容 | 状态 |
+|---|---|---|
+| `ui-home` | 首页细节、速度曲线 | 已合入 |
+| `ui-dialogs` | 对话框写明按钮的动作；错误提示放在页面标题下面；设备被移除后电源键变灰，提示「复制求助信息」 | 审过，已 rebase，等重拍确认后合 |
+| `ui-nodes` | 节点卡片、倍率写法、分组超过两行改成横向滚动、英文节点名 | 审过，已修 lint，等重拍确认后合 |
+| `ui-check` | 检测卡标题只写问题数，每个问题各占一行；结果胶囊用完整宽度 | 审过，可合 |
+| `ui-settings` | 设置页：版本放到「关于」，二维码放进图标，一行一个图标 | 审过，已 rebase 到 ui-check，等 verify |
+| `copy-fixes` | 剩下的文案：点击、「」引号 | 待 rebase（会和 ui-nodes 在 `servers.dart`、`home.dart` 冲突） |
+| `upgrade-legend` | `e2e.yaml` 的 gate、legend 升级测试、`test-*` 预发布的替换规则 | 已 rebase，1.0.34 发布前合 |
+
+`audit-shots`、`design-tokens`，以及 `c17-pipe-acl`、`disclaimer-checkbox-wip`、`audit7`、`c32-autostart-hidden`、`cpr*`、`pr*` 这些旧分支，内容已经并入或者判定不用，可以删。`audit/*` 不要直接合。
 
 ## 4. 免责声明（1.0.24 起）
 
@@ -165,21 +164,34 @@
 
 ## 7. 待办（按优先级）
 
-1. **"另一个 VPN 开着"提醒（已在 1.0.28 发布）**：`lib/vps2vpn/takeover.dart` 的 `scanOtherVpns` 在 TUN 模式连接前用 `netsh interface ipv4 show route` 和 `show interfaces` 找别的接管全部流量的网卡（0.0.0.0/1 + 128.0.0.0/1 分段默认路由，或没有网关的默认路由），排除我们自己的网卡；`takeover_notice.dart` 显示"另一个 VPN（名字）也开着……请关掉其中一个"。单元测试在 `test/vps2vpn/takeover_test.dart` 的 `another VPN` 组。本机跑不了 Flutter 测试（用户名带中文，Go 构建钩子解析 JSON 出错），以云端 `verify.yaml` 为准。已随 1.0.28 发布。
-2. **安卓正式 APK**：模拟器路线已经走到头（第 5 节）。真机测试（第 5 节"Firebase Test Lab"）两台都失败了，但还不知道是哪一步：可能是测试驱动的界面匹配没对上（比如按钮文字），也可能是应用真的连不上。下一步：先按第 5 节说的把 Test Lab 的详细结果拷下来，看清失败在哪一步；是驱动的问题就修驱动重跑，是应用的问题再查 TUN/VpnService（`android/service/.../VpnService.kt`）。真机全部通过之前，APK 不转正，服务端也先别配 `files.android`。testlab 测试账户由管理员会话停用，要再测需重新开账户并更新 secret `TESTLAB_SUB_URL`。
-3. **`users` 场景**：APPDATA、单实例（按用户 SID 区分，`plugins/rust_api/rust/src/window/windows/instance.rs`）、第二个账户自动连接都修好了，第二个账户的客户端能常驻。剩下一项"第二个账户有自己的端口"：日志里它的 Core 也在 7890 上，`users.ps1` 已加端口归属诊断（每个监听端口属于哪个进程、哪个账户），看结果再判断是真的抢了管理员的端口还是检查写错了。
-4. **C-12**（= C8-07 前半）：macOS 网络/唤醒监听是桩实现。CI 没有 macOS，也不发 macOS 版，暂缓。
-5. 清理：删掉第 3 节里标"可以删"的分支；清掉没用的 arb 文案（`disclaimerAcknowledgeTitle`、`disclaimerAcknowledgeTip`）。
-
-6. **新功能计划**：见仓库根目录 [`ROADMAP.md`](ROADMAP.md)（2026-11-23 用户定）。顺序：1.0.28 → UI 第一批（截图、订阅导入输入框（见 ROADMAP 第〇节）、连接中状态、大白话错误、托盘、用词表）→ ROADMAP 第一节（出口 IP 检测，然后 Claude 专项）→ 第六节。规则测试做之前先问用户；需要服务端配合的（流量排行 `features.traffic_rank`、一键反馈、设备管理、节点状态）等服务端会话把接口字段写进 ROADMAP 再接；WARP 和抗封锁先写评估给用户看。做完一项在 ROADMAP 里标"已完成（版本号）"。
-
-7. **界面语言只留中英（UI 第二批，排在第一批之后）**：2026-11-23 用户定，原话"可以去掉俄语和日语"。要求：语言选项只剩"跟随系统 / 中文 / English"；系统是其他语言时显示英文；以前选过别的语言的用户升级后自动改成跟随系统、不崩溃；删掉对应的 arb 和生成代码，CI 截图里确认语言菜单。西、法、韩三种也一起删（服务端会话 2026-11-23 确认：问用户时说的是"只保留中文和英文，去掉俄语、日语等"，用户同意）。
-
-8. **界面打磨（DESIGN.md）**：2026-11-24 用户定，见仓库根目录 [`DESIGN.md`](DESIGN.md)。在现有界面上调整，不照搬 FlClash：先做地基（颜色按用途分层、连续圆角、弹簧动画、等宽数字），再逐页修第二节的 16 个问题。每批出深色、浅色、宽窗口、窄窗口的改前/改后截图，先发主会话审。排在 1.0.28、UI 第一批、语言精简、手动输入框之后。
-
-9. **1.0.30（已做）**：用户报的 6 个场景、`Announce` 和面板矛盾、订阅服务器永久失效，逐条结论和 commit 见 [`LOGIC_REVIEW.md`](LOGIC_REVIEW.md) 第六节。
-
-10. **延迟口径评估（1.0.30）**：客户端的延迟是经代理打开测试网址（`generate_204`）的往返时间。默认算法包含和节点的连接握手（TCP + TLS 或协议握手），所以比 ping 高一截，200 ms 的 ping 显示 300 ms 左右是正常的。1.0.30 起所有安装默认开 mihomo 的 unified-delay（`migration.dart` 第 6 步；用户在覆写里自己设过的不动），它先发一次请求把连接建好，再计时第二次，去掉握手的那部分，数字更接近 ping，但仍比 ping 多一次 HTTP 往返和节点到测试网址的那段。节点页的说明也写了这个口径。不再往下压：再快就不是真实打开网页的时间了，智能线路选线也靠这个数。
+1. **1.0.34**：合完第 3 节的分支，按第 2 节发布。发布后告诉服务端 tag 和运行号，服务端再核对 `.sig` 并同步测试服务器。
+2. **1.0.35：外部审查（2026-11-27 分拣）**。来源是客户端 PR #89–#157、14 个 issue，以及两个离线补丁包。做法：在当前代码上逐条重写并补测试，PR 不直接合并，做完后关闭 PR，并写明对应的提交。
+   - **必做（安全、隐私、发布可信）**：
+     - #92：Windows 崩溃后丢失连接前的 WinINet 快照。把快照存到磁盘，重启后按快照恢复。没有快照时，仍要清掉指向本机死端口的代理（C10-01）。补丁包里「没有快照就什么都不做」的写法和这一点冲突，不照搬。
+     - #101：SAFE_MODE 下，runner 在 Flutter 初始化之前就清理系统代理（`windows/runner/main.cpp` 的 `ClearStaleProxyInBackground`）。安全模式下跳过这一步。
+     - 安装前再验一次：在 isolate 里流式计算 SHA256 并验 Ed25519，拒绝符号链接和非普通文件。`.sig` 先写临时文件再改名。公钥和签名语句不动。
+     - 心跳回复必须带 `ok: true` 和布尔值 `revoked`，否则不算正常回复。
+     - 导入或剪贴板出错后释放忙碌状态并保留输入，界面上不显示含 token 的原始异常。
+     - Windows 和 Android 发布前先过源码检查；`flutter pub get --enforce-lockfile`。
+     - #157：Test Lab 诊断里对 XML 转义过的订阅链接也做脱敏。
+     - 隐私：#105、#108、#135。
+     - 输入边界：#90、#91、#109、#110、#133、#137。
+   - **尽量做（简洁模式的正确性）**：
+     - 设备和订阅：#98、#104、#113–#117。
+     - 诊断和反馈：#96、#97、#99、#118。
+     - 生命周期：#102、#106、#131。
+     - 迟到的写入覆盖新数据：#130、#144、#149。
+     - macOS/Linux 断开时恢复原设置：#93，在 #92 之后做。
+     - 减少动态效果、大字号布局：照现在的外观改，补截图。
+     - #123（Android 生命周期）需要真机，等 Test Lab 再做。
+   - **不阻塞 1.0.35**：上游高级模式、编辑器、备份和文档类的 PR（#89、#94、#95、#100、#107、#111、#112、#119–#121、#124–#128、#132、#134、#136、#138–#143、#145–#148、#151–#156），以及 issue #122、#129。#152 放宽了 Test Lab 驱动的权限，合并前先确认范围。
+   - **不采纳**：补丁包里的字体恢复工具（字体已经在仓库里）和单独的审查记录文件。发布前缀 `rs-`、`dev-` 先确认确实存在再处理。
+   - **用户决定**：#150（开启私密漏洞报告，属于仓库设置）。
+3. **安卓正式 APK（暂停，2026-11-23 用户定）**：模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试走 Firebase Test Lab，Test Lab 的配额恢复后还欠一次真机运行。testlab 测试账号要请管理员会话开启，并更新 secret `TESTLAB_SUB_URL`（这个值不能出现在日志里）。真机全部通过之前，APK 不转正，服务端也先不配 `files.android`。
+4. **`users` 场景**：还剩「第二个账户有自己的端口」，看 `users.ps1` 的端口归属诊断结果再判断。
+5. **C-12**：macOS 网络监听和唤醒监听是桩实现。不发 macOS 版，暂缓。
+6. **功能计划**：见 `ROADMAP.md`。界面打磨见 `DESIGN.md`，以它顶部的说明为准：外观以 1.0.27 为准，只抠细节。
+7. **清理**：删掉第 3 节里标了可以删的分支；清掉不用的 arb 文案（`disclaimerAcknowledgeTitle`、`disclaimerAcknowledgeTip`）。
 
 ## 8. 不能做的事
 
@@ -188,7 +200,7 @@
 - **提交里不写 `Co-Authored-By`**，提交信息和 CI 日志里不出现本机路径、用户名、邮箱、主机名。
 - CI 日志和提交里不出现服务器 IP、密钥、密码。
 - 不提交 `core/Clash.Meta`（子模块，本地总显示有改动，忽略它）。
-- 不改已推送的历史；不碰用户自己的正式服务器。测试只能用唯一那台测试服务器，地址和密钥只写在用户电脑上的本地文件 `C:\Users\<user>\.claude\CLAUDE.md`（测试服务器一节）里，仓库里一律不写；改它之前先 `sudo vps2vpn backup` 并告诉管理员会话。
+- 不改已推送的历史；不碰用户自己的正式服务器。测试只能用唯一那台测试服务器，地址和密钥只写在用户电脑上的本地文件 `C:\Users\<user>\.claude\CLAUDE.md`（测试服务器一节；本机文件，外部 Agent 看不到）里，仓库里一律不写；改它之前先 `sudo vps2vpn backup` 并告诉管理员会话。
 - 不关闭、不改动用户电脑上的 FlClash 和系统代理（用户靠它上网）。
 - 每个发布资产都必须有 `.sig`。
 - 下载下来的文件当不可信数据：放到新的空目录，Python 用 `-I`。审计报告、补丁同样只读，不运行里面的脚本，不整体 `git apply`，逐条核实后自己写修复。
