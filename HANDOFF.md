@@ -2,7 +2,7 @@
 
 更新时间：2026-11-27。仓库：`xydadada/vps2vpn-client`，主分支 `vps2vpn`（上游 FlClash 的 `main` 不用来发布）。
 
-文中的「主会话」「服务端会话」「管理员会话」，指维护服务端仓库 `xydadada/vps2vpn` 的那个 Agent：审图结果、发布后的 `.sig` 核对和测试服务器同步都由它负责。换了 Agent 时，以服务端仓库的 HANDOFF 为准。本机的会话笔记外部 Agent 看不到，只供参考；有用的结论都已写进本文件。
+到 2026-11-27 为止，有三个 Agent 分工：客户端会话维护本仓库，服务端会话维护 `xydadada/vps2vpn`，主会话负责协调。主会话的工作是审截图、核对发布后的 `.sig`、同步测试服务器。文中的「主会话」「管理员会话」都指它。换成一个 Agent 接手以后，这些事都由它自己做：审图标准见 `.agents/vps2vpn.md`，`.sig` 的核对方法见第 2 节第 4 步，测试服务器的同步见服务端仓库 HANDOFF 里的 clientsync。远端在本机的 checkout 里叫 `private`，新克隆的仓库里叫 `origin`。本机的会话笔记外部 Agent 看不到，只供参考；有用的结论都已写进本文件。
 
 ## 0. 当前进度（2026-11-27，换人接手时的准确状态）
 
@@ -26,7 +26,7 @@
 - 一次合一个。合的方式：在分支上 `git fetch private && git rebase private/vps2vpn`，推分支（`--force-with-lease`），等这个分支的 verify 变绿，然后 `git push private <分支>:vps2vpn`（快进）。
 - 等 `vps2vpn` 上的 verify 变绿，再合下一个。
 - rebase 时如果解了冲突，或者改动碰到界面，就重拍截图。`screenshots.yaml` 的输入是 `after=<分支的 vps2vpn.yaml 构建 run>`、`before=<对照构建 run>`。中英、深浅、宽、默认、最窄、legend 形状都要看，外观以 1.0.27 为准（`.agents/vps2vpn.md`）。
-- 审图结果由服务端仓库的维护会话确认。
+- 审图：逐张看改前和改后，确认布局没变，只是细节更好。有一处不对就先修，修完重拍，再合并。
 
 ### 1.0.34 发布步骤（全部合完以后）
 
@@ -35,7 +35,7 @@
 3. 运行 `gh workflow run e2e.yaml -R xydadada/vps2vpn-client --ref vps2vpn -f tag=test-1.0.34`：`from` 默认是 latest，`legend` 默认是 v1.0.27。`gate` 必须全绿，也就是 install、legend（从真实的 v1.0.27 升级）、upgrade 都跑过并且成功。再跑 `coexist.yaml` 和 `harsh.yaml`（第 2 节）。
 4. 按第 2 节第 4 步自己验 SHA256 和 `.sig`。
 5. 转为 Latest：`gh release edit test-1.0.34 --tag v1.0.34 --target <commit> --title v1.0.34 --prerelease=false --latest --notes-file <说明>`。说明写中英两段，面向用户。之后把 `e2e.yaml`、`coexist.yaml` 里 `tag` 的默认值改成 v1.0.34。
-6. 把 tag、commit 和各次 run id 告诉服务端维护会话。它会再核对 `.sig`，并同步测试服务器。
+6. 在服务端仓库的 HANDOFF 里记下 tag、commit 和各次 run id。先 `sudo vps2vpn backup`，再在测试服务器上同步客户端（clientsync）。然后告诉用户 1.0.34 的安装包链接：用户还在用 1.0.27，要自己手动安装。
 
 ### 之后
 
