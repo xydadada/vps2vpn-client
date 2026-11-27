@@ -2,6 +2,24 @@
 
 更新时间：2026-11-23。仓库：`xydadada/vps2vpn-client`，主分支 `vps2vpn`（上游 FlClash 的 `main` 不用来发布）。
 
+## 0. 暂停时的进度（2026-11-26，额度用完）
+
+逐页 UI 审查按顺序合并：ui-home → ui-dialogs → ui-nodes → ui-check → ui-settings → copy-fixes，每合一个先等 `verify.yaml` 通过，再合下一个。合并要等审图通过；截图由 `screenshots.yaml` 生成，每页都拍中英、深浅、宽/默认/最窄三种窗口、125%/150% 缩放。
+
+| 分支 | 头 | 状态 |
+|---|---|---|
+| `ui-home` | `fb57ca12` | **已合入 `vps2vpn`**（verify 45919616693 通过） |
+| `ui-dialogs` | `1ec33153` | 待审。错误提示固定在页面标题下；设备被移除时电源键变灰不能点；按钮改为「复制求助信息」，并提示所有者去恢复。截图 run 45921277202。基于旧 `vps2vpn`，合并前要 rebase |
+| `ui-nodes` | `c37cbaf5` | 待审。分组超过两行改成一行横向滚动（边缘渐隐、支持滚轮、选中项自动滚到可见处）；英文节点名只按城市/国家对照表翻译开头。截图 run 45921449592 |
+| `ui-check` | `3a8a3f3c` | 待审。已 rebase 到 `fb57ca12`。最后两个提交：检测卡标题只显示问题数，每个问题各占一行；结果胶囊按完整宽度显示。这两个提交的截图正在重拍 |
+| `ui-settings` | `ce87beb7` | 待审，截图已出未看。基于旧的 ui-check，合并前要 rebase |
+| `copy-fixes` | `2cfc6f12` | 待审。合并前要 rebase，`servers.dart`、`home.dart` 会和 ui-nodes 冲突 |
+| `upgrade-legend` | `b7844f16` | 发布关口（`e2e.yaml` 的 gate）和测试用覆盖源的修复。gate 已全绿（run 45919510339）：install、legend、从 v1.0.33 升级，在 windows-2025/2022 都通过。还没合，合进 1.0.34 前先和服务端确认 |
+
+1.0.34 发布顺序：分支全部合完 → 改版本号 → 用 `vps2vpn.yaml` 加 `publish=true` 打出 `test-1.0.34` → 以 `tag=test-1.0.34` 跑 `e2e.yaml`，gate 必须全绿 → 手动转为 Latest。
+
+1.0.35（外部审查核实）：只读了 issue #92（崩溃后丢失连接前的系统代理设置）、#101（SAFE_MODE 构建启动时仍会清理系统代理），以及离线补丁包 B、C 的 CHANGES.md，**还没改代码**。其余 PR 和 issue 还没看，`external-triage-client.md` 还没写。
+
 ## 1. 当前版本
 
 | 项目 | 值 |
