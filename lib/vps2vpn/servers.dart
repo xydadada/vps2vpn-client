@@ -113,10 +113,10 @@ final _byLatency = ValueNotifier<bool>(true);
 /// Per node: whether Claude and ChatGPT both open through it, from the last
 /// "Test AI" this session.
 final _aiOk = ValueNotifier<Map<String, bool>>(const {});
-(int?, DateTime?)? _aiOkProfile;
+(int?, String?, DateTime?)? _aiOkProfile;
 
-(int?, DateTime?) _profileKey(Profile? profile) =>
-    (profile?.id, profile?.lastUpdateDate);
+(int?, String?, DateTime?) _profileKey(Profile? profile) =>
+    (profile?.id, profile?.url, profile?.lastUpdateDate);
 
 /// Sort key: answered lines by latency, then untested, then timeouts.
 int _rank(int? d) => switch (d) {
@@ -140,6 +140,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   String? _groupName;
   bool _testing = false;
   bool _testingAi = false;
+  var _aiRun = 0;
 
   void _aiChanged() => setState(() {});
 
@@ -155,10 +156,21 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     super.dispose();
   }
 
+  void _cancelAi() {
+    _aiRun++;
+    if (_testingAi) setState(() => _testingAi = false);
+  }
+
   Future<void> _testAi(Group group) async {
-    if (_testingAi) return;
+    if (_testingAi || !ref.read(isStartProvider)) return;
     setState(() => _testingAi = true);
+    final run = ++_aiRun;
     final key = _profileKey(ref.read(currentProfileProvider));
+    bool isCurrent() =>
+        mounted &&
+        run == _aiRun &&
+        key == _profileKey(ref.read(currentProfileProvider)) &&
+        ref.read(isStartProvider);
     if (_aiOkProfile != key) {
       _aiOkProfile = key;
       _aiOk.value = const {};
@@ -175,28 +187,35 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     };
     try {
       for (var i = 0; i < names.length; i += 3) {
+        if (!isCurrent()) return;
         await Future.wait([
           for (final name in names.skip(i).take(3))
             checkServices(
               core,
               proxyName: name,
               targets: const [ServiceTarget.claude, ServiceTarget.chatgpt],
-            ).then(
-              (checks) => _aiOk.value = {
-                ..._aiOk.value,
-                name:
-                    checks.values.length == 2 &&
-                    checks.values.every(
-                      (c) => c.status == ServiceProbeStatus.available,
-                    ),
+            ).then<void>(
+              (checks) {
+                if (!isCurrent()) return;
+                _aiOk.value = {
+                  ..._aiOk.value,
+                  name:
+                      checks.values.length == 2 &&
+                      checks.values.every(
+                        (c) => c.status == ServiceProbeStatus.available,
+                      ),
+                };
               },
-              onError: (_) => _aiOk.value = {..._aiOk.value, name: false},
+              onError: (Object _) {
+                if (isCurrent()) {
+                  _aiOk.value = {..._aiOk.value, name: false};
+                }
+              },
             ),
         ]);
-        if (!mounted) return;
       }
     } finally {
-      if (mounted) setState(() => _testingAi = false);
+      if (mounted && run == _aiRun) setState(() => _testingAi = false);
     }
   }
 
@@ -245,6 +264,12 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(currentProfileProvider.select(_profileKey), (_, _) {
+      _cancelAi();
+    });
+    ref.listen(isStartProvider, (_, running) {
+      if (!running) _cancelAi();
+    });
     final p = VpsPalette.of(context);
     final groups = ref
         .watch(currentGroupsStateProvider)
