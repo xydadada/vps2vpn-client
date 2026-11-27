@@ -1464,7 +1464,7 @@ class _Stat extends StatelessWidget {
         child: body,
       );
     }
-    // Full width under the text, 6px clear of the text and the card's edge.
+    // Full width under the text, 6 dp clear of the text and the card's edge.
     return ClipRSuperellipse(
       borderRadius: BorderRadius.circular(VpsRadius.large),
       child: Padding(
@@ -1623,7 +1623,7 @@ class _SparkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width < 40 || size.height < 20) return;
-    // About 3px a sample, so a narrow tile shows the last few seconds.
+    // About 3 dp a sample, so a narrow tile shows the last few seconds.
     final keep = math.max(8, size.width ~/ 3);
     final values = this.values.length > keep
         ? this.values.sublist(this.values.length - keep)
