@@ -241,8 +241,6 @@ class _SiteRowState extends State<_SiteRow> {
                 style: vpsText(p, size: 14, weight: FontWeight.w500),
               ),
             ),
-            ?widget.delay,
-            const SizedBox(width: 4),
             ExcludeFocus(
               excluding: !shown,
               child: IgnorePointer(
@@ -268,6 +266,8 @@ class _SiteRowState extends State<_SiteRow> {
                 ),
               ),
             ),
+            const SizedBox(width: 4),
+            ?widget.delay,
           ],
         ),
       ),
