@@ -717,12 +717,7 @@ class _GroupTab extends StatelessWidget {
         ),
         child: Text(
           label,
-          // One line box for Latin and CJK labels, so a row shares a baseline.
-          strutStyle: const StrutStyle(
-            fontSize: 13.5,
-            height: 1.3,
-            forceStrutHeight: true,
-          ),
+          strutStyle: vpsStrut(13.5),
           style: vpsText(
             p,
             size: 13.5,

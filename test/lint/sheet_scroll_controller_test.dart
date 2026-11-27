@@ -13,6 +13,8 @@ const _allowed = {
   'lib/features/editor/completion_popup.dart',
   // Nor a drag along the proxies group chips, which run across the sheet.
   'lib/views/proxies/group_tabs.dart',
+  // Nor along the simple-mode node group tabs, for the same reason.
+  'lib/vps2vpn/servers.dart',
 };
 
 int _lineOf(String source, int offset) =>

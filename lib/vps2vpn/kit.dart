@@ -366,6 +366,11 @@ TextStyle vpsText(
   fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
 );
 
+/// One line box of [size] for Latin and CJK alike, so mixed labels in a row
+/// share a baseline.
+StrutStyle vpsStrut(double size, {double height = 1.3}) =>
+    StrutStyle(fontSize: size, height: height, forceStrutHeight: true);
+
 /// The rounded surface every block sits on: glass in dark, paper in light.
 class VpsCard extends StatefulWidget {
   const VpsCard({
