@@ -223,11 +223,12 @@ class _SiteRow extends StatefulWidget {
 
 class _SiteRowState extends State<_SiteRow> {
   var _hover = false;
+  var _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final shown = _hover || !system.isDesktop;
+    final shown = _hover || _focused || !system.isDesktop;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -243,8 +244,9 @@ class _SiteRowState extends State<_SiteRow> {
                 style: vpsText(p, size: 14, weight: FontWeight.w500),
               ),
             ),
-            ExcludeFocus(
-              excluding: !shown,
+            Focus(
+              canRequestFocus: false,
+              onFocusChange: (value) => setState(() => _focused = value),
               child: IgnorePointer(
                 ignoring: !shown,
                 child: AnimatedOpacity(
@@ -252,7 +254,11 @@ class _SiteRowState extends State<_SiteRow> {
                   duration: VpsMotion.fast,
                   child: VpsPressable(
                     onTap: widget.onRemove,
-                    semanticLabel: tr(context, '移除', 'Remove'),
+                    semanticLabel: tr(
+                      context,
+                      '移除 ${widget.name}',
+                      'Remove ${widget.name}',
+                    ),
                     child: SizedBox(
                       width: 28,
                       height: 28,
