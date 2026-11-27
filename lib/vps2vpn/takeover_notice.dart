@@ -50,7 +50,7 @@ Future<VpsTakeoverAnswer?> vpsShowTakeoverAsk(List<String> names) async {
                 style: vpsText(p, size: 13.5, color: p.soft, height: 1.5),
               ),
               const SizedBox(height: 4),
-              // The box sits 15 px inside its 48 px target.
+              // The box sits 15 dp inside its 48 dp target.
               Transform.translate(
                 offset: const Offset(-15, 0),
                 child: Row(

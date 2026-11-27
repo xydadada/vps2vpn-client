@@ -722,6 +722,7 @@ class _HeroState extends ConsumerState<_Hero> {
             tone: tone ?? p.good,
             add: !hasProfile,
             size: wide ? 148 : 132,
+            off: removed,
             label: !hasProfile
                 ? tr(context, '导入', 'Import')
                 : connecting && !tunWaiting
@@ -921,6 +922,7 @@ class _PowerRing extends StatefulWidget {
     required this.label,
     required this.onTap,
     this.busy = false,
+    this.off = false,
   });
 
   final bool on;
@@ -932,6 +934,9 @@ class _PowerRing extends StatefulWidget {
   final String label;
   final VoidCallback? onTap;
   final bool busy;
+
+  /// Nothing to connect to here: a grey face that does not press.
+  final bool off;
 
   @override
   State<_PowerRing> createState() => _PowerRingState();
@@ -1033,8 +1038,9 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
     final s = widget.size;
     final arc = _arcNow;
     final tone = arc.withValues(alpha: 1);
+    final off = widget.off && !widget.on;
     return VpsPressable(
-      onTap: widget.onTap,
+      onTap: off ? null : widget.onTap,
       child: SizedBox(
         width: s,
         height: s,
@@ -1044,26 +1050,27 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
           children: [
             // Outer glow in the state's colour (connected) or the brand's
             // (an invitation to connect).
-            FadeTransition(
-              opacity: _glow,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 600),
-                curve: VpsMotion.settle,
-                width: s,
-                height: s,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: (widget.on ? tone : p.seed).withValues(
-                        alpha: widget.on ? 0.32 : 0.22,
+            if (!off)
+              FadeTransition(
+                opacity: _glow,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 600),
+                  curve: VpsMotion.settle,
+                  width: s,
+                  height: s,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (widget.on ? tone : p.seed).withValues(
+                          alpha: widget.on ? 0.32 : 0.22,
+                        ),
+                        blurRadius: widget.on ? 56 : 36,
                       ),
-                      blurRadius: widget.on ? 56 : 36,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
             // One wave out from the button the moment it connects.
             AnimatedBuilder(
               animation: _ripple,
@@ -1110,8 +1117,12 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
               height: s * 0.7,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: widget.on ? null : p.accentGradient,
-                color: widget.on ? p.cardHi : null,
+                gradient: widget.on || off ? null : p.accentGradient,
+                color: widget.on
+                    ? p.cardHi
+                    : off
+                    ? p.track
+                    : null,
                 border: Border.all(
                   color: widget.on
                       ? tone.withValues(alpha: 0.45)
@@ -1150,7 +1161,13 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                   else
                     CustomPaint(
                       size: Size.square(s * 0.2),
-                      painter: _PowerGlyph(widget.on ? tone : p.accentInk),
+                      painter: _PowerGlyph(
+                        widget.on
+                            ? tone
+                            : off
+                            ? p.muted
+                            : p.accentInk,
+                      ),
                     ),
                   SizedBox(height: s * 0.03),
                   Text(
@@ -1159,7 +1176,11 @@ class _PowerRingState extends State<_PowerRing> with TickerProviderStateMixin {
                       p,
                       size: 13,
                       weight: FontWeight.w600,
-                      color: widget.on ? p.text : p.accentInk,
+                      color: widget.on
+                          ? p.text
+                          : off
+                          ? p.muted
+                          : p.accentInk,
                     ),
                   ),
                 ],

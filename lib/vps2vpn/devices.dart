@@ -695,14 +695,17 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
           vpsRemovedText(context),
           tr(
             context,
-            '这个订阅在本机已停用，账号所有者恢复后即可重新连接。',
-            'This subscription is off here until the owner restores it; then '
-                'connect again.',
+            '这个订阅在本机已停用，账号所有者恢复后即可重新连接。'
+                '你就是所有者的话，在会员中心或管理面板的设备列表里点击「恢复」。',
+            'This subscription is off here until the owner restores it. If '
+                "that's you, ${Platform.isAndroid ? 'tap' : 'click'} "
+                '"Restore" in the device list of the member center or admin '
+                'panel.',
           ),
         ],
         actions: [
           VpsButton(
-            label: tr(context, '联系所有者恢复', 'Ask the owner to restore'),
+            label: tr(context, '复制求助信息', 'Copy a note for the owner'),
             filled: true,
             onTap: () => unawaited(_copyRestoreNote(context)),
           ),
