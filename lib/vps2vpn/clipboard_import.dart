@@ -61,6 +61,7 @@ Future<VpsImportResult> vpsImportLink(WidgetRef ref, String link) async {
   } catch (_) {
     return VpsImportResult.failed;
   }
+  if (!ref.context.mounted) return VpsImportResult.failed;
   return ref.read(profilesProvider).length > before
       ? VpsImportResult.added
       : VpsImportResult.failed;
