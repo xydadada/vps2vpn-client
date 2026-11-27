@@ -296,7 +296,10 @@ void main() {
     await tester.pump();
     expect(tester.widget<LoadingBar>(find.byType(LoadingBar)).active, isFalse);
     if (vps2vpnUpdatesDisabled) {
-      expect(find.text('Check for updates'), findsNothing);
+      expect(
+        find.widgetWithText(TonalButton, 'Check for updates'),
+        findsNothing,
+      );
       return;
     }
 
