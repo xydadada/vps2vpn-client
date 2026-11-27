@@ -246,10 +246,11 @@ func TestShareLinksReadBackThroughTheConverter(t *testing.T) {
 		{
 			proxy: map[string]any{
 				"name": "https", "type": "http", "server": "j.example", "port": 443,
-				"username": "test", "tls": true,
+				"username": "test", "tls": true, "skip-cert-verify": true,
 			},
 			want: map[string]string{
 				"type": "http", "username": "test", "password": "", "tls": "true",
+				"skip-cert-verify": "true",
 			},
 		},
 		{
