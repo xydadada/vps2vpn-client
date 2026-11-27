@@ -148,7 +148,7 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
                           'Latency to these sites through your node',
                         )
                       : tr(context, '连接后可以测试', 'Connect to test'),
-                  style: vpsText(p, size: 13.5, color: p.soft),
+                  style: vpsText(p, size: 15, weight: FontWeight.w600),
                 ),
               ),
               const SizedBox(width: 12),
@@ -161,8 +161,9 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          for (final site in _sites)
+          const SizedBox(height: 8),
+          for (final (i, site) in _sites.indexed) ...[
+            if (i > 0) Container(height: 1, color: p.line),
             _SiteRow(
               name: site.name,
               delay: picked == null
@@ -171,7 +172,8 @@ class _VpsSiteTestCardState extends ConsumerState<VpsSiteTestCard> {
               onRemove: () =>
                   _save([..._sites.where((s) => s.url != site.url)]),
             ),
-          const SizedBox(height: 8),
+          ],
+          const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -230,7 +232,7 @@ class _SiteRowState extends State<_SiteRow> {
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
+        padding: const EdgeInsets.symmetric(vertical: 11),
         child: Row(
           children: [
             Expanded(
