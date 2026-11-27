@@ -4,13 +4,42 @@
 
 文中的「主会话」「服务端会话」「管理员会话」，指维护服务端仓库 `xydadada/vps2vpn` 的那个 Agent：审图结果、发布后的 `.sig` 核对和测试服务器同步都由它负责。换了 Agent 时，以服务端仓库的 HANDOFF 为准。本机的会话笔记外部 Agent 看不到，只供参考；有用的结论都已写进本文件。
 
-## 0. 当前进度（2026-11-27）
+## 0. 当前进度（2026-11-27，换人接手时的准确状态）
 
-正在发布 1.0.34。逐页 UI 审查的分支按这个顺序合进 `vps2vpn`：ui-home → ui-dialogs → ui-nodes → ui-check → ui-settings → copy-fixes，最后合 upgrade-legend。每合一个都要等 `verify.yaml` 通过，再合下一个。各分支的状态见第 3 节。
+只读这一节就能接着做。正在发 **1.0.34**，还没合任何页面分支，也没改版本号。当前 Latest 仍是 v1.0.33。
 
-全部合完以后按第 2 节发布。1.0.34 转为 Latest 之前，`e2e.yaml` 的 gate 必须全绿（第 2 节第 5 步）。
+### 分支（全在 `private` 远端，即 `xydadada/vps2vpn-client`）
 
-1.0.35 做外部审查里核实过的修复，分拣结论见第 7 节。
+`vps2vpn` 头是本节所在的文档提交，前一个是 `a42ca221`（删除上游没用的文件）。`a42ca221` 之后还没有一次跑完的 `verify.yaml`，所以先确认 `vps2vpn` 头上的 verify 是绿的。如果它挂了，多半是有测试引用了被删的文件，先修这个。
+
+| 顺序 | 分支 | 头 | 审图 | 还差什么 |
+|---|---|---|---|---|
+| 1 | `ui-dialogs` | `d02d5259` | 审过（截图 run 45971348592） | 已 rebase 到 `a42ca221`。等 verify run 45973612502 变绿后，快进合并 |
+| 2 | `ui-nodes` | `d243e3ad` | 审过 c37cbaf5 的截图（run 45921449592）；之后修了 lint 和英文组名 | 重拍 run 45971865715 交接时还在跑，看一眼 `connected-nodes-*-en` 和 `legend-nodes-*-en`：「自动选择」卡片应显示 Auto，「🚀 节点选择」应显示「🚀 Proxy」。verify 已绿。合并前 rebase 到当时的 `vps2vpn` |
+| 3 | `ui-check` | `3a8a3f3c` | 审过（run 45965894596） | rebase 后合并 |
+| 4 | `ui-settings` | `92c558d3` | 审过（run 45920608086） | 已经叠在 ui-check 上，verify 已绿。ui-check 合完后 rebase 再合 |
+| 5 | `copy-fixes` | `2cfc6f12` | 文案已审 | 落后 18 个提交。rebase 时 `servers.dart`、`home.dart` 会和 ui-nodes 冲突，`devices.dart`、`takeover_notice.dart` 可能和 ui-dialogs 冲突，两边的改动都保留。按 `.agents/wording.md` 再查一遍，例如 `devices.dart` 里内联的 `Platform.isAndroid ? 'tap' : 'click'` 换成 `vpsClick()`。冲突解决后重拍截图，审过再合 |
+| 6 | `upgrade-legend` | `91c462d0` | 不涉及界面（e2e gate 和测试用的覆盖源） | rebase 后合并。发 1.0.34 必须有它 |
+
+### 合并的规矩
+
+- 一次合一个。合的方式：在分支上 `git fetch private && git rebase private/vps2vpn`，推分支（`--force-with-lease`），等这个分支的 verify 变绿，然后 `git push private <分支>:vps2vpn`（快进）。
+- 等 `vps2vpn` 上的 verify 变绿，再合下一个。
+- rebase 时如果解了冲突，或者改动碰到界面，就重拍截图。`screenshots.yaml` 的输入是 `after=<分支的 vps2vpn.yaml 构建 run>`、`before=<对照构建 run>`。中英、深浅、宽、默认、最窄、legend 形状都要看，外观以 1.0.27 为准（`.agents/vps2vpn.md`）。
+- 审图结果由服务端仓库的维护会话确认。
+
+### 1.0.34 发布步骤（全部合完以后）
+
+1. 单独一个提交改 `pubspec.yaml`：`version: 1.0.34+<YYYYMMDDNN>`，提交信息 `chore: version 1.0.34`。fetch 后推送，等 verify 变绿。这次 verify 没跑完之前，不要再往 `vps2vpn` 推任何东西。
+2. 运行 `gh workflow run vps2vpn.yaml -R xydadada/vps2vpn-client --ref vps2vpn -f publish=true`，生成预发布 `test-1.0.34`，带安装包、zip、`.sig` 和 `SHA256SUMS.txt`。
+3. 运行 `gh workflow run e2e.yaml -R xydadada/vps2vpn-client --ref vps2vpn -f tag=test-1.0.34`：`from` 默认是 latest，`legend` 默认是 v1.0.27。`gate` 必须全绿，也就是 install、legend（从真实的 v1.0.27 升级）、upgrade 都跑过并且成功。再跑 `coexist.yaml` 和 `harsh.yaml`（第 2 节）。
+4. 按第 2 节第 4 步自己验 SHA256 和 `.sig`。
+5. 转为 Latest：`gh release edit test-1.0.34 --tag v1.0.34 --target <commit> --title v1.0.34 --prerelease=false --latest --notes-file <说明>`。说明写中英两段，面向用户。之后把 `e2e.yaml`、`coexist.yaml` 里 `tag` 的默认值改成 v1.0.34。
+6. 把 tag、commit 和各次 run id 告诉服务端维护会话。它会再核对 `.sig`，并同步测试服务器。
+
+### 之后
+
+1.0.35：外部审查的修复，分拣结论和优先级见第 7 节第 2 条。目前还没改代码。
 
 ## 1. 当前版本
 
