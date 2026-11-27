@@ -901,11 +901,17 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Downloading 50%'), findsOneWidget);
-    download.value = const UpdateReady('v1.1.0', 'setup.exe');
+    download.value = UpdateReady(
+      'v1.1.0',
+      'vps2vpn-1.1.0-${Platform.operatingSystem}-amd64-setup.exe',
+    );
     await tester.pump();
     expect(find.text('Install & restart'), findsOneWidget);
     // A pending update for another version is not this one.
-    download.value = const UpdateReady('v1.0.5', 'setup.exe');
+    download.value = UpdateReady(
+      'v1.0.5',
+      'vps2vpn-1.0.5-${Platform.operatingSystem}-amd64-setup.exe',
+    );
     await tester.pump();
     expect(find.text('Update'), findsOneWidget);
     download.value = null;
