@@ -15,6 +15,7 @@ import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:fl_clash/vps2vpn/ui_trace.dart';
+import 'package:fl_clash/vps2vpn/update_integrity.dart';
 import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -133,21 +134,13 @@ Future<(String, File)?> vpsReadyInstaller(
     if (entry is! File) continue;
     final name = entry.uri.pathSegments.last;
     final version = vpsUpdateFileVersion(name);
-    final sig = File('${entry.path}.sig');
     if (!name.endsWith('-setup.exe') ||
         version == null ||
         !vpsVersionNewer(version, current) ||
-        (best != null && !vpsVersionNewer(version, best.$1)) ||
-        !await sig.exists()) {
+        (best != null && !vpsVersionNewer(version, best.$1))) {
       continue;
     }
-    if (vpsVerifyUpdate(
-      fileName: name,
-      sha256Hex: await fileSha256(entry.path),
-      size: await entry.length(),
-      signatureText: await sig.readAsString(),
-      publicKeyHex: publicKeyHex,
-    )) {
+    if (await vpsVerifyInstaller(entry.path, publicKeyHex: publicKeyHex)) {
       best = (version, entry);
     }
   }
