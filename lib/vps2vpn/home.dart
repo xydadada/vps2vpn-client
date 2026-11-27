@@ -413,8 +413,8 @@ class _HeroState extends ConsumerState<_Hero> {
           : vpsPageError.value == last.text
           ? tr(
               context,
-              '原因写在上方，处理好后再连接。',
-              'The reason is above; sort it out, then connect again.',
+              '原因见上方提示，处理好后再连接。',
+              'The note above says why; connect again once it is sorted.',
             )
           : last.text;
     }
@@ -534,10 +534,17 @@ class _HeroState extends ConsumerState<_Hero> {
         onSince != null &&
         DateTime.now().difference(onSince) < _connectWindow;
     final failure = isStart || !hasProfile ? null : _failure;
+    final profileId = ref.watch(currentProfileProvider.select((p) => p?.id));
+    final removed =
+        !isStart &&
+        profileId != null &&
+        ref.watch(vpsRemovedProvider).contains(profileId);
     final (status, statusColor) = !hasProfile
         ? (tr(context, '未导入订阅', 'No subscription'), p.muted)
         : block != null
         ? (vpsAccountBlockReason(context, block), p.bad)
+        : removed
+        ? (tr(context, '此设备已被移除', 'Device removed'), p.bad)
         : failure != null
         ? (tr(context, '没连上', 'Not connected'), p.bad)
         : connecting
@@ -561,6 +568,8 @@ class _HeroState extends ConsumerState<_Hero> {
     // how well); otherwise what to do next.
     final title = !hasProfile
         ? tr(context, '导入订阅以开始', 'Import a subscription')
+        : !isStart && (block != null || removed)
+        ? tr(context, '暂时不能连接', "Can't connect for now")
         : failure != null
         ? tr(context, '这次没连上', 'That did not connect')
         : connecting
@@ -576,7 +585,7 @@ class _HeroState extends ConsumerState<_Hero> {
     // behind the window. Null is "not connected": the brand's own colour.
     final tone = !hasProfile
         ? null
-        : block != null || failure != null
+        : block != null || removed || failure != null
         ? p.bad
         : connecting
         ? null
@@ -615,6 +624,8 @@ class _HeroState extends ConsumerState<_Hero> {
           )
         : block != null
         ? vpsAccountBlockHint(context, block)
+        : removed
+        ? tr(context, '处理方法见上方提示。', 'The note above says what to do.')
         : failure ??
               (connecting
                   ? tr(
