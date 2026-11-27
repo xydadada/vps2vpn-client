@@ -162,11 +162,16 @@ Future<VpsDeviceOutcome> vpsDeviceBeat({
   required Map<String, Object?> body,
   required void Function(bool removed) mark,
   required FutureOr<void> Function() disconnect,
+  bool Function()? isCurrent,
 }) async {
   final (outcome, json) = await _ask(call, 'device', body: body);
+  if (isCurrent != null && !isCurrent()) return outcome;
   switch (outcome) {
     case VpsDeviceOutcome.ok:
-      final removed = json['revoked'] == true;
+      if (json['ok'] != true || json['revoked'] is! bool) {
+        return VpsDeviceOutcome.unreachable;
+      }
+      final removed = json['revoked']! as bool;
       mark(removed);
       if (removed) await disconnect();
     case VpsDeviceOutcome.featureOff:
@@ -673,6 +678,13 @@ Future<void> _copyRestoreNote(BuildContext context) async {
   );
 }
 
+class _DeviceRemovedKey extends ValueKey<(int, String)> {
+  const _DeviceRemovedKey(int id, String url) : super((id, url));
+
+  @override
+  String toString() => '[DeviceRemovedNotice profile ${value.$1}]';
+}
+
 class VpsDeviceRemovedNotice extends ConsumerWidget {
   const VpsDeviceRemovedNotice({super.key});
 
@@ -683,7 +695,96 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
         !ref.watch(vpsRemovedProvider).contains(profile.id)) {
       return const SizedBox.shrink();
     }
+    return _DeviceRemovedNotice(
+      key: _DeviceRemovedKey(profile.id, profile.url),
+      profile: profile,
+    );
+  }
+}
+
+class _DeviceRemovedNotice extends ConsumerStatefulWidget {
+  const _DeviceRemovedNotice({required this.profile, super.key});
+
+  final Profile profile;
+
+  @override
+  ConsumerState<_DeviceRemovedNotice> createState() =>
+      _DeviceRemovedNoticeState();
+}
+
+class _DeviceRemovedNoticeState extends ConsumerState<_DeviceRemovedNotice> {
+  var _checking = false;
+  String? _error;
+
+  bool _isCurrent() {
+    if (!mounted) return false;
+    final profile = ref.read(currentProfileProvider);
+    final member = ref.read(vpsMemberProvider);
+    return profile?.id == widget.profile.id &&
+        profile?.url == widget.profile.url &&
+        !member.isLoading &&
+        !member.hasError &&
+        member.value?.member != null &&
+        ref.read(vpsRemovedProvider).contains(widget.profile.id);
+  }
+
+  Future<void> _recheck() async {
+    if (_checking || !_isCurrent()) return;
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+    try {
+      final base = vpsApiBase(widget.profile.url);
+      if (base == null) throw StateError('Device API unavailable');
+      final call = ref.read(vpsDeviceCallsProvider)(base);
+      final id = await vpsDeviceId();
+      if (!_isCurrent()) return;
+      final outcome = await vpsDeviceBeat(
+        call: call,
+        body: vpsCheckInBody(id: id, version: globalState.packageInfo.version),
+        mark: (removed) => ref
+            .read(vpsRemovedProvider.notifier)
+            .mark(widget.profile.id, removed),
+        disconnect: () {},
+        isCurrent: _isCurrent,
+      );
+      if (!_isCurrent()) return;
+      setState(() {
+        _error = outcome == VpsDeviceOutcome.ok
+            ? tr(
+                context,
+                '账号所有者尚未恢复此设备，请联系账号所有者后重试',
+                'This device is still removed. Ask the account owner to '
+                    'restore it, then check again',
+              )
+            : _outcomeText(context, outcome);
+      });
+    } catch (_) {
+      if (_isCurrent()) {
+        setState(() {
+          _error = tr(
+            context,
+            '未能确认设备状态，请稍后重试',
+            'Could not confirm the device status. Try again later',
+          );
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.profile;
     final p = VpsPalette.of(context);
+    final member = ref.watch(vpsMemberProvider);
+    final canCheck =
+        vpsApiBase(profile.url) != null &&
+        !member.isLoading &&
+        !member.hasError &&
+        member.value?.member != null;
     return ValueListenableBuilder<int?>(
       valueListenable: vpsRemovedDismissed,
       builder: (context, dismissed, child) =>
@@ -692,20 +793,38 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
         color: p.bad,
         lines: [
           vpsRemovedText(context),
-          tr(
-            context,
-            '这个订阅在本机已停用，账号所有者恢复后即可重新连接。'
-                '如果你就是账号所有者，请在会员中心或管理面板的设备列表里点击「恢复」。',
-            'This subscription is off here until the account owner restores '
-                "it. If that's you, ${vpsClick()} "
-                '"Restore" in the device list of the member center or admin '
-                'panel.',
-          ),
+          canCheck
+              ? tr(
+                  context,
+                  '这个订阅在本机已停用。账号所有者恢复后，点击「重新检查」即可再次连接。'
+                      '如果你就是账号所有者，请在会员中心或管理面板的设备列表里点击「恢复」。',
+                  'This subscription is off here. After the account owner '
+                      'restores it, ${vpsClick()} "Check again" to enable '
+                      'connecting again. If that\'s you, ${vpsClick()} '
+                      '"Restore" in the device list of the member center '
+                      'or admin panel.',
+                )
+              : tr(
+                  context,
+                  '这个订阅在本机已停用，请先联系账号所有者恢复设备。'
+                      '连接到网络、重新获取账号信息后，可在这里检查恢复状态。',
+                  'This subscription is off here. Ask the account owner '
+                      'to restore this device. Once online and account '
+                      'information is available, you can check its status here.',
+                ),
+          ?_error,
         ],
         actions: [
+          if (canCheck)
+            VpsButton(
+              label: _checking
+                  ? tr(context, '检查中…', 'Checking…')
+                  : tr(context, '重新检查', 'Check again'),
+              filled: true,
+              onTap: _checking ? null : () => unawaited(_recheck()),
+            ),
           VpsButton(
             label: tr(context, '复制求助信息', 'Copy a note for the owner'),
-            filled: true,
             onTap: () => unawaited(_copyRestoreNote(context)),
           ),
           VpsButton(
