@@ -362,8 +362,8 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
           ? tr(
               context,
               '点击切换节点 · 延迟为打开测试网址的往返时间',
-              '${Platform.isAndroid ? 'Tap' : 'Click'} to switch · latency is '
-                  'the round trip to a test page',
+              '${Platform.isAndroid ? 'Tap' : 'Click'} to switch · latency '
+                  'to a test page',
             )
           : tr(
               context,

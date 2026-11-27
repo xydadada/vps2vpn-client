@@ -127,6 +127,8 @@ const _placeEn = {
   '圣保罗': 'São Paulo',
 };
 
+const _countryShortEn = {'US': 'US', 'GB': 'UK', 'KR': 'Korea'};
+
 /// English for the place a node's name starts with ("洛杉矶 Reality").
 String vpsPlaceEn(String name) {
   final m = RegExp(r'^(\S+)(.*)$', dotAll: true).firstMatch(name);
@@ -136,8 +138,16 @@ String vpsPlaceEn(String name) {
       .where((e) => e.value == head)
       .map((e) => e.key)
       .firstOrNull;
-  final en = _placeEn[head] ?? (code == null ? null : _countryEn[code]);
-  return en == null ? name : '$en${m[2]}';
+  final rest = m[2]!;
+  // Before a protocol or a number, the short form keeps the card's one line.
+  final en =
+      _placeEn[head] ??
+      (code == null
+          ? null
+          : rest.trim().isEmpty
+          ? _countryEn[code]
+          : _countryShortEn[code] ?? _countryEn[code]);
+  return en == null ? name : '$en$rest';
 }
 
 /// The country a node's name points at ("新加坡 Hysteria2", "US-2", "jp

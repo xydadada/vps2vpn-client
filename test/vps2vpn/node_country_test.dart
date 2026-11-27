@@ -20,6 +20,8 @@ void main() {
     expect(vpsPlaceEn('洛杉矶'), 'Los Angeles');
     expect(vpsPlaceEn('日本 Reality'), 'Japan Reality');
     expect(vpsPlaceEn('首尔 2'), 'Seoul 2');
+    expect(vpsPlaceEn('美国'), 'United States');
+    expect(vpsPlaceEn('美国 Hysteria2'), 'US Hysteria2');
     expect(vpsPlaceEn('洛杉矶高速'), '洛杉矶高速');
     expect(vpsPlaceEn('自动选择'), '自动选择');
   });
