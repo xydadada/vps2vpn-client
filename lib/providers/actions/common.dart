@@ -303,13 +303,13 @@ class CommonAction extends _$CommonAction {
         !vps2vpnUpdatesDisabled
             ? currentAppLocalizations.updateInstallFailed
             : zh
-            ? '没能开始安装：安装需要管理员同意。再点一次安装，在弹出的窗口里点"是"；'
+            ? '没能开始安装：安装需要管理员同意。请再安装一次，在弹出的窗口里点击「是」；'
                   '如果它要管理员密码而你没有，就到下载页下载安装包，交给这台电脑的管理员安装。'
             : 'The install did not start: it needs an administrator to allow '
-                  'it. Tap install again and choose Yes in the window that '
-                  'opens; if it asks for an administrator password you do '
-                  'not have, download the installer from the download page '
-                  "and ask this computer's administrator to run it.",
+                  'it. Try the install again and click "Yes" in the window '
+                  'that opens; if it asks for an administrator password you '
+                  'do not have, download the installer from the download '
+                  "page and ask this computer's administrator to run it.",
       );
     }
   }
