@@ -128,6 +128,14 @@ int _rank(int? d) => switch (d) {
 bool _isPinned(String name) =>
     name == vpsSmartGroupName || name == vpsAIGroupName;
 
+bool _isGroupType(String type) => const {
+  'selector',
+  'urltest',
+  'fallback',
+  'loadbalance',
+  'relay',
+}.contains(type.toLowerCase());
+
 class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   String? _groupName;
   bool _testing = false;
@@ -772,8 +780,10 @@ class _ProxyCard extends ConsumerWidget {
           );
     final down = status?.state == VpsNodeState.maintenance;
     final busy = status?.state == VpsNodeState.congested;
-    final shown = pinned
-        ? (name: vpsGroupLabel(context, proxy.name), rate: null)
+    final label = vpsGroupLabel(context, proxy.name);
+    final named = pinned || (_isGroupType(proxy.type) && label != proxy.name);
+    final shown = named
+        ? (name: label, rate: null)
         : vpsNodeTitle(context, proxy.name);
     final rate = shown.rate;
     final using = selected && !pinned;
