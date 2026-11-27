@@ -669,11 +669,7 @@ class VpsUpdateCard extends ConsumerWidget {
                 )
               : tr(context, '自动检查已关闭', 'Automatic checks are off'),
       };
-      detail = tr(
-        context,
-        '当前 $version · $status',
-        'You have $version · $status',
-      );
+      detail = status;
       final checking = check.status == VpsUpdateStatus.checking;
       action = VpsButton(
         label: checking
@@ -685,54 +681,22 @@ class VpsUpdateCard extends ConsumerWidget {
                   unawaited(vpsCheckForUpdateNow(ref, currentVersion: current)),
       );
     }
+    final summary = vpsReleaseSummary(release?.notes, zh: vpsZh(context));
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: VpsCard(
         highlight: release != null,
-        padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                VpsIconView(
-                  release != null ? VpsIcon.sparkle : VpsIcon.refresh,
-                  size: 19,
-                  color: release != null ? p.accent : p.soft,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: vpsText(p, size: 14.5, weight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        detail,
-                        style: vpsText(
-                          p,
-                          size: 13,
-                          color:
-                              check.status == VpsUpdateStatus.failed &&
-                                  release == null
-                              ? p.warn
-                              : p.soft,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                action,
-              ],
+            VpsRow(
+              icon: release != null ? VpsIcon.sparkle : VpsIcon.refresh,
+              title: title,
+              subtitle: detail,
+              trailing: action,
             ),
-            if (vpsReleaseSummary(release?.notes, zh: vpsZh(context))
-                case final summary?) ...[
-              const SizedBox(height: 10),
+            if (summary != null)
               VpsPressable(
                 semanticLabel: tr(context, '更新内容', "What's new"),
                 onTap: () => unawaited(
@@ -747,7 +711,10 @@ class VpsUpdateCard extends ConsumerWidget {
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 31),
+                  padding: const EdgeInsetsDirectional.only(
+                    start: 48,
+                    bottom: 12,
+                  ),
                   child: Text.rich(
                     TextSpan(
                       children: [
@@ -765,25 +732,16 @@ class VpsUpdateCard extends ConsumerWidget {
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 10),
             Container(height: 1, color: p.line),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    tr(context, '自动检查更新', 'Check for updates automatically'),
-                    style: vpsText(p, size: 13, color: p.soft),
-                  ),
-                ),
-                VpsSwitch(
-                  value: auto,
-                  onChanged: (v) => ref
-                      .read(appSettingProvider.notifier)
-                      .update((s) => s.copyWith(autoCheckUpdate: v)),
-                ),
-              ],
+            VpsRow(
+              icon: VpsIcon.arrowDown,
+              title: tr(context, '自动检查更新', 'Check for updates automatically'),
+              trailing: VpsSwitch(
+                value: auto,
+                onChanged: (v) => ref
+                    .read(appSettingProvider.notifier)
+                    .update((s) => s.copyWith(autoCheckUpdate: v)),
+              ),
             ),
           ],
         ),

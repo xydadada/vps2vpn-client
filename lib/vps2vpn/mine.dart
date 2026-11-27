@@ -416,9 +416,13 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
         VpsSectionTitle(tr(context, '共享和工具', 'Sharing and tools')),
         const _ShareTools(),
         const SizedBox(height: 24),
-        const VpsCard(child: VpsFeedbackRow()),
-        const SizedBox(height: 24),
         const VpsDevicesRow(),
+        VpsSectionTitle(tr(context, '帮助', 'Help')),
+        const VpsCard(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          child: VpsFeedbackRow(),
+        ),
+        const SizedBox(height: 24),
         VpsSectionTitle(tr(context, '关于', 'About')),
         const VpsUpdateCard(),
         VpsCard(
@@ -430,13 +434,19 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(() {
-                      try {
-                        return 'vps2vpn  v${globalState.packageInfo.version}';
-                      } catch (_) {
-                        return 'vps2vpn';
-                      }
-                    }(), style: vpsText(p, size: 15, weight: FontWeight.w600)),
+                    Text.rich(
+                      TextSpan(
+                        text: 'vps2vpn',
+                        children: [
+                          if (_version() case final v?)
+                            TextSpan(
+                              text: ' $v',
+                              style: vpsText(p, size: 15, color: p.soft),
+                            ),
+                        ],
+                      ),
+                      style: vpsText(p, size: 15, weight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       tr(context, '你的私有网络客户端', 'Your private network client'),
@@ -451,6 +461,14 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
         const _LegalLine(),
       ],
     );
+  }
+}
+
+String? _version() {
+  try {
+    return globalState.packageInfo.version;
+  } catch (_) {
+    return null;
   }
 }
 
