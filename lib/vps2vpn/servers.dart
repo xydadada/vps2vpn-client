@@ -13,6 +13,7 @@ import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart'
@@ -398,18 +399,10 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
           children: [
             Expanded(
               child: groups.length > 1
-                  ? Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final g in groups)
-                          _GroupTab(
-                            label: vpsGroupLabel(context, g.name),
-                            tooltip: g.name,
-                            selected: g.name == group.name,
-                            onTap: () => setState(() => _groupName = g.name),
-                          ),
-                      ],
+                  ? _GroupTabs(
+                      names: [for (final g in groups) g.name],
+                      selected: group.name,
+                      onSelect: (name) => setState(() => _groupName = name),
                     )
                   : const SizedBox.shrink(),
             ),
@@ -521,8 +514,175 @@ class _SortPill extends StatelessWidget {
   }
 }
 
+/// The group tabs wrap onto two rows at most; past that they become one row
+/// that scrolls sideways, fades at the edge that has more, and keeps the
+/// selected tab in view.
+class _GroupTabs extends StatefulWidget {
+  const _GroupTabs({
+    required this.names,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final List<String> names;
+  final String selected;
+  final ValueChanged<String> onSelect;
+
+  @override
+  State<_GroupTabs> createState() => _GroupTabsState();
+}
+
+class _GroupTabsState extends State<_GroupTabs> {
+  static const _gap = 8.0;
+  static const _maxRows = 2;
+  final _scroll = ScrollController();
+  final _selectedKey = GlobalKey();
+  var _fadeStart = false;
+  var _fadeEnd = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_edges);
+    _reveal();
+  }
+
+  @override
+  void didUpdateWidget(_GroupTabs old) {
+    super.didUpdateWidget(old);
+    if (old.selected != widget.selected) _reveal();
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _reveal() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _selectedKey.currentContext;
+      if (!mounted || target == null || !_scroll.hasClients) return;
+      Scrollable.ensureVisible(
+        target,
+        alignment: 0.5,
+        duration: VpsMotion.medium,
+        curve: VpsMotion.settle,
+      );
+      _edges();
+    });
+  }
+
+  void _edges() {
+    if (!_scroll.hasClients) return;
+    final pos = _scroll.position;
+    final start = pos.pixels > 1;
+    final end = pos.pixels < pos.maxScrollExtent - 1;
+    if (start != _fadeStart || end != _fadeEnd) {
+      setState(() {
+        _fadeStart = start;
+        _fadeEnd = end;
+      });
+    }
+  }
+
+  /// Rows a greedy wrap of [widths] takes in [max].
+  static int _rows(List<double> widths, double max) {
+    var rows = 1;
+    var line = 0.0;
+    for (final w in widths) {
+      final next = line == 0 ? w : line + _gap + w;
+      if (next > max && line > 0) {
+        rows++;
+        line = w;
+      } else {
+        line = next;
+      }
+    }
+    return rows;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final labels = [for (final n in widget.names) vpsGroupLabel(context, n)];
+    final widths = [
+      for (final label in labels)
+        (TextPainter(
+              text: TextSpan(
+                text: label,
+                style: vpsText(p, size: 13.5, weight: FontWeight.w600),
+              ),
+              textScaler: scaler,
+              textDirection: TextDirection.ltr,
+              maxLines: 1,
+            )..layout()).width +
+            30,
+    ];
+    Widget tab(int i) => _GroupTab(
+      key: widget.names[i] == widget.selected ? _selectedKey : null,
+      label: labels[i],
+      tooltip: widget.names[i],
+      selected: widget.names[i] == widget.selected,
+      onTap: () => widget.onSelect(widget.names[i]),
+    );
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (_rows(widths, c.maxWidth) <= _maxRows) {
+          return Wrap(
+            spacing: _gap,
+            runSpacing: _gap,
+            children: [for (var i = 0; i < labels.length; i++) tab(i)],
+          );
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) => _edges());
+        final row = Listener(
+          // A mouse wheel moves the row sideways.
+          onPointerSignal: (e) {
+            if (e is! PointerScrollEvent || !_scroll.hasClients) return;
+            final pos = _scroll.position;
+            final delta = e.scrollDelta.dy != 0
+                ? e.scrollDelta.dy
+                : e.scrollDelta.dx;
+            _scroll.jumpTo(
+              (pos.pixels + delta).clamp(0.0, pos.maxScrollExtent),
+            );
+          },
+          child: SingleChildScrollView(
+            controller: _scroll,
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var i = 0; i < labels.length; i++) ...[
+                  if (i > 0) const SizedBox(width: _gap),
+                  tab(i),
+                ],
+              ],
+            ),
+          ),
+        );
+        return ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (rect) => LinearGradient(
+            colors: [
+              Color(_fadeStart ? 0x00000000 : 0xFF000000),
+              const Color(0xFF000000),
+              const Color(0xFF000000),
+              Color(_fadeEnd ? 0x00000000 : 0xFF000000),
+            ],
+            stops: [0, 24 / rect.width, 1 - 32 / rect.width, 1],
+          ).createShader(rect),
+          child: row,
+        );
+      },
+    );
+  }
+}
+
 class _GroupTab extends StatelessWidget {
   const _GroupTab({
+    super.key,
     required this.label,
     required this.tooltip,
     required this.selected,
