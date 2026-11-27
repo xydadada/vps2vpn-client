@@ -775,7 +775,7 @@ class _ProxyCard extends ConsumerWidget {
     final down = status?.state == VpsNodeState.maintenance;
     final busy = status?.state == VpsNodeState.congested;
     final shown = pinned
-        ? (name: friendlyLineName(context, proxy.name), rate: null)
+        ? (name: vpsGroupLabel(context, proxy.name), rate: null)
         : vpsNodeTitle(context, proxy.name);
     final rate = shown.rate;
     final using = selected && !pinned;

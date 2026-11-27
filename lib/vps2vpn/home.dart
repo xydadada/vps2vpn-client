@@ -281,9 +281,15 @@ const _panelGroupsEn = {
 };
 final _panelGroupsZh = {for (final e in _panelGroupsEn.entries) e.value: e.key};
 
+final _emojiLead = RegExp(r'^([^\p{L}\p{N}\s]+\s*)(.+)$', unicode: true);
+
+/// A group's name in the reader's language; a leading emoji, as in
+/// "🚀 节点选择", stays and the rest is looked up.
 String vpsGroupLabel(BuildContext context, String name) {
   final line = friendlyLineName(context, name);
   if (line != name) return line;
+  final lead = _emojiLead.firstMatch(name);
+  if (lead != null) return '${lead[1]}${vpsGroupLabel(context, lead[2]!)}';
   return (vpsZh(context) ? _panelGroupsZh : _panelGroupsEn)[name] ?? name;
 }
 
