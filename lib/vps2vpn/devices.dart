@@ -19,8 +19,7 @@ import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart'
-    show AlertDialog, ButtonStyle, TextButton;
+import 'package:prism_ui/prism_ui.dart' show AlertDialog, TextButton;
 
 enum VpsDeviceOutcome {
   ok,
@@ -1104,12 +1103,6 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
         ),
         if (kicked == null)
           TextButton(
-            style: ButtonStyle(
-              foregroundColor: WidgetStateProperty<Color?>.fromMap({
-                WidgetState.disabled: p.bad.withValues(alpha: 0.38),
-                WidgetState.any: p.bad,
-              }),
-            ),
             onPressed: _busy || !_listed
                 ? null
                 : () => setState(() => _confirming = true),
