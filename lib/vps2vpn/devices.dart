@@ -697,7 +697,7 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
             '这个订阅在本机已停用，账号所有者恢复后即可重新连接。'
                 '如果你就是账号所有者，请在会员中心或管理面板的设备列表里点击「恢复」。',
             'This subscription is off here until the account owner restores '
-                "it. If that's you, ${Platform.isAndroid ? 'tap' : 'click'} "
+                "it. If that's you, ${vpsClick()} "
                 '"Restore" in the device list of the member center or admin '
                 'panel.',
           ),
@@ -929,7 +929,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                   '其他设备都已下线，本机已换上新链接，但新订阅还没下载下来（网络不通）。请点击「重试」。',
                   'Every other device is signed out and this one is on the '
                       'new link, but the new subscription has not downloaded '
-                      'yet (no network). ${Platform.isAndroid ? 'Tap' : 'Click'} '
+                      'yet (no network). ${vpsClick(start: true)} '
                       '"Retry".',
                 ),
           style: vpsText(p, size: 13, color: p.soft, height: 1.5),

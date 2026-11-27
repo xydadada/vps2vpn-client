@@ -9,7 +9,7 @@ import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/common.dart';
-import 'package:fl_clash/vps2vpn/kit.dart' show tr;
+import 'package:fl_clash/vps2vpn/kit.dart' show tr, vpsClick;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -320,7 +320,7 @@ String? vpsFailingText(BuildContext context, VpsProfileHealth? h) {
       'The subscription link may be gone (unreachable for '
           '${_span(context, now.difference(h.failingSince!))}). Your nodes '
           'still work; ask the admin for a new link, then '
-          '${Platform.isAndroid ? 'tap' : 'click'} Replace link',
+          '${vpsClick()} "Replace link"',
     );
   }
   final since = h.failingSince == null

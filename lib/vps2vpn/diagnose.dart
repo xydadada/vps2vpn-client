@@ -46,7 +46,7 @@ String vpsLegAdvice(
         ? tr(
             context,
             '本机网络正常，但节点和订阅链接都无法连接，问题在服务器一侧（服务器已停止或更换了地址），不是本机断网。请联系管理员获取新链接，然后在「设置」的订阅卡片上点击「替换链接」。',
-            'Your network is fine, but neither the node nor the subscription link answers: the problem is on the server\'s side (it stopped or moved), not this device. Ask the owner for a new link, then ${Platform.isAndroid ? 'tap' : 'click'} Replace link on the subscription card in Settings.',
+            'Your network is fine, but neither the node nor the subscription link answers: the problem is on the server\'s side (it stopped or moved), not this device. Ask the owner for a new link, then ${vpsClick()} "Replace link" on the subscription card in Settings.',
           )
         : on
         ? tr(
@@ -57,7 +57,7 @@ String vpsLegAdvice(
         : tr(
             context,
             '本机网络正常，还没有连接：请回到「概览」点击「连接」。',
-            'Your network is fine; you are not connected yet: ${Platform.isAndroid ? 'tap' : 'click'} Connect on Overview.',
+            'Your network is fine; you are not connected yet: ${vpsClick()} "Connect" on Overview.',
           ),
   VpsLeg.site => tr(
     context,

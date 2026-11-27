@@ -282,7 +282,7 @@ Future<_Got> _downloadUpdate(
             c,
             '新版本 ${release.version} 已下载并校验签名，点这里安装（会自动重启 vps2vpn）',
             'Version ${release.version} is downloaded and its signature '
-                'checked. Tap to install it (vps2vpn restarts)',
+                'checked. ${vpsClick(start: true)} to install it (vps2vpn restarts)',
           ),
           ?vpsReleaseSummary(release.notes, zh: vpsZh(c)),
         ].join('\n'),
@@ -534,7 +534,7 @@ Future<void> vpsAutoUpdateCheck(
         (c) => tr(
           c,
           '有新版本 ${newest.version}，点这里下载（会先校验签名）',
-          'Version ${newest.version} is out. Tap to download it '
+          'Version ${newest.version} is out. ${vpsClick(start: true)} to download it '
               '(its signature is checked first)',
         ),
         BannerLevel.info,

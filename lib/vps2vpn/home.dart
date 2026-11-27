@@ -723,8 +723,9 @@ class _HeroState extends ConsumerState<_Hero> {
     final sub = !hasProfile
         ? tr(
             context,
-            '把订阅链接粘贴到下面的框里，再点"导入"',
-            'Paste your subscription link into the box below, then tap Import',
+            '把订阅链接粘贴到下面的框里，再点击「导入」',
+            'Paste your subscription link into the box below, then '
+                '${vpsClick()} "Import"',
           )
         : block != null
         ? vpsAccountBlockHint(context, block)
@@ -740,8 +741,9 @@ class _HeroState extends ConsumerState<_Hero> {
                   : suspended
                   ? tr(
                       context,
-                      '连接已暂停，恢复后自动继续，也可点击"断开"停止',
-                      'Connection paused; resumes automatically, or tap Disconnect',
+                      '连接已暂停，恢复后自动继续，也可点击「断开」停止',
+                      'Connection paused; resumes automatically, or '
+                          '${vpsClick()} "Disconnect"',
                     )
                   : netOff
                   ? tr(

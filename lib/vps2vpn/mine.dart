@@ -223,8 +223,9 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
               Text(
                 tr(
                   context,
-                  '粘贴或输入订阅链接后点"导入"，也可以导入本地配置文件',
-                  'Paste or type the link, then tap Import; or import a local config file',
+                  '粘贴或输入订阅链接后点击「导入」，也可以导入本地配置文件',
+                  'Paste or type the link, then ${vpsClick()} "Import"; or import '
+                      'a local config file',
                 ),
                 style: vpsText(p, size: 13, color: p.soft),
               ),

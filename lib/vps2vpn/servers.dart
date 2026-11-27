@@ -1,7 +1,5 @@
 // vps2vpn "Servers": pick the line you use, see how fast each one answers.
 
-import 'dart:io' show Platform;
-
 import 'package:fl_clash/common/dialog.dart' show dialogs;
 import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -363,7 +361,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
           ? tr(
               context,
               '点击切换节点 · 延迟为打开测试网址的往返时间',
-              '${Platform.isAndroid ? 'Tap' : 'Click'} to switch · latency '
+              '${vpsClick(start: true)} to switch · latency '
                   'to a test page',
             )
           : tr(
