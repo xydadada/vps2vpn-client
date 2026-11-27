@@ -386,12 +386,25 @@ List<VpsFinding> vpsExitFindings(
   return rows;
 }
 
+List<String> _problems(List<VpsFinding> rows) => [
+  for (final r in rows)
+    if (r.problem != null) r.problem!,
+];
+
+/// The card's heading: "一切正常" or "2 项有问题".
+String vpsExitHeading(BuildContext context, List<VpsFinding> rows) {
+  final count = _problems(rows).length;
+  if (count == 0) return tr(context, '一切正常', 'All good');
+  return tr(
+    context,
+    '$count 项有问题',
+    '$count ${count == 1 ? 'issue' : 'issues'}',
+  );
+}
+
 /// The verdict line: "一切正常" or "2 项有问题：…".
 String vpsExitVerdict(BuildContext context, List<VpsFinding> rows) {
-  final problems = [
-    for (final r in rows)
-      if (r.problem != null) r.problem!,
-  ];
+  final problems = _problems(rows);
   if (problems.isEmpty) return tr(context, '一切正常', 'All good');
   return tr(
     context,
@@ -476,7 +489,7 @@ class VpsFindingCard extends StatelessWidget {
                   active: !settled,
                   child: Text(
                     settled
-                        ? vpsExitVerdict(context, rows)
+                        ? vpsExitHeading(context, rows)
                         : tr(context, '检测中…', 'Checking…'),
                     style: vpsText(
                       p,
@@ -511,6 +524,15 @@ class VpsFindingCard extends StatelessWidget {
               ),
             ],
           ),
+          if (settled)
+            for (final problem in _problems(rows))
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${problem[0].toUpperCase()}${problem.substring(1)}',
+                  style: vpsText(p, size: 13.5, color: p.soft, height: 1.45),
+                ),
+              ),
           const SizedBox(height: 8),
           for (final (i, r) in rows.indexed) ...[
             if (i > 0) Container(height: 1, color: p.line),
