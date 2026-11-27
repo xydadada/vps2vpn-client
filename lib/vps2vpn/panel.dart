@@ -1337,9 +1337,12 @@ Future<VpsClientRelease?> vpsLatestGitHubRelease({
   int? proxyPort,
   String? proxyAuth,
 }) async {
-  final client = _client(proxyPort: proxyPort, proxyAuth: proxyAuth);
+  final feed = _releaseFeed;
+  // The test feed is on loopback, which the proxy will not carry.
+  final client = feed != null
+      ? _client()
+      : _client(proxyPort: proxyPort, proxyAuth: proxyAuth);
   try {
-    final feed = _releaseFeed;
     final api = await client
         .getUrl(
           feed != null
@@ -1361,6 +1364,9 @@ Future<VpsClientRelease?> vpsLatestGitHubRelease({
     if (res.statusCode == HttpStatus.notFound) return null;
     if (res.statusCode == HttpStatus.ok) {
       return vpsReleaseFromGitHub(jsonDecode(text), installed: installed);
+    }
+    if (feed != null) {
+      throw HttpException('feed answered HTTP ${res.statusCode}');
     }
     final page = await client
         .getUrl(
