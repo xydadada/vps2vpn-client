@@ -242,6 +242,21 @@ class _ShotRun {
     }
   }
 
+  BuildContext? _find(String type) {
+    BuildContext? found;
+    void visit(Element e) {
+      if (found != null) return;
+      if (e.widget.runtimeType.toString() == type) {
+        found = e;
+        return;
+      }
+      e.visitChildren(visit);
+    }
+
+    _boundary.currentContext?.visitChildElements(visit);
+    return found;
+  }
+
   ScrollableState? _scroller() {
     ScrollableState? best;
     void visit(Element e) {
@@ -381,11 +396,13 @@ class _ShotRun {
       for (final locale in const ['zh', 'en']) {
         _locale(locale);
         await _settle(1200);
-        final scroll = _scroller();
-        scroll?.position.jumpTo(scroll.position.maxScrollExtent);
+        final tiles = _find('_Stats');
+        if (tiles != null && tiles.mounted) {
+          await Scrollable.ensureVisible(tiles, alignment: 0.3);
+        }
         await _settle(500);
         await _shoot('legend-home-default-${theme.name}-$locale-tiles');
-        scroll?.position.jumpTo(0);
+        _scroller()?.position.jumpTo(0);
       }
     }
   }
