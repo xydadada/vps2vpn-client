@@ -21,7 +21,7 @@ PACKAGE_FLAGS = $(if $(ARCH),--arch $(ARCH)) $(if $(FORM),--targets $(FORM)) \
 COMMENT_FILES = $(or $(FILES),$(shell git diff HEAD --name-only --diff-filter=d; git ls-files --others --exclude-standard))
 
 .PHONY: help setup submodules pub-get doctor hooks worktrees \
-	gen gen-watch l10n status-icons frb site \
+	gen gen-watch l10n status-icons frb \
 	fmt fmt-check analyze test coverage lint strip-check hooks-test comment-density plugins-check setup-hooks-test \
 	rust-check changelog-verify check \
 	core-check core-test \
@@ -70,9 +70,6 @@ status-icons: ## Regenerate the tray icons
 
 frb: ## Regenerate the flutter_rust_bridge bindings of plugins/rust_api
 	cd plugins/rust_api && flutter_rust_bridge_codegen generate
-
-site: ## Build the website into build/site
-	bash tool/build_site.sh
 
 ##@ Check
 

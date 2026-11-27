@@ -106,8 +106,7 @@ controller, so it does not compete with the installed app for the mixed, DNS, RE
 flutter run --dart-define-from-file=env.json --dart-define=SAFE_MODE=true
 ```
 
-`.run/main_safe_mode.run.xml` is the same launch for IntelliJ, and `Flutter App (Safe Mode)` in `.zed/debug.json` (debugger) or `flutter run (Safe Mode)` in `.zed/tasks.json`
-(plain run) for Zed. The build is bannered `SAFE MODE`, the tray shows the
+The build is bannered `SAFE MODE`, the tray shows the
 `status_4` bug icon with a menu of only show and exit and no traffic title, and the settings keep their values, so
 nothing has to be flipped back before a normal run. See the safe mode section of `architecture.md` for the owners that consult the flag.
 
@@ -200,9 +199,6 @@ its own, lets that run decide, and names the files that only failed together. Se
 `plugins/setup/setup_hooks/` is a pure Dart package and is tested with `dart test` from its own directory, which is
 also what CI runs; `tool/check_plugins.sh` does not descend into it. It must stay out of `flutter test`, because a test
 run of `plugins/setup` would execute the build hook itself.
-
-`.github/scripts/issue-gate.js` is tested with `node --test .github/scripts/`, against the forms in
-`.github/ISSUE_TEMPLATE/`; no workflow runs it, so run it after changing the script or a form.
 
 Native plugin code under `plugins/*/{linux,macos,windows}` is compiled by the CI `desktop` job, which runs
 `flutter build <platform> --debug` on every branch push, and by the release matrix on a tag; `tool/check_plugins.sh`
@@ -359,34 +355,6 @@ version from `pubspec.yaml`, which the upload job has already set from the tag, 
 `v<that version>` is tagged, so a prerelease tag must name the next, untagged `X.Y.Z`. The changelog builder walks
 stable tags only and ignores a `+M` tag.
 
-### Website
-
-`site/` is the GitHub Pages site: a static page that renders `CHANGELOG.md` and the download links in the browser, and
-works as is for local previews. `tool/build_site.sh [dir]` assembles it with the preview images, the app icon,
-`CHANGELOG.md` read at the latest release tag, and a `release.json` of asset names, sizes and digests fetched through
-`gh`. Without `gh` access the page falls back to the newest version in `CHANGELOG.md` and lists the files without sizes.
-It then runs `tool/render_site.mjs` (Node), which writes the English page and a `zh/` copy for search engines: page
-text, the first changelog releases, canonical and `hreflang` links, JSON-LD and `sitemap.xml`, all from the strings,
-changelog parser and release markup in `site/assets/shared.js`, plus the GitHub star count from `release.json` so the
-nav does not grow when the page loads. `SITE_URL` overrides the published URL these point at.
-On the built site each URL keeps its language: the language button links to the other page and carries the section in
-view, the chosen platform and the changelog search. Only the English root sends readers who chose or prefer Chinese on
-to `zh/`, unless its URL carries `?lang=en`: the button on `zh/` links there with it, so getting back to English never
-depends on browser storage. A project site cannot serve the `robots.txt` that would announce the sitemap, so submit
-`sitemap.xml` in Google Search Console and Bing Webmaster Tools once.
-
-```bash
-tool/build_site.sh && python3 -m http.server -d build/site
-```
-
-The page's look is deliberate: low-saturation flat colour, no blur, glow, glass or soft shadow, and motion that follows
-the logo's 30° lattice. `site/assets/field.js` draws the hero's capsules on that lattice with the glyph's own
-proportions, and the slanted wipes, the dot-to-bar marks and the theme transition reuse the same angle. Text that sits
-inside the hero has to be listed in `wireField` in `app.js`, or the capsules run behind it.
-
-`.github/workflows/pages.yaml` deploys it after every successful stable tag build and on pushes to `main` that touch the
-site, in the public repository only; its Pages source has to be set to GitHub Actions once. The file names come from the
-release matrix in `build.yaml`, so a renamed artifact needs the same change in `buildsFor` in `site/assets/app.js`.
 
 ## Verify
 

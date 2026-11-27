@@ -1,23 +1,77 @@
 # vps2vpn Wording
 
-The simple-mode pages, the tray and every message a user reads use one word per idea, in Chinese and in English.
-Use this list when adding or changing user-facing text in `lib/vps2vpn/` or the tray.
+简易模式的页面、托盘和用户能看到的每条提示，每个意思只用一个词，中文和英文都是。改 `lib/vps2vpn/` 或托盘里的文字时，照这份写。
 
-| Idea | 中文 | English | Avoid |
+这套规则是 2026-11-26 和服务端一起定的。服务端仓库的 `docs/wording.md` 和这份一致，要改规则就两边一起改。
+
+## 规则
+
+- **空格**：中文和英文字母、数字之间空一格，比如「AI 专线」「5 Mbps」「3 天」。有三个例外：
+  - 日期不空格；
+  - 数字和「%」之间不空格；
+  - 全角标点前后不空格。
+- **标点**：中文句子用全角标点。提到按钮名、页面名或设置项名时，用「」括起来。
+- **英文**：
+  - 用 Sentence case，只有第一个词首字母大写；
+  - 用美式拼写，比如 color、center；
+  - 句子里提到按钮时，按钮名放进英文双引号，比如 click "Replace link"。
+- **点按的动词**：桌面端写「点击」，英文写 click。
+- **进行中的状态**：写成「X中…」，英文写 “X-ing…”。用省略号「…」，不用三个句点。
+- **人称**：
+  - 称呼用户用「你」，不用「您」。
+  - 软件自称写「vps2vpn」，不写「我们」「本软件」。
+  - 不用口语，比如「的话」「搞」「连不上」。「连不上」改成「无法连接」。
+- **日期**：
+  - 一般写「11月26日」；
+  - 跨年写「2026年11月26日」；
+  - 带时间写「11月26日 15:00」；
+  - 图表刻度可以写「11/26」。
+- **流量**：显示 3 位有效数字，比如「90.9 TB」；额度是整数时不带小数，比如「共 100 TB」。
+- **错误提示**：先说发生了什么、该怎么办，原始报错放在点开以后才显示（`lib/vps2vpn/plain_errors.dart` 的 `vpsPlainError`）。
+
+## 用词表
+
+| 意思 | 中文 | English | 不再用 |
 |---|---|---|---|
-| Start using the line | 连接 | Connect | 启动, Start |
-| Stop using the line | 断开 | Disconnect | 暂停, 停止, Stop |
-| While starting | 连接中… | Connecting… | |
-| State when not in use | 未连接 | Not connected | Disconnected |
-| The account holder who hands out links | 管理员 | owner | admin |
-| The link the owner hands out | 订阅链接 | subscription link | 配置, config URL |
-| One server of the subscription | 服务器 | server | |
-| A protocol entry under a server | 节点 | node | |
-| The automatic choice | 智能线路 | Smart line | Smart lines |
-| The fixed exit for AI services | AI 专线 | AI line | |
-| Routing modes | 规则模式 / 全局模式 | Rule mode / Global mode | 直连 (not offered in simple mode) |
-| Ways to take over traffic | 系统代理 / 虚拟网卡 | System proxy / TUN | |
-| A temporary hold by the server | 已暂停 | Paused | |
+| 开始使用 | 连接 | Connect | 启动、Start |
+| 停止使用 | 断开 | Disconnect | 暂停、停止、Stop |
+| 正在连接 | 连接中… | Connecting… | |
+| 没在用时的状态 | 未连接 | Not connected | 没连上、Disconnected |
+| 还没导入订阅 | 未导入订阅 | No subscription yet | 尚未导入订阅 |
+| 订阅的网址 | 订阅链接 | subscription link | 订阅地址、配置 |
+| 导入订阅 | 导入 | Import | Add |
+| 列表里的一个条目 | 节点 | node | 句子里泛指节点的「线路」、server |
+| 自动选择的分组 | 智能线路 / AI 专线 | Smart line / AI line | 「线路」只用在这类分组名里 |
+| 用户自己的 VPS | 服务器 | server | |
+| 运营 vps2vpn 面板的人 | 管理员 | admin | owner、服务提供者 |
+| 不是 vps2vpn 的订阅来源 | 服务商 | provider | 提供者 |
+| 账号的持有人 | 账号所有者 | account owner | 主人 |
+| 会员自己看的网页 | 会员中心 | member center | 会员页 |
+| 账号 | 账号 | account | 账户 |
+| 从列表拿掉一台设备或一个网站 | 移除 | Remove | 踢下线、删除 |
+| 换链接，让其他设备断开 | 让其他设备下线 | Sign out other devices | 踢掉 |
+| 永久删除本机的订阅 | 删除 | Delete | |
+| 结束程序 | 退出 | Quit | 用「关闭」表示退出 |
+| 检测页 | 检测 | Check | 体检 |
+| 逐段排查网络 | 诊断 | Diagnose | |
+| 测延迟 | 测速 | Test latency | Test speed |
+| 检查新版本 | 检查更新 | Check for updates | Check now |
+| 本台设备 | 本机 | this device | 这台电脑 |
+| 用量 | 流量 | data | |
+| 两种代理模式 | 规则模式 / 全局模式 | Rule mode / Global mode | 智能分流、全部走代理 |
+| 代理模式这个设置项 | 代理模式 | Proxy mode | 出站模式、上网方式 |
+| 两种接管方式 | 系统代理 / 虚拟网卡 | System proxy / Virtual adapter (TUN) | 正文里单写 TUN |
+| 接管方式这个设置项 | 接管方式 | Takeover method | Takeover |
+| 计费倍率 | 2 倍 | 2× | ×2、2x |
+| 服务器临时暂停 | 已暂停 | Paused | |
+| 测不到延迟 | 超时 | Timed out | Timeout |
+| 需要先在网页上登录 | 需要登录 | sign-in | login |
 
-Errors say what happened and what to do next, in these words; the raw text stays behind a tap (`vpsPlainError` in
-`lib/vps2vpn/plain_errors.dart`).
+## 设备行
+
+设备行和服务端的会员中心保持一致：
+
+- 设备名太长时用省略号截断；
+- 第一行写「平台 · 版本 · IP」，版本号前不加 v；
+- 第二行写「最后在线 11月26日 15:00」；
+- 列表表头写「同时在线 2 / 上限 3」。

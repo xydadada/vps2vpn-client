@@ -80,7 +80,7 @@ dart tool/package.dart windows --env stable
 
 本项目以 [GPL-3.0](LICENSE) 发布。
 
-- [FlClash](https://github.com/chen08209/FlClash)，作者 chen08209，GPL-3.0（原项目说明见 [README_FlClash.md](README_FlClash.md)）
+- [FlClash](https://github.com/chen08209/FlClash)，作者 chen08209，GPL-3.0
 - [mihomo (Clash.Meta)](https://github.com/MetaCubeX/mihomo)，GPL-3.0
 
 第三方许可全文随安装包附在 `data\legal` 目录。
