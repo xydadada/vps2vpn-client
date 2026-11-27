@@ -11,6 +11,7 @@ import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/vps2vpn/profile_health.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -545,6 +546,8 @@ class _GroupTabsState extends State<_GroupTabs> {
   final _selectedKey = GlobalKey();
   var _fadeStart = false;
   var _fadeEnd = false;
+  double? _layoutWidth;
+  var _revealPending = false;
 
   @override
   void initState() {
@@ -554,9 +557,18 @@ class _GroupTabsState extends State<_GroupTabs> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reveal();
+  }
+
+  @override
   void didUpdateWidget(_GroupTabs old) {
     super.didUpdateWidget(old);
-    if (old.selected != widget.selected) _reveal();
+    if (old.selected != widget.selected ||
+        !listEquals(old.names, widget.names)) {
+      _reveal();
+    }
   }
 
   @override
@@ -566,11 +578,14 @@ class _GroupTabsState extends State<_GroupTabs> {
   }
 
   void _reveal() {
+    if (_revealPending) return;
+    _revealPending = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _revealPending = false;
       final target = _selectedKey.currentContext;
       if (!mounted || target == null || !_scroll.hasClients) return;
-      Scrollable.ensureVisible(
-        target,
+      _scroll.position.ensureVisible(
+        target.findRenderObject()!,
         alignment: 0.5,
         duration: VpsMotion.medium,
         curve: VpsMotion.settle,
@@ -580,7 +595,7 @@ class _GroupTabsState extends State<_GroupTabs> {
   }
 
   void _edges() {
-    if (!_scroll.hasClients) return;
+    if (!mounted || !_scroll.hasClients) return;
     final pos = _scroll.position;
     final start = pos.pixels > 1;
     final end = pos.pixels < pos.maxScrollExtent - 1;
@@ -635,6 +650,10 @@ class _GroupTabsState extends State<_GroupTabs> {
     );
     return LayoutBuilder(
       builder: (context, c) {
+        if (_layoutWidth != c.maxWidth) {
+          _layoutWidth = c.maxWidth;
+          _reveal();
+        }
         if (_rows(widths, c.maxWidth) <= _maxRows) {
           return Wrap(
             spacing: _gap,
@@ -939,7 +958,7 @@ extension on _ProxyCard {
     }
     if (proxy.name == vpsSmartGroupName) {
       return TextSpan(
-        text: using
+        text: selected
             ? tr(context, '使用中 · 自动选最快', 'In use · auto')
             : tr(context, '推荐 · 自动选最快', 'Picks the fastest'),
       );
