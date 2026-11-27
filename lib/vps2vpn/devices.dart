@@ -695,9 +695,9 @@ class VpsDeviceRemovedNotice extends ConsumerWidget {
           tr(
             context,
             '这个订阅在本机已停用，账号所有者恢复后即可重新连接。'
-                '你就是所有者的话，在会员中心或管理面板的设备列表里点击「恢复」。',
-            'This subscription is off here until the owner restores it. If '
-                "that's you, ${Platform.isAndroid ? 'tap' : 'click'} "
+                '如果你就是账号所有者，请在会员中心或管理面板的设备列表里点击「恢复」。',
+            'This subscription is off here until the account owner restores '
+                "it. If that's you, ${Platform.isAndroid ? 'tap' : 'click'} "
                 '"Restore" in the device list of the member center or admin '
                 'panel.',
           ),
