@@ -302,7 +302,7 @@ List<VpsFinding> vpsExitFindings(
             ? tr(
                 context,
                 '直连出去了，没走节点',
-                'goes out directly, not through the node',
+                'Goes out directly, not through the node',
               )
             : v6 != null
             ? countryName(context, v6.countryCode)
@@ -310,9 +310,9 @@ List<VpsFinding> vpsExitFindings(
             ? tr(
                 context,
                 '节点不支持 IPv6，本机 IPv6 未外泄',
-                'the node has no IPv6; yours is not exposed',
+                'The node has no IPv6; yours is not exposed',
               )
-            : tr(context, '本机没有 IPv6', 'no IPv6 here'),
+            : tr(context, '本机没有 IPv6', 'No IPv6 here'),
         leaks
             ? VpsFindingLevel.bad
             : elsewhere
@@ -396,7 +396,8 @@ String vpsExitVerdict(BuildContext context, List<VpsFinding> rows) {
   return tr(
     context,
     '${problems.length} 项有问题：${problems.join('；')}',
-    '${problems.length} issues: ${problems.join('; ')}',
+    '${problems.length} ${problems.length == 1 ? 'issue' : 'issues'}: '
+        '${problems.join('; ')}',
   );
 }
 

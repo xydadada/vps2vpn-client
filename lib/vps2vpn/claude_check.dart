@@ -166,12 +166,12 @@ List<VpsFinding> vpsClaudeFindings(
       VpsFinding(
         tr(context, 'Claude 各域名的出口', 'Exit for Claude\'s hosts'),
         split
-            ? tr(context, '网页和 API 出口不同', 'web and API use different exits')
+            ? tr(context, '网页和 API 出口不同', 'Web and API use different exits')
             : missing
-            ? tr(context, '有域名查不到', 'some hosts did not answer')
+            ? tr(context, '有域名查不到', 'Some hosts did not answer')
             : apart
-            ? tr(context, '同一专用出口', 'one dedicated exit')
-            : tr(context, '同一出口', 'one exit'),
+            ? tr(context, '同一专用出口', 'One dedicated exit')
+            : tr(context, '同一出口', 'One exit'),
         split
             ? VpsFindingLevel.bad
             : missing
@@ -194,10 +194,10 @@ List<VpsFinding> vpsClaudeFindings(
       VpsFinding(
         tr(context, '终端代理（Claude Code）', 'Terminal proxy (Claude Code)'),
         proxy == null
-            ? tr(context, '没有设置', 'not set')
+            ? tr(context, '没有设置', 'Not set')
             : ours
-            ? tr(context, '指向 vps2vpn', 'points to vps2vpn')
-            : tr(context, '指向别处', 'points elsewhere'),
+            ? tr(context, '指向 vps2vpn', 'Points to vps2vpn')
+            : tr(context, '指向别处', 'Points elsewhere'),
         proxy == null
             ? VpsFindingLevel.none
             : ours
