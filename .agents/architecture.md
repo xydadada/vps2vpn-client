@@ -1631,6 +1631,9 @@ rewritten; each owner reads the flag where it would otherwise act:
   `vmess-config`, `tuic-server` and `iptables`, and closes `dns.listen`, preventing profile-only changes during apply.
 - System proxy: `systemProxyQueue` in `lib/common/proxy.dart` is `null`, so `ProxyManager` and exit cleanup never
   write the OS setting, not even the stop that would clear what the installed app configured.
+  The Windows runner reads the same encoded `DART_DEFINES` at CMake configuration time and skips its pre-engine
+  stale-proxy sweep in safe builds. The explicit `--clear-stale-proxy` maintenance command still performs cleanup;
+  it is not a safe-mode application launch.
 - System DNS: with no TUN in the generated profile the Core registers no resolver, and `restoreLegacySystemDns` does
   not run. The restore matters because a profile or release build shares the preferences of the installed app (only a
   macOS or Android debug build has its own bundle id) and would restore from its record.
@@ -2115,8 +2118,8 @@ UTF-8 bytes rather than a `String` so that decoding them stays off the UI isolat
   proxy or `/flclash.pac` URL still set to FlClash's `127.0.0.1:<port>` with nothing listening on that port. In the app
   `SystemProxyQueue` (`lib/common/proxy.dart`) sets the system proxy when the Core starts with it on, and stops it on
   a stop or exit only when this run set it, since a stop also clears a proxy, PAC or auto-detect setting someone else
-  made. Nothing is stored; instead the runner calls `flclash_clear_stale_proxy` on a background thread at every launch
-  that passes the single-instance check, so a proxy a crashed or killed run left on a dead port goes at once rather
+  made. Nothing is stored; instead the runner calls `flclash_clear_stale_proxy` on a background thread at every normal launch
+  that passes the single-instance check (Safe Mode skips this sweep), so a proxy a crashed or killed run left on a dead port goes at once rather
   than at the next connect, while one another running proxy app listens behind stays.
 - `window/` drives the desktop window the Flutter view lives in, one submodule per platform (Win32 and DWM, AppKit
   through `objc2`, GTK through the `-sys` crates). See Desktop Window.
