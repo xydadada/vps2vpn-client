@@ -379,6 +379,9 @@ func vShareQuery(f proxyFields) url.Values {
 }
 
 func encodeTrojan(f proxyFields) string {
+	if hasUnencodedTLSIdentity(f) {
+		return ""
+	}
 	query := url.Values{}
 	if f.flag("skip-cert-verify") {
 		query.Set("allowInsecure", "1")
@@ -404,6 +407,9 @@ func encodeTrojan(f proxyFields) string {
 }
 
 func encodeHysteria(f proxyFields) string {
+	if hasUnencodedTLSIdentity(f) || f.str("fingerprint") != "" {
+		return ""
+	}
 	query := url.Values{}
 	setIf(query, "peer", f.str("sni"))
 	setIf(query, "obfs", f.str("obfs"))
@@ -425,7 +431,7 @@ func encodeHysteria(f proxyFields) string {
 // A realm hop needs the realm server's address where the link holds the
 // proxy's own, so such a proxy has no link.
 func encodeHysteria2(f proxyFields) string {
-	if f.sub("realm-opts").flag("enable") {
+	if f.sub("realm-opts").flag("enable") || hasUnencodedTLSIdentity(f) {
 		return ""
 	}
 	host := hostPort(f)
@@ -440,6 +446,9 @@ func encodeHysteria2(f proxyFields) string {
 			user = url.UserPassword(name, secret)
 		} else {
 			user = url.User(password)
+		}
+		if user.String() != password {
+			return ""
 		}
 	}
 	query := url.Values{}
@@ -483,17 +492,34 @@ func encodeTuic(f proxyFields) string {
 	return shareURL("tuic", user, hostPort(f), query, f.str("name"))
 }
 
-// The converter reads the user info as base64 before falling back to plain
-// text, so it always carries the ":" that no base64 alphabet has.
+// The converter reads base64 or plain user info without URL-unescaping it.
 func encodeSocks(f proxyFields, scheme string) string {
+	if f.flag("tls") && (scheme != "https" || !f.flag("skip-cert-verify") ||
+		f.str("sni") != "" || f.str("fingerprint") != "" || hasUnencodedTLSIdentity(f)) {
+		return ""
+	}
 	var user *url.Userinfo
 	if username, password := f.str("username"), f.str("password"); username != "" || password != "" {
+		if strings.Contains(username, ":") || strings.Contains(password, ":") {
+			return ""
+		}
+		credentials := username + ":" + password
 		user = url.UserPassword(username, password)
+		if user.String() != credentials {
+			encoded := base64.RawStdEncoding.EncodeToString([]byte(credentials))
+			user = url.User(encoded)
+			if user.String() != encoded {
+				return ""
+			}
+		}
 	}
 	return shareURL(scheme, user, hostPort(f), url.Values{}, f.str("name"))
 }
 
 func encodeAnyTLS(f proxyFields) string {
+	if hasUnencodedTLSIdentity(f) {
+		return ""
+	}
 	query := url.Values{}
 	setIf(query, "sni", f.str("sni"))
 	if f.flag("skip-cert-verify") {
