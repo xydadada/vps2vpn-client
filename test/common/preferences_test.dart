@@ -4,6 +4,7 @@ import 'package:fl_clash/common/boot_record.dart';
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/preferences.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,6 +27,32 @@ void main() {
   setUp(() async {
     await mockPreferences();
     store = await SharedPreferences.getInstance();
+  });
+
+  test('corrupt preference JSON never exposes its contents in logs', () async {
+    final logs = <String>[];
+    final print = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = print);
+    const corrupt = '{"password":"test-secret" trailing}';
+    final readers = <String, Future<Object?> Function()>{
+      configKey: preferences.getConfigMap,
+      clashConfigKey: preferences.getClashConfigMap,
+      systemDnsRecordKey: preferences.getSystemDnsRecord,
+      bootRecordKey: preferences.getBootRecord,
+    };
+
+    for (final entry in readers.entries) {
+      await store.setString(entry.key, corrupt);
+      expect(await entry.value(), isNull);
+    }
+
+    expect(logs, hasLength(readers.length));
+    expect(logs, everyElement(contains('FormatException')));
+    expect(logs.join(), isNot(contains('test-secret')));
+    expect(logs.join(), isNot(contains(corrupt)));
   });
 
   group('applied config md5', () {

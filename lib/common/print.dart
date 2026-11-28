@@ -6,6 +6,9 @@ import 'package:fl_clash/state.dart';
 import 'package:flutter/widgets.dart';
 
 String compactError(Object error) {
+  if (error is FormatException) {
+    return 'FormatException(${error.message})';
+  }
   if (error is DioException) {
     final statusCode = error.response?.statusCode;
     return statusCode != null
