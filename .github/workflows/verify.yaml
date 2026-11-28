@@ -17,6 +17,18 @@ env:
   FLUTTER_VERSION: '3.50.0'
 
 jobs:
+  testlab-diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Check Test Lab diagnostic redaction without device credentials
+        run: python3 -m unittest discover -s .github/testlab -p '*_test.py' -v
+
   go:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

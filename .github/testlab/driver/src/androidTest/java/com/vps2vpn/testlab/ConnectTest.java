@@ -152,12 +152,7 @@ public class ConnectTest {
             while (m.find() && labels.length() < 1500) {
                 labels.append(labels.length() == 0 ? "" : " | ").append(m.group(1).replace("&#10;", "/").replace('\n', '/'));
             }
-            String text = labels.toString();
-            for (String secret : secrets) {
-                text = text.replace(secret, "<hidden>");
-            }
-            return text.replaceAll("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b", "x.x.x.x")
-                    .replaceAll("(?i)\\b[0-9a-f]{1,4}(:[0-9a-f]{0,4}){2,7}\\b", "x:x::x");
+            return Redaction.scrub(labels.toString(), secrets).replace('\n', '/');
         } catch (Exception e) {
             return "(no dump: " + e.getClass().getSimpleName() + ")";
         }
