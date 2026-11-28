@@ -3756,6 +3756,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get subscriptionTooLarge => '订阅内容过大，无法加载';
 
   @override
+  String get resourceTooLarge => '下载的文件过大，无法加载';
+
+  @override
   String get subscriptionAnnounce => '服务商通知';
 
   @override

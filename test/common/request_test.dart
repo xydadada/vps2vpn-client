@@ -227,20 +227,27 @@ void main() {
       );
     });
 
+    test(
+      'a failed retry does not destroy an already verified installer',
+      () async {
+        final existing = File(join(directory.path, name));
+        await existing.writeAsBytes(package);
+        final corrupt = requestServing(
+          '$digest  ./$name\n',
+          utf8.encode('corrupt'),
+        );
 
-    test('a failed retry does not destroy an already verified installer', () async {
-      final existing = File(join(directory.path, name));
-      await existing.writeAsBytes(package);
-      final corrupt = requestServing('$digest  ./$name\n', utf8.encode('corrupt'));
+        await expectLater(
+          download(corrupt),
+          throwsA(isA<ReleaseNotVerifiedException>()),
+        );
 
-      await expectLater(
-        download(corrupt),
-        throwsA(isA<ReleaseNotVerifiedException>()),
-      );
-
-      expect(await existing.readAsBytes(), package);
-      expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
-    });
+        expect(await existing.readAsBytes(), package);
+        expect(directory.listSync().map((f) => f.path).toList(), [
+          existing.path,
+        ]);
+      },
+    );
 
     test('a network failure leaves a previous installer intact', () async {
       final existing = File(join(directory.path, name));
@@ -258,15 +265,20 @@ void main() {
       expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
     });
 
-    test('a verified replacement publishes only after checksum passes', () async {
-      final existing = File(join(directory.path, name));
-      await existing.writeAsString('old');
-      final downloader = requestServing('$digest  ./$name\n', package);
+    test(
+      'a verified replacement publishes only after checksum passes',
+      () async {
+        final existing = File(join(directory.path, name));
+        await existing.writeAsString('old');
+        final downloader = requestServing('$digest  ./$name\n', package);
 
-      expect(await download(downloader), existing.path);
-      expect(await existing.readAsBytes(), package);
-      expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
-    });
+        expect(await download(downloader), existing.path);
+        expect(await existing.readAsBytes(), package);
+        expect(directory.listSync().map((f) => f.path).toList(), [
+          existing.path,
+        ]);
+      },
+    );
 
     test('refuses an asset the listing does not name', () async {
       final request = requestServing('$digest  ./other.apk\n', package);
@@ -465,6 +477,115 @@ void main() {
       final small = await request.getFileResponseForUrl(url, maxBytes: 6);
       expect(small.data, [1, 2, 3, 4, 5, 6]);
       expect(direct.calls, 0);
+    });
+
+    test(
+      'text downloads count streamed bytes despite a small header',
+      () async {
+        final (:request, :proxied, :direct) = routes(
+          proxied: (_) => ResponseBody(
+            Stream.fromIterable([
+              Uint8List.fromList(utf8.encode('ab')),
+              Uint8List.fromList(utf8.encode('cde')),
+            ]),
+            200,
+            headers: {
+              HttpHeaders.contentLengthHeader: ['1'],
+            },
+          ),
+          direct: _status(200, 'must not retry'),
+        );
+
+        await expectLater(
+          request.getTextResponseForUrl(url, maxBytes: 4),
+          throwsA(
+            isA<ResourceTooLargeException>().having(
+              (error) => error.limit,
+              'limit',
+              4,
+            ),
+          ),
+        );
+        expect((proxied.calls, direct.calls), (1, 0));
+      },
+    );
+
+    test('text downloads reject a declared oversized body', () async {
+      final (:request, :proxied, :direct) = routes(
+        proxied: (_) => ResponseBody.fromString(
+          '',
+          200,
+          headers: {
+            HttpHeaders.contentLengthHeader: ['5'],
+          },
+        ),
+        direct: _status(200),
+      );
+
+      await expectLater(
+        request.getTextResponseForUrl(url, maxBytes: 4),
+        throwsA(isA<ResourceTooLargeException>()),
+      );
+      expect((proxied.calls, direct.calls), (1, 0));
+    });
+
+    test(
+      'text at its byte cap preserves split UTF-8 and response details',
+      () async {
+        final bytes = utf8.encode('你好');
+        final (:request, :proxied, :direct) = routes(
+          proxied: (_) => ResponseBody(
+            Stream.fromIterable([
+              Uint8List.fromList(bytes.sublist(0, 2)),
+              Uint8List.fromList(bytes.sublist(2)),
+            ]),
+            200,
+            statusMessage: 'OK',
+            headers: {
+              'x-resource-version': ['3'],
+            },
+          ),
+          direct: _status(200),
+        );
+
+        final response = await request.getTextResponseForUrl(url, maxBytes: 6);
+
+        expect(response.data, '你好');
+        expect(response.statusCode, 200);
+        expect(response.statusMessage, 'OK');
+        expect(response.headers.value('x-resource-version'), '3');
+        expect(response.requestOptions.uri.toString(), url);
+        expect((proxied.calls, direct.calls), (1, 0));
+      },
+    );
+
+    testWidgets('a stalled text body releases its stream at timeout', (
+      tester,
+    ) async {
+      var cancelled = false;
+      final stream = StreamController<Uint8List>(
+        onCancel: () => cancelled = true,
+      );
+      addTearDown(stream.close);
+      final (:request, :proxied, :direct) = routes(
+        proxied: (_) => ResponseBody(stream.stream, 200),
+        direct: _status(200),
+      );
+      final assertion = expectLater(
+        request.getTextResponseForUrl(url, maxBytes: 4),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.receiveTimeout,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(downloadTimeoutDuration + const Duration(seconds: 1));
+      await assertion;
+      expect(cancelled, isTrue);
+      expect((proxied.calls, direct.calls), (1, 0));
     });
 
     test('enforces the same byte limit on the direct fallback', () async {

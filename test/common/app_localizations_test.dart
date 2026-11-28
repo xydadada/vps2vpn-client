@@ -198,6 +198,18 @@ void main() {
     );
   });
 
+  test('an oversized resource has a file-specific message in each locale', () {
+    for (final locale in [const Locale('en'), const Locale('zh')]) {
+      final localizations = lookupAppLocalizations(locale);
+      final message = userFacingErrorMessage(
+        const ResourceTooLargeException(32 << 20),
+        localizations,
+      );
+      expect(message, localizations.resourceTooLarge);
+      expect(message, isNot(localizations.subscriptionTooLarge));
+    }
+  });
+
   group('a lost Core session', () {
     test('says the connection is gone when it has no cause', () {
       expect(

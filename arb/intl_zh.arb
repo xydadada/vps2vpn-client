@@ -1146,6 +1146,7 @@
   "subscriptionEmpty": "订阅返回了空配置",
   "subscriptionUpdateKeptLast": "{label} 更新失败，继续使用上次可用的配置",
   "subscriptionTooLarge": "订阅内容过大，无法加载",
+  "resourceTooLarge": "下载的文件过大，无法加载",
   "subscriptionAnnounce": "服务商通知",
   "subscriptionWebPage": "我的页面",
   "subscriptionSupport": "联系客服",
