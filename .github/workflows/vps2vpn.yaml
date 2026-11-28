@@ -29,7 +29,13 @@ env:
   GO_VERSION: '1.27.4'
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yaml
+    permissions:
+      contents: read
+
   windows:
+    needs: verify
     runs-on: windows-2022
     timeout-minutes: 90
     permissions:
@@ -72,7 +78,7 @@ jobs:
       - name: Flutter dependencies
         run: |
           flutter --version
-          flutter pub get
+          flutter pub get --enforce-lockfile
 
       - name: Fetch CA certificates
         shell: bash
