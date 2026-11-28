@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
+import 'src/test_config.dart';
+
 const _usage =
     '''
 Runs the root package tests from a few generated entrypoints.
@@ -12,8 +14,9 @@ usage: dart run tool/test.dart [path ...] [-- flutter test arguments]
 
 Every *_test.dart under the given paths (default: test) is imported into one of
 $_bundleCount entrypoints under $_bundleDir, so `flutter test` compiles and
-starts $_bundleCount programs rather than one per file. A file carrying a
-library-level annotation such as @TestOn runs on its own.
+starts $_bundleCount programs rather than one per file. Bundles use the most
+common nearest flutter_test_config.dart. Files with another configuration or
+a library-level annotation such as @TestOn run on their own.
 
 Files in one entrypoint share an isolate. A file that fails there is run again
 on its own, and that run decides the result; the files that pass alone are
@@ -58,9 +61,14 @@ Future<void> main(List<String> arguments) async {
 
   final files = _collect(paths.isEmpty ? const ['test'] : paths);
   final standalone = files.where(_hasAnnotation).toList();
-  final bundles = _writeBundles(
+  final configuration = planTestConfiguration(
     files.where((file) => !standalone.contains(file)).toList(),
+    bundleDirectory: _bundleDir,
   );
+  standalone.addAll(configuration.standalone);
+  standalone.sort();
+  final bundles = _writeBundles(configuration.bundled);
+  writeBundleConfiguration(_bundleDir, configuration.configuration);
   final setsConcurrency = flutterArguments.any(
     (argument) =>
         argument.startsWith('-j') || argument.startsWith('--concurrency'),

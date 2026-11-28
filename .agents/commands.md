@@ -191,7 +191,9 @@ dart run tool/test.dart -- --reporter expanded --coverage
 Plain `flutter test` compiles each file into its own program and starts an engine for it, one file after another, and
 that dominates a full run. `tool/test.dart` imports the files into 32 generated entrypoints under
 `.dart_tool/test_bundles/` and runs those with one worker per core, about half the time of a plain run, and less than
-a third with `--coverage`. Files in one entrypoint share an
+a third with `--coverage`. Each bundle forwards to the same nearest `flutter_test_config.dart` as its original files,
+stopping discovery at `pubspec.yaml` as Flutter does. Files outside the largest configuration group run on their own;
+files without a config never acquire one from the generated entrypoint's ancestors. Files in one entrypoint share an
 isolate, so a test can see state a file before it left behind; the script runs every file that failed there again on
 its own, lets that run decide, and names the files that only failed together. See the Shared Test Isolate section of
 `rules.md` before fixing one.
