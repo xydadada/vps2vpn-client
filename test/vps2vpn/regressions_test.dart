@@ -7,6 +7,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/vps2vpn/clipboard_import.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/mine.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
@@ -271,6 +272,73 @@ void main() {
       expect(find.text('Replace'), findsOneWidget);
     },
   );
+
+  testWidgets('an inline replacement stays with its subscription on reorder', (
+    tester,
+  ) async {
+    final second = profile.copyWith(
+      id: 2,
+      label: 'Second',
+      url: 'https://second.invalid/sub',
+    );
+    final profiles = TestProfiles([profile, second]);
+    final health = VpsProfileHealth(
+      at: DateTime.now(),
+      ok: false,
+      error: 'offline fixture',
+    );
+    final container = ProviderContainer(
+      overrides: [
+        profilesProvider.overrideWith(() => profiles),
+        vpsMemberProvider.overrideWith((ref) async => null),
+        localIpProvider.overrideWithValue(null),
+        vpsProfileHealthProvider.overrideWith(
+          () => _Health({1: health, 2: health}),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    globalState.container = container;
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const TestApp(locale: Locale('en'), child: VpsMePage()),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Replace link').first);
+    await tester.pump();
+    final replacement = find.byWidgetPredicate(
+      (widget) => widget is VpsImportField && widget.replace != null,
+    );
+    expect(replacement, findsOneWidget);
+    final field = find.descendant(
+      of: replacement,
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(field, 'https://replacement.invalid/sub');
+
+    profiles.reorder([second, profile]);
+    await tester.pump();
+    expect(replacement, findsOneWidget);
+    final card = find.ancestor(of: replacement, matching: find.byType(VpsCard));
+    expect(
+      find.descendant(of: card, matching: find.text('First')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('Second')),
+      findsNothing,
+    );
+    expect(
+      tester.widget<EditableText>(field).controller.text,
+      'https://replacement.invalid/sub',
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'buttons support Tab, Enter and Space and skip disabled controls',

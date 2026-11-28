@@ -697,7 +697,7 @@ class VpsPage extends StatelessWidget {
                   const VpsErrorNotice(),
                   // Blocks arrive one after another, top to bottom.
                   for (final (i, child) in children.indexed)
-                    VpsEnter(index: i, child: child),
+                    VpsEnter(key: child.key, index: i, child: child),
                 ],
               ),
             ),
