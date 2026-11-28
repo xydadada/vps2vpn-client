@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/feedback.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -9,6 +13,87 @@ VpsFeedbackAnswer _answer(VpsFeedbackOutcome outcome) =>
     (outcome: outcome, id: null, retryAfter: null);
 
 void main() {
+  testWidgets('a previous account cannot enable feedback while reloading', (
+    tester,
+  ) async {
+    final pending = Completer<VpsMemberResult?>();
+    var reloading = false;
+    bool? open;
+    final container = ProviderContainer(
+      overrides: [
+        currentProfileProvider.overrideWithValue(
+          Profile.normal(url: 'https://provider.example/s/TestToken0123456789'),
+        ),
+        vpsMemberProvider.overrideWith((ref) async {
+          if (reloading) return pending.future;
+          return const VpsMemberResult(
+            member: VpsMember(name: 'A', enabled: true, feedback: true),
+          );
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: Consumer(
+          builder: (context, ref, child) {
+            ref.watch(vpsMemberProvider);
+            open = vpsFeedbackOpen(ref);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(open, isTrue);
+    reloading = true;
+    container.invalidate(vpsMemberProvider);
+    await tester.pump();
+    expect(container.read(vpsMemberProvider).value?.member?.feedback, isTrue);
+    expect(open, isFalse);
+    pending.complete(null);
+    await tester.pump();
+    expect(open, isFalse);
+  });
+
+  testWidgets('feedback needs the panel to advertise the feature', (
+    tester,
+  ) async {
+    for (final result in <VpsMemberResult?>[
+      null,
+      const VpsMemberResult(problem: VpsPanelProblem.unreachable),
+      const VpsMemberResult(member: VpsMember(name: 'A', enabled: true)),
+      const VpsMemberResult(
+        member: VpsMember(name: 'A', enabled: true, feedback: true),
+      ),
+    ]) {
+      bool? open;
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [
+            currentProfileProvider.overrideWithValue(
+              Profile.normal(
+                url: 'https://provider.example/s/TestToken0123456789',
+              ),
+            ),
+            vpsMemberProvider.overrideWith((ref) async => result),
+          ],
+          child: Consumer(
+            builder: (context, ref, child) {
+              ref.watch(vpsMemberProvider);
+              open = vpsFeedbackOpen(ref);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(open, result?.member?.feedback == true);
+    }
+  });
+
   group('masking', () {
     test('links, secrets, UUIDs and addresses are masked', () {
       final masked = vpsMaskSecrets(
