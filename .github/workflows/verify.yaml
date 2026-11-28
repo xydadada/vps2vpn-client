@@ -28,6 +28,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: core/go.sum
+      - name: Test APK signer identity validation
+        run: python3 -I tool/check_apk_signer_test.py -v
       - name: Verify and apply hash-pinned controller and fallback fixes
         run: |
           go test -race tool/apply_core_patches.go tool/apply_core_patches_test.go
