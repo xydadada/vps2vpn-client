@@ -799,11 +799,8 @@ extension ScriptExt on Script {
   Future<String?> get content async => readTextFileTask(await path);
 
   Future<Script> save(String content) async {
-    final file = File(await path);
-    if (!await file.exists()) {
-      await file.create(recursive: true);
-    }
-    await file.writeAsString(content);
+    // A failed write must leave the last usable script intact.
+    await File(await path).writeAsStringAtomically(content);
     return copyWith(lastUpdateTime: DateTime.now());
   }
 
