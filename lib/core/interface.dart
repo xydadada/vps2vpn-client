@@ -34,9 +34,7 @@ abstract class CoreHandlerInterface {
   }) async {
     return await handleWatch(
       onStart: () {
-        commonPrint.log(
-          'Invoke method ${method.wireName} ${DateTime.now()} $arguments',
-        );
+        commonPrint.log('Invoke method ${method.wireName} ${DateTime.now()}');
       },
       function: () => invokeMethod(
         method: method,

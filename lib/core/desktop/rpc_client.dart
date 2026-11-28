@@ -277,7 +277,7 @@ final class CoreRpcClient implements CoreRpcChannel {
 
   void _logParseFailure(Object error) {
     commonPrint.log(
-      'Failed to parse transport data: $error',
+      'Failed to parse transport data (${error.runtimeType})',
       logLevel: LogLevel.error,
     );
   }
