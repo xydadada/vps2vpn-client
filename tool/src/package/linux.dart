@@ -176,6 +176,7 @@ String rpmSpec(PackageContext context, Map<String, dynamic> config) {
       'cp -r $binary.desktop %{buildroot}%{_datadir}/applications/%{name}.desktop',
       'cp -r $binary.png %{buildroot}%{_datadir}/pixmaps/%{name}.png',
       'cp -r $binary*.xml %{buildroot}%{_datadir}/metainfo/%{name}.appdata.xml || :',
+      'chmod -R u=rwX,go=rX %{buildroot}',
     ].join('\n'),
     '%post': [
       'update-mime-database %{_datadir}/mime &> /dev/null || :',
