@@ -8,6 +8,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/action.dart';
 import 'package:fl_clash/providers/config.dart';
+import 'package:fl_clash/providers/database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +20,33 @@ import '../helpers/preferences.dart';
 
 Profile _profile(int id, String label) =>
     Profile(id: id, label: label, autoUpdateDuration: Duration.zero);
+
+class _RestoreSetup extends SetupAction {
+  _RestoreSetup({this.running = false});
+
+  bool running;
+  int applies = 0;
+  final stops = <bool>[];
+
+  @override
+  void build() {}
+
+  @override
+  bool get wantsRunning => running;
+
+  @override
+  Future<bool> setRunning(bool running, {bool initialize = false}) async {
+    this.running = running;
+    stops.add(running);
+    return true;
+  }
+
+  @override
+  Future<bool> fullSetup() async {
+    applies++;
+    return true;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,8 +75,12 @@ void main() {
   });
 
   // AppStateManager's listen keeps the settings alive while a restore awaits.
-  ProviderContainer buildContainer() {
-    final container = ProviderContainer()..listen(configProvider, (_, _) {});
+  ProviderContainer buildContainer({SetupAction? setup}) {
+    final container = ProviderContainer(
+      overrides: [
+        if (setup != null) setupActionProvider.overrideWith(() => setup),
+      ],
+    )..listen(configProvider, (_, _) {});
     addTearDown(container.dispose);
     return container;
   }
@@ -139,6 +171,40 @@ void main() {
       expect(own.readAsStringSync(), '{}');
       expect(stale.existsSync(), isFalse);
     });
+
+    for (final strategy in RestoreStrategy.values) {
+      test(
+        'an empty database snapshot follows ${strategy.name} restore semantics',
+        () async {
+          final archivePath = await backupToKept(actionOf(buildContainer()));
+          await testDatabase.profilesDao.putAll([
+            _profile(42, 'Current').toCompanion(),
+          ]);
+          final setup = _RestoreSetup(running: true);
+          final target = buildContainer(setup: setup);
+          target.read(currentProfileIdProvider.notifier).value = 42;
+          target
+              .read(appSettingProvider.notifier)
+              .update((state) => state.copyWith(restoreStrategy: strategy));
+
+          expect(
+            await actionOf(
+              target,
+            ).restore(RestoreOption.onlyProfiles, (_) async => archivePath),
+            isTrue,
+          );
+
+          final overrides = strategy == RestoreStrategy.override;
+          expect(
+            await testDatabase.profilesDao.ids().get(),
+            overrides ? isEmpty : [42],
+          );
+          expect(target.read(currentProfileIdProvider), overrides ? null : 42);
+          expect(setup.stops, overrides ? [false] : isEmpty);
+          expect(setup.applies, 1);
+        },
+      );
+    }
 
     test('removes the work directory when delivery fails', () async {
       final container = buildContainer();
@@ -233,6 +299,78 @@ void main() {
       final stored = await testDatabase.profilesDao.query().get();
       expect(stored.map((item) => item.label), ['From backup']);
     });
+
+    test(
+      'override moves a removed selection to a restored profile and reapplies',
+      () async {
+        final setup = _RestoreSetup();
+        final container = buildContainer(setup: setup);
+        await testDatabase.profilesDao.putAll([
+          _profile(42, 'Current').toCompanion(),
+        ]);
+        container.read(currentProfileIdProvider.notifier).value = 42;
+        container
+            .read(appSettingProvider.notifier)
+            .update(
+              (state) =>
+                  state.copyWith(restoreStrategy: RestoreStrategy.override),
+            );
+
+        await actionOf(container).applyRestore(
+          MigrationData(profiles: [_profile(7, 'Restored')]),
+          RestoreOption.onlyProfiles,
+        );
+
+        expect(container.read(currentProfileIdProvider), 7);
+        expect(container.read(profilesProvider).map((profile) => profile.id), [
+          7,
+        ]);
+        expect(setup.applies, 1);
+      },
+    );
+
+    test('restoring the current id reapplies its changed content', () async {
+      final setup = _RestoreSetup();
+      final container = buildContainer(setup: setup);
+      await testDatabase.profilesDao.putAll([
+        _profile(42, 'Current').toCompanion(),
+      ]);
+      container.read(currentProfileIdProvider.notifier).value = 42;
+
+      await actionOf(container).applyRestore(
+        MigrationData(profiles: [_profile(42, 'Restored')]),
+        RestoreOption.onlyProfiles,
+      );
+
+      expect(container.read(currentProfileIdProvider), 42);
+      expect(container.read(profilesProvider).single.label, 'Restored');
+      expect(setup.applies, 1);
+    });
+
+    test(
+      'a settings-only restore never treats absent database as empty',
+      () async {
+        final container = buildContainer();
+        await testDatabase.profilesDao.putAll([
+          _profile(42, 'Current').toCompanion(),
+        ]);
+        container.read(currentProfileIdProvider.notifier).value = 42;
+        container
+            .read(appSettingProvider.notifier)
+            .update(
+              (state) =>
+                  state.copyWith(restoreStrategy: RestoreStrategy.override),
+            );
+
+        await actionOf(container).applyRestore(
+          MigrationData(configMap: configMapOf(container)),
+          RestoreOption.all,
+        );
+
+        expect(await testDatabase.profilesDao.ids().get(), [42]);
+        expect(container.read(currentProfileIdProvider), 42);
+      },
+    );
 
     test('a compatible restore keeps profiles the backup omits', () async {
       final container = buildContainer();
@@ -362,6 +500,9 @@ void main() {
 
   group('applyRestore writes the settings providers', () {
     test('restores every settings provider the config carries', () async {
+      await testDatabase.profilesDao.putAll([
+        _profile(42, 'Saved').toCompanion(),
+      ]);
       final source = buildContainer();
       source
           .read(appSettingProvider.notifier)

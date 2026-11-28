@@ -212,6 +212,7 @@ Future<MigrationData> readBackupArchive({
     ]);
     return MigrationData(
       configMap: configMap,
+      hasDatabaseSnapshot: true,
       profiles: results[0].cast<Profile>(),
       scripts: results[1].cast<Script>(),
       rules: results[2].cast<Rule>(),

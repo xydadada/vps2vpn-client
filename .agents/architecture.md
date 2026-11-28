@@ -1592,7 +1592,10 @@ directives, so consumers continue to import the same public API:
 - `BackupAction`: backup/restore orchestration over a per-run temp work directory; the view supplies where an archive
   goes (local save, WebDAV upload) or comes from. The archive format lives in `lib/common/backup.dart`, which stages a
   restore without touching the data directory; files, database rows and settings are applied only after the whole
-  archive has been read and validated.
+  archive has been read and validated. A present but empty database snapshot clears rows under override restore;
+  settings-only archives without a database keep the rows. After restoring, the selected profile is reconciled with
+  the resulting rows, an empty profile list stops a running connection, and the restored configuration is reapplied
+  even when the selected id is unchanged.
 - `CoreAction`: core lifecycle, initialization, coalesced restart, and post-restart profile/running-state application.
 - `SystemAction`: system integration, tray, coordinated resource cleanup, terminal Core close, exit, and brightness.
 - `StoreAction`: profile storage operations.

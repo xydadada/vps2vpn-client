@@ -518,8 +518,10 @@ class Database extends _$Database {
     List<ProxyDialer> proxyDialers = const [],
     List<MitmModule> mitmModules = const [],
     bool isOverride = false,
+    bool allowEmptyOverride = false,
   }) async {
-    if (profiles.isEmpty &&
+    if (!(isOverride && allowEmptyOverride) &&
+        profiles.isEmpty &&
         scripts.isEmpty &&
         rules.isEmpty &&
         disabledRules.isEmpty &&

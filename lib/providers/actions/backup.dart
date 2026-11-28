@@ -117,6 +117,7 @@ class BackupAction extends _$BackupAction {
         proxyDialers: data.proxyDialers,
         mitmModules: data.mitmModules,
         isOverride: isOverride,
+        allowEmptyOverride: data.hasDatabaseSnapshot,
       );
     } catch (_) {
       await putBack?.call();
@@ -124,27 +125,48 @@ class BackupAction extends _$BackupAction {
     }
     await _clearReplacedProviderCaches(previousProviders);
     await _clearOutdatedCompiledRuleSets(data.clashProviders);
+    final profiles = await database.profilesDao.query().get();
+    final selected = config == null
+        ? ref.read(currentProfileIdProvider)
+        : config.currentProfileId;
+    final selectedId = selected == null || profiles.getProfile(selected) != null
+        ? selected
+        : profiles.firstOrNull?.id;
     if (config == null) {
-      await _restoreMitmModules();
-      return;
-    }
-    // A desktop backup carries no package lists; the apps picked here stay.
-    final accessControlProps = config.vpnProps.accessControlProps.hasPackages
-        ? config.vpnProps.accessControlProps
-        : ref.read(vpnSettingProvider).accessControlProps;
-    writeConfig(
-      ref,
-      config.copyWith(
-        davProps: config.davProps ?? ref.read(davSettingProvider),
-        vpnProps: config.vpnProps.copyWith(
-          accessControlProps: accessControlProps,
+      ref.read(currentProfileIdProvider.notifier).value = selectedId;
+    } else {
+      // A desktop backup carries no package lists; the apps picked here stay.
+      final accessControlProps = config.vpnProps.accessControlProps.hasPackages
+          ? config.vpnProps.accessControlProps
+          : ref.read(vpnSettingProvider).accessControlProps;
+      writeConfig(
+        ref,
+        config.copyWith(
+          currentProfileId: selectedId,
+          davProps: config.davProps ?? ref.read(davSettingProvider),
+          vpnProps: config.vpnProps.copyWith(
+            accessControlProps: accessControlProps,
+          ),
         ),
-      ),
-    );
-    if (unusableMixedPort(configMap?['patchClashConfig']) case final value?) {
-      dialogs.showMixedPortReset(value, config.patchClashConfig.mixedPort);
+      );
+      if (unusableMixedPort(configMap?['patchClashConfig']) case final value?) {
+        dialogs.showMixedPortReset(value, config.patchClashConfig.mixedPort);
+      }
     }
-    await _restoreMitmModules();
+    final setup = ref.read(setupActionProvider.notifier);
+    if (profiles.isEmpty && setup.wantsRunning) {
+      await setup.setRunning(false);
+    }
+    // Keep the database listener active while restored rows reach setup.
+    final subscription = ref.container.listen(profilesProvider, (_, _) {});
+    try {
+      ref.invalidate(profilesStreamProvider);
+      await ref.read(profilesStreamProvider.future);
+      await _restoreMitmModules();
+      await setup.fullSetup();
+    } finally {
+      subscription.close();
+    }
   }
 
   Future<void> _restoreMitmModules() async {

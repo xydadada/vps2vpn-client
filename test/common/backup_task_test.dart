@@ -621,6 +621,7 @@ void main() {
 
       final data = await restore(archivePath);
 
+      expect(data.hasDatabaseSnapshot, isTrue);
       expect(data.profiles.single.label, 'Backed up');
       expect(data.scripts.single.label, 'Script');
       expect(data.rules.single.content, 'example.com');
@@ -824,6 +825,7 @@ void main() {
       final data = await restore(archivePath);
 
       expect(data.configMap?['version'], 1);
+      expect(data.hasDatabaseSnapshot, isFalse);
       expect(data.profiles, isEmpty);
       expect(data.scripts, isEmpty);
     });
