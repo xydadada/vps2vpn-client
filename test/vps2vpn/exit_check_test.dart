@@ -38,15 +38,17 @@ void main() {
       )?.countryCode,
       'JP',
     );
-    expect(
-      parseIpv6Answer(
-        const OutboundIpResult(
-          url: 'https://v6.ident.me/json',
-          body: '{"ip":"203.0.113.7","cc":"JP"}',
+    for (final ip in ['203.0.113.7', 'not:an:address']) {
+      expect(
+        parseIpv6Answer(
+          OutboundIpResult(
+            url: 'https://v6.ident.me/json',
+            body: '{"ip":"$ip","cc":"JP"}',
+          ),
         ),
-      ),
-      isNull,
-    );
+        isNull,
+      );
+    }
     expect(
       parseIpv6Answer(
         const OutboundIpResult(
