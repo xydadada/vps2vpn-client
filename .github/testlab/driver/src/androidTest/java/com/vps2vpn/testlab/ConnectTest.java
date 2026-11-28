@@ -70,7 +70,8 @@ public class ConnectTest {
         shell("appops set " + PKG + " ACTIVATE_VPN allow");
         shell("pm grant " + PKG + " android.permission.POST_NOTIFICATIONS");
         String directIp = fetch("https://api.ipify.org");
-        step("direct internet works: " + (directIp != null));
+        check(ExitAddressCheck.available(directIp), "no direct address baseline; the exit route cannot be verified");
+        step("the direct address baseline is available");
 
         Intent launch = context.getPackageManager().getLaunchIntentForPackage(PKG);
         assertNotNull("vps2vpn is not installed", launch);
@@ -116,9 +117,7 @@ public class ConnectTest {
         }
         String vpnIp = fetch("https://api.ipify.org");
         check(vpnIp != null, "no public address through the VPN");
-        if (directIp != null) {
-            check(!directIp.equals(vpnIp), "traffic did not leave through the line");
-        }
+        check(ExitAddressCheck.changed(directIp, vpnIp), "the exit address did not change or could not be verified");
         step("traffic leaves through the line (address changed)");
 
         if (!tap("(disconnect|断开|断开连接|stop|停止)", 5_000)) {
