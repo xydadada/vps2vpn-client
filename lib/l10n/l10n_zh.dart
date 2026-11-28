@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'l10n.dart';
 
 // ignore_for_file: type=lint
@@ -679,7 +680,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runTime => '运行时长';
 
   @override
-  String get stop => '暂停';
+  String get stop => '停止';
 
   @override
   String get key => '键';
@@ -1551,16 +1552,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connecting => '连接中…';
 
   @override
-  String get restartCoreTip => '您确定要重启核心吗？';
+  String get restartCoreTip => '您确定要重启内核吗？';
 
   @override
-  String get forceRestartCoreTip => '您确定要强制重启核心吗？';
+  String get forceRestartCoreTip => '您确定要强制重启内核吗？';
 
   @override
   String get dnsHijacking => 'DNS劫持';
 
   @override
-  String get coreStatus => '核心状态';
+  String get coreStatus => '内核状态';
 
   @override
   String get appendSystemDns => '追加系统DNS';
@@ -1614,7 +1615,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editGlobalRules => '编辑全局规则';
 
   @override
-  String get confirmForceCrashCore => '确定要强制崩溃核心？';
+  String get confirmForceCrashCore => '确定要强制崩溃内核？';
 
   @override
   String get confirmClearAllData => '确定要清除所有数据？';
@@ -3601,7 +3602,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stopUpdateDownloadTip => '要停止下载更新吗？';
 
   @override
-  String get forceRestartCoreAsk => '强制重启核心？';
+  String get forceRestartCoreAsk => '强制重启内核？';
 
   @override
   String get forceRestartCoreAskDesc => '进行中的连接会断开';
@@ -3666,14 +3667,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveStatus => '实时状态';
 
   @override
-  String get coreStopped => '核心已停止';
+  String get coreStopped => '内核已停止';
 
   @override
-  String get coreStoppedDesc => '应用与核心的连接已断开';
+  String get coreStoppedDesc => '应用与内核的连接已断开';
 
   @override
   String coreStoppedWithReason(Object reason) {
-    return '应用与核心的连接已断开：$reason';
+    return '应用与内核的连接已断开：$reason';
   }
 
   @override
@@ -3682,7 +3683,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get restartCore => '重启核心';
+  String get restartCore => '重启内核';
 
   @override
   String get installUpdate => '安装更新';
@@ -3693,16 +3694,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get coreStarting => '正在启动核心';
+  String get coreStarting => '正在启动内核';
 
   @override
-  String get coreStartingDesc => '正在连接核心';
+  String get coreStartingDesc => '正在连接内核';
 
   @override
-  String get coreRunning => '核心运行中';
+  String get coreRunning => '内核运行中';
 
   @override
-  String get coreRunningDesc => '应用已连接到核心';
+  String get coreRunningDesc => '应用已连接到内核';
 
   @override
   String get forceRestartCore => '强制重启';
