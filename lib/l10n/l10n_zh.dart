@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'l10n.dart';
 
 // ignore_for_file: type=lint
@@ -1827,7 +1828,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get coreBlockedBySmartAppControlTip =>
-      'Windows 智能应用控制拦截了未签名的 vps2vpnCore.exe。请打开 Windows 安全中心 → 应用和浏览器控制 → 智能应用控制设置，选择「关闭」后重新启动 vps2vpn。智能应用控制关闭后无法再开启，除非重装 Windows。';
+      'Windows 智能应用控制拦截了未签名的 vps2vpnCore.exe。可在 Windows 安全中心 → 应用和浏览器控制 → 智能应用控制设置中查看。关闭它会影响整台设备的保护；能否不重装 Windows 就重新开启，取决于 Windows 版本和系统设置。';
 
   @override
   String get hideFromList => '从列表中隐藏';

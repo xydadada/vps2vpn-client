@@ -3557,7 +3557,7 @@ abstract class AppLocalizations {
   /// No description provided for @coreBlockedBySmartAppControlTip.
   ///
   /// In en, this message translates to:
-  /// **'Windows Smart App Control blocked vps2vpnCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start vps2vpn again. Smart App Control cannot be turned back on without reinstalling Windows.'**
+  /// **'Windows Smart App Control blocked the unsigned vps2vpnCore.exe. You can review its settings in Windows Security → App & browser control → Smart App Control settings. Turning it off affects protection for the whole device; whether it can be turned back on without reinstalling Windows depends on your Windows version and settings.'**
   String get coreBlockedBySmartAppControlTip;
 
   /// No description provided for @hideFromList.
