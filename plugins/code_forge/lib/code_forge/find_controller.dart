@@ -375,6 +375,7 @@ class FindController extends ChangeNotifier {
 
   /// Replaces the currently selected match with the text in [replaceInputController].
   void replace() {
+    if (_codeController.readOnly) return;
     _codeController.commitComposition();
     if (_currentMatchIndex < 0 || _currentMatchIndex >= matchCount) return;
 
@@ -393,6 +394,7 @@ class FindController extends ChangeNotifier {
   /// text is rewritten off the UI isolate, and left alone if it changes
   /// meanwhile.
   Future<void> replaceAll() async {
+    if (_codeController.readOnly) return;
     _codeController.commitComposition();
     if (_matches.isEmpty) return;
     final pattern = _pattern(_lastQuery);
@@ -416,7 +418,9 @@ class FindController extends ChangeNotifier {
       replacement,
     );
     final document = await CodeForgeDocument.fromUtf8(replaced);
-    if (!_disposed && version == _codeController.contentVersion) {
+    if (!_disposed &&
+        !_codeController.readOnly &&
+        version == _codeController.contentVersion) {
       _codeController.replaceDocument(document);
       _reperformSearch();
     }

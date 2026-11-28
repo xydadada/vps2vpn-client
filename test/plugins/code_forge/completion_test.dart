@@ -94,6 +94,26 @@ void main() {
     expect(find.textContaining('suggest '), findsNothing);
   });
 
+  testWidgets('a pending suggestion cannot edit a read-only controller', (
+    tester,
+  ) async {
+    final (controller, popups) = await pumpWords(tester);
+    await typeText(tester, controller, 'al');
+    await settle(tester, 8);
+    final details = popups.last;
+    final index = details.suggestions.indexWhere((s) => s.label == 'alpha');
+    expect(index, isNonNegative);
+
+    controller.readOnly = true;
+    details.onAccept(index);
+    expect(controller.text, '${_document}al');
+
+    controller.readOnly = false;
+    details.onAccept(index);
+    expect(controller.text, '${_document}alpha');
+    await settle(tester, 4);
+  });
+
   testWidgets('a newline from the IME accepts the highlighted suggestion', (
     tester,
   ) async {
