@@ -1709,6 +1709,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupFromNewerVersion => '该备份来自更高版本的应用，请先更新应用再恢复';
 
   @override
+  String get backupTooLarge => '备份超过 2,000 个文件或解压后总大小超过 256 MiB，请减少备份内容后重试';
+
+  @override
   String get networkTimeoutError => '请求超时，请检查网络或代理后重试';
 
   @override

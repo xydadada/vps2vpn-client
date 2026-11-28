@@ -11,10 +11,15 @@ class BackupAction extends _$BackupAction {
   @override
   void build() {}
 
-  Future<bool> backup(BackupDelivery deliver) {
-    return _withWorkDir((workDir) async {
-      return deliver(await _createArchive(workDir));
-    });
+  Future<bool> backup(BackupDelivery deliver) async {
+    try {
+      return await _withWorkDir((workDir) async {
+        return deliver(await _createArchive(workDir));
+      });
+    } on BackupException catch (error) {
+      if (error.failure != BackupFailure.tooLarge) rethrow;
+      throw MessageException(currentAppLocalizations.backupTooLarge);
+    }
   }
 
   Future<bool> restore(RestoreOption option, BackupFetch fetch) {
@@ -35,6 +40,7 @@ class BackupAction extends _$BackupAction {
           BackupFailure.invalid => currentAppLocalizations.invalidBackupFile,
           BackupFailure.newerVersion =>
             currentAppLocalizations.backupFromNewerVersion,
+          BackupFailure.tooLarge => currentAppLocalizations.backupTooLarge,
         });
       }
       await applyRestore(data, option, stagingDirPath: stagingDirPath);

@@ -140,6 +140,39 @@ void main() {
       expect(stale.existsSync(), isFalse);
     });
 
+    test(
+      'an oversized backup is reported before delivery and cleaned up',
+      () async {
+        await testDatabase.profilesDao.putAll([
+          _profile(91, 'Large').toCompanion(),
+        ]);
+        final file = File(await appPath.getProfilePath('91'))
+          ..createSync(recursive: true);
+        addTearDown(file.delete);
+        final handle = await file.open(mode: FileMode.write);
+        await handle.truncate(256 * 1024 * 1024);
+        await handle.close();
+        var delivered = false;
+
+        await expectLater(
+          actionOf(buildContainer()).backup((_) async {
+            delivered = true;
+            return true;
+          }),
+          throwsA(
+            isA<MessageException>().having(
+              (error) => error.message,
+              'message',
+              currentAppLocalizations.backupTooLarge,
+            ),
+          ),
+        );
+
+        expect(delivered, isFalse);
+        expect(workDirs(), isEmpty);
+      },
+    );
+
     test('removes the work directory when delivery fails', () async {
       final container = buildContainer();
 
