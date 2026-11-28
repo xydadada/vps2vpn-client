@@ -492,6 +492,10 @@ Future<void> Function(String) vpsRemovedSave = (value) =>
 
 /// Subscriptions (by profile id) whose owner removed this device.
 class VpsRemoved extends Notifier<Set<int>> {
+  var _loaded = false;
+  final _changes = <int, bool>{};
+  var _writing = Future<void>.value();
+
   @override
   Set<int> build() {
     unawaited(_load());
@@ -503,14 +507,33 @@ class VpsRemoved extends Notifier<Set<int>> {
       final raw = await vpsRemovedLoad();
       if (raw == null || !ref.mounted) return;
       final list = jsonDecode(raw);
-      if (list is List) state = {...state, ...list.whereType<int>()};
-    } catch (_) {}
+      if (list is List) {
+        final restored = list.whereType<int>().toSet();
+        for (final entry in _changes.entries) {
+          entry.value ? restored.add(entry.key) : restored.remove(entry.key);
+        }
+        state = restored;
+      }
+    } catch (_) {
+    } finally {
+      if (ref.mounted) {
+        _loaded = true;
+        if (_changes.isNotEmpty) _save();
+        _changes.clear();
+      }
+    }
   }
 
   void mark(int profileId, bool removed) {
+    if (!_loaded) _changes[profileId] = removed;
     if (state.contains(profileId) == removed) return;
     state = removed ? {...state, profileId} : ({...state}..remove(profileId));
-    unawaited(vpsRemovedSave(jsonEncode(state.toList())).catchError((_) {}));
+    if (_loaded) _save();
+  }
+
+  void _save() {
+    final value = jsonEncode(state.toList());
+    _writing = _writing.then((_) => vpsRemovedSave(value)).catchError((_) {});
   }
 }
 
