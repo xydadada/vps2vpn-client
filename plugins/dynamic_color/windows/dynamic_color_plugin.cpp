@@ -3,7 +3,6 @@
 // This must be included before many other Windows headers.
 #include <windows.h>
 #include <dwmapi.h>
-#include "dwm.c"
 
 // For getPlatformVersion; remove unless needed for your plugin implementation.
 #include <VersionHelpers.h>
@@ -52,7 +51,7 @@ static BOOL GetAccentColorViaRegistry(int64_t& argbColor) {
       nullptr,
       &abgr,
       &resultSize
-    ) == S_OK
+    ) == ERROR_SUCCESS
   ) {
     argbColor = (abgr & 0xFF00FF00) + ((abgr & 0xFF) << 16) + ((abgr & 0xFF0000) >> 16);
     return TRUE;
@@ -61,30 +60,22 @@ static BOOL GetAccentColorViaRegistry(int64_t& argbColor) {
   return FALSE;
 }
 
-static BOOL GetWindowColorViaDwmUndocd(int64_t& argbColor) {
-  HMODULE hDwmDll = LoadLibrary(L"dwmapi.dll");
-  if (!hDwmDll) {
+// Use the documented API: ordinal 127 has no stable signature or availability.
+static BOOL GetWindowColorViaDwm(int64_t& argbColor) {
+  DWORD argb = 0;
+  BOOL opaque = FALSE;
+  if (FAILED(DwmGetColorizationColor(&argb, &opaque))) {
     return FALSE;
   }
-
-  *(FARPROC *)&DwmGetColorizationParameters = GetProcAddress(hDwmDll,(LPCSTR)127);
-
-  COLORIZATIONPARAMS colorParams;
-  if (SUCCEEDED(DwmGetColorizationParameters(&colorParams))) {
-    argbColor = colorParams.clrColor;
-    FreeLibrary(hDwmDll);
-    return TRUE;
-  }
-
-  FreeLibrary(hDwmDll);
-  return FALSE;
+  argbColor = argb;
+  return TRUE;
 }
 
 static BOOL GetWindowColorViaDwmRegistry(int64_t& argbColor) {
   DWORD argb = 0;
   DWORD resultSize = sizeof(argb);
 
-  if (SUCCEEDED(
+  if (
     RegGetValue(
       HKEY_CURRENT_USER,
       L"Software\\Microsoft\\Windows\\DWM",
@@ -93,8 +84,8 @@ static BOOL GetWindowColorViaDwmRegistry(int64_t& argbColor) {
       nullptr,
       &argb,
       &resultSize
-    )
-  )) {
+    ) == ERROR_SUCCESS
+  ) {
     argbColor = argb;
     return TRUE;
   }
@@ -116,10 +107,9 @@ void DynamicColorPlugin::HandleMethodCall(
     if (!successful && IsWindowsVistaOrGreater()) {
       BOOL dwmEnabled = FALSE;
       if (SUCCEEDED(DwmIsCompositionEnabled(&dwmEnabled)) && dwmEnabled == TRUE) {
-        successful = GetWindowColorViaDwmUndocd(argb);
+        successful = GetWindowColorViaDwm(argb);
 
-        // Our attempt at using the undocumented DWM
-        // function failed, let's retry using the registry.
+        // If the DWM API cannot provide a color, try its registry value.
         if (!successful) {
           successful = GetWindowColorViaDwmRegistry(argb);
         }
