@@ -1,51 +1,58 @@
 # vps2vpn 客户端交接文档
 
-更新时间：2026-11-27。仓库：`xydadada/vps2vpn-client`，主分支 `vps2vpn`（上游 FlClash 的 `main` 不用来发布）。
+更新时间：2026-11-28。仓库：`xydadada/vps2vpn-client`，主分支 `vps2vpn`（上游 FlClash 的 `main` 不用来发布）。
 
 到 2026-11-27 为止，有三个 Agent 分工：客户端会话维护本仓库，服务端会话维护 `xydadada/vps2vpn`，主会话负责协调。主会话的工作是审截图、核对发布后的 `.sig`、同步测试服务器。文中的「主会话」「管理员会话」都指它。换成一个 Agent 接手以后，这些事都由它自己做：审图标准见 `.agents/vps2vpn.md`，`.sig` 的核对方法见第 2 节第 4 步，测试服务器的同步见服务端仓库 HANDOFF 里的 clientsync。远端在本机的 checkout 里叫 `private`，新克隆的仓库里叫 `origin`。本机的会话笔记外部 Agent 看不到，只供参考；有用的结论都已写进本文件。
 
-## 0. 当前进度（2026-11-27，换人接手时的准确状态）
+## 0. 当前进度（2026-11-28，换人接手时的准确状态）
 
-只读这一节就能接着做。正在发 **1.0.34**，还没合任何页面分支，也没改版本号。当前 Latest 仍是 v1.0.33。
+只读这一节就能接着做。
 
-### 分支（全在 `private` 远端，即 `xydadada/vps2vpn-client`）
+### 现在的状态
 
-`vps2vpn` 头是本节所在的文档提交，前一个是 `a42ca221`（删除上游没用的文件）。`a42ca221` 之后还没有一次跑完的 `verify.yaml`，所以先确认 `vps2vpn` 头上的 verify 是绿的。如果它挂了，多半是有测试引用了被删的文件，先修这个。
+- **Latest 是 v1.0.34**：tag 指向 `33f3dfbd84d3a0d8c7ceb43d64016fb3f56ac122`（2026-11-28 转正）。构建 45991088384，verify 45990858662，e2e gate 45993180507（install、legend 从真实 v1.0.27、upgrade 从 v1.0.33 全绿），coexist 45993187304，harsh 45993194233。SHA256SUMS 对，exe 和 zip 的 `.sig` 用服务端 `clientsync.signature_ok` 验过，加载标志 19 个文件 0 问题。
+- **测试服务器**：2026-11-28 先 `sudo vps2vpn backup`（`backups/vps2vpn-20261128.json`），再跑 `clientsync.sync`，客户端文件夹现在是 1.0.34，`setup.exe` 的 sha256 和发布一致（`74e50273…be6f`）。
+- `vps2vpn` 头上 `aa4763cf` 把 `e2e.yaml`、`coexist.yaml`、`harsh.yaml` 的默认 `tag` 改成了 v1.0.34。
+- 用户叫停时 1.0.35 **没有发**，版本号也没改。
 
-| 顺序 | 分支 | 头 | 审图 | 还差什么 |
-|---|---|---|---|---|
-| 1 | `ui-dialogs` | `d02d5259` | 审过（截图 run 45971348592） | 已 rebase 到 `a42ca221`。等 verify run 45973612502 变绿后，快进合并 |
-| 2 | `ui-nodes` | `d243e3ad` | 审过 c37cbaf5 的截图（run 45921449592）；之后修了 lint 和英文组名 | 重拍 run 45971865715 交接时还在跑，看一眼 `connected-nodes-*-en` 和 `legend-nodes-*-en`：「自动选择」卡片应显示 Auto，「🚀 节点选择」应显示「🚀 Proxy」。verify 已绿。合并前 rebase 到当时的 `vps2vpn` |
-| 3 | `ui-check` | `3a8a3f3c` | 审过（run 45965894596） | rebase 后合并 |
-| 4 | `ui-settings` | `92c558d3` | 审过（run 45920608086） | 已经叠在 ui-check 上，verify 已绿。ui-check 合完后 rebase 再合 |
-| 5 | `copy-fixes` | `2cfc6f12` | 文案已审 | 落后 18 个提交。rebase 时 `servers.dart`、`home.dart` 会和 ui-nodes 冲突，`devices.dart`、`takeover_notice.dart` 可能和 ui-dialogs 冲突，两边的改动都保留。按 `.agents/wording.md` 再查一遍，例如 `devices.dart` 里内联的 `Platform.isAndroid ? 'tap' : 'click'` 换成 `vpsClick()`。冲突解决后重拍截图，审过再合 |
-| 6 | `upgrade-legend` | `91c462d0` | 不涉及界面（e2e gate 和测试用的覆盖源） | rebase 后合并。发 1.0.34 必须有它 |
+### 1.0.35 已写好、还没合的分支
+
+`p1-1035`（基于 `aa4763cf`，已推到 `private`）。每个提交都带测试，本地 `flutter analyze` 干净，`flutter test` 只在 CI 跑，**这个分支的 verify 还没跑完过**（run 46145663556 停在 `816dd9a7`，之后又推了两个提交）。接手后先看最新一次 verify：
+
+| 提交 | 内容 | 对应 |
+|---|---|---|
+| `12de9cb6` | 安全模式构建跳过 runner 启动时清理残留代理（CMake 从 `DART_DEFINES` 读 `SAFE_MODE=true`） | #101，替代 #172 |
+| `75b99893` | Test Lab 摘要和截屏标签里，XML 转义过的订阅链接也遮住；verify 的 dart job 跑 `.github/testlab/summary_test.py` | 替代 #157 |
+| `11bdc9a3` | 反馈里遮住带引号的密码、链接里的账号密码、Authorization 头 | 替代 #105 |
+| `c05d39aa` | 坏掉的偏好设置只记 `FormatException(原因)`，不记内容 | 替代 #108 |
+| `5a06f3c0` | MITM 资源下载失败的日志不写链接 | 替代 #135 |
+| `1bb6c9eb` | 出口 IP 探测拒绝更多保留 IPv6 段（3fff::/20、100::/64、100:0:0:1::/64、5f00::/16） | 替代 #90 |
+| `a733b9a5` | Protobuf 长度接近 2^63 时当成二进制，不再崩 | 替代 #133 |
+| `816dd9a7` | 所有 YAML 读取共用一个转换，超过 100 万个值或 256 层就拒绝（别名炸弹） | #137 |
+| `cc249bf5` | 备份超过恢复上限（2000 个文件或 256 MB）时不写，提示原因；新增文案 `backupTooLarge` | 替代 #109 |
+| `2dcd54bd` | **P0**：点「安装」时在 isolate 里重读安装包和 `.sig`，对同一份字节算 SHA256 和大小再验 Ed25519；链接、文件夹、改过的文件都拒绝并删掉；`.sig` 先写 `.sig.part` 再改名 | 替代 #167；#168 的原生交接部分没做 |
+
+另有 `wip-110-text-cap`（一个提交）：脚本、图标集、模块的文本下载限 32 MiB，超限报 `DownloadTooLargeException`。**没进 CI**，对应 #110。
+
+### 接下来（按顺序）
+
+1. 等 `p1-1035` 的 verify 变绿（挂了先修）。`2dcd54bd` 只在失败时弹一个对话框，不改界面，不用截图。
+2. 合进 `vps2vpn`（快进），等 verify 绿；单独提交 `chore: version 1.0.35`；按第 2 节发：`vps2vpn.yaml` → `e2e.yaml`（gate 含 legend）→ `coexist.yaml` → `harsh.yaml` → 自己验 SHA256、`.sig`、加载标志 → 转 Latest → 改工作流默认 tag → 测试服务器先 backup 再 `clientsync.sync`（命令：`sudo PYTHONPATH=/usr/local/lib/vps2vpn/app /usr/bin/python3 -c "from vps2vpn import clientsync, db; print(clientsync.sync(db.settings()))"`）。
+3. 关 PR 和 issue：#172 #157 #105 #108 #135 #90 #133 #109 #167 写明替代它的提交后关闭；#101 #137 修好后关；#168 留着（原生交接边界）。没处理的不要关。
+4. 剩下的待办按优先级见 [.agents/triage-1.0.35.md](.agents/triage-1.0.35.md)（P1 → P2 → P3）。P1 里还没做的：#92 + C10-01（崩溃后恢复系统代理快照，同时仍清掉指向本机死端口的残留代理）；B/C 包的心跳 `ok:true`、导入出错释放忙碌状态；#159 发布前源码校验和 `--enforce-lockfile`；#110（见上面的 wip 分支）；#158 分享链接；#91 #164/#174（安卓签名指纹）。2026-11-28 之后新增的 #173（只做调研）和 #175（failover 旧动作）还没看。
+5. 服务端审计带来的两项客户端工作，**等服务端那边做完再做**：R-13 的客户端部分（防抖、延迟切回、换服务器时提示），以及「显示的延迟不是 ping」的文案。
+6. #150（私下报告漏洞）是仓库设置，由用户决定。#74、#75 来自外部贡献者，先核实再回复。
 
 ### 合并的规矩
 
-- 一次合一个。合的方式：在分支上 `git fetch private && git rebase private/vps2vpn`，推分支（`--force-with-lease`），等这个分支的 verify 变绿，然后 `git push private <分支>:vps2vpn`（快进）。
-- 等 `vps2vpn` 上的 verify 变绿，再合下一个。
-- rebase 时如果解了冲突，或者改动碰到界面，就重拍截图。`screenshots.yaml` 的输入是 `after=<分支的 vps2vpn.yaml 构建 run>`、`before=<对照构建 run>`。中英、深浅、宽、默认、最窄、legend 形状都要看，外观以 1.0.27 为准（`.agents/vps2vpn.md`）。
-- 审图：逐张看改前和改后，确认布局没变，只是细节更好。有一处不对就先修，修完重拍，再合并。
-
-### 1.0.34 发布步骤（全部合完以后）
-
-1. 单独一个提交改 `pubspec.yaml`：`version: 1.0.34+<YYYYMMDDNN>`，提交信息 `chore: version 1.0.34`。fetch 后推送，等 verify 变绿。这次 verify 没跑完之前，不要再往 `vps2vpn` 推任何东西。
-2. 运行 `gh workflow run vps2vpn.yaml -R xydadada/vps2vpn-client --ref vps2vpn -f publish=true`，生成预发布 `test-1.0.34`，带安装包、zip、`.sig` 和 `SHA256SUMS.txt`。
-3. 运行 `gh workflow run e2e.yaml -R xydadada/vps2vpn-client --ref vps2vpn -f tag=test-1.0.34`：`from` 默认是 latest，`legend` 默认是 v1.0.27。`gate` 必须全绿，也就是 install、legend（从真实的 v1.0.27 升级）、upgrade 都跑过并且成功。再跑 `coexist.yaml` 和 `harsh.yaml`（第 2 节）。
-4. 按第 2 节第 4 步自己验 SHA256 和 `.sig`。
-5. 转为 Latest：`gh release edit test-1.0.34 --tag v1.0.34 --target <commit> --title v1.0.34 --prerelease=false --latest --notes-file <说明>`。说明写中英两段，面向用户。之后把 `e2e.yaml`、`coexist.yaml` 里 `tag` 的默认值改成 v1.0.34。
-6. 在服务端仓库的 HANDOFF 里记下 tag、commit 和各次 run id。先 `sudo vps2vpn backup`，再在测试服务器上同步客户端（clientsync）。然后告诉用户 1.0.34 的安装包链接：用户还在用 1.0.27，要自己手动安装。
-
-### 之后
-
-1.0.35：外部审查的修复，分拣结论和优先级见第 7 节第 2 条。目前还没改代码。
+- 一次合一个：分支上 `git fetch private && git rebase private/vps2vpn`，推分支（`--force-with-lease`），等分支 verify 绿，`git push private <分支>:vps2vpn` 快进，等 `vps2vpn` verify 绿再合下一个。
+- 动到界面的改动要用 `screenshots.yaml` 拍改前改后（中英、深浅、宽、默认、最窄、legend 形状），外观以 1.0.27 为准（`.agents/vps2vpn.md`）。
 
 ## 1. 当前版本
 
 | 项目 | 值 |
 |---|---|
-| 最新正式版（Latest） | **v1.0.33**，commit `9b2456ca0454990e4ee63fb6ca3a87d66f92caf1`（2026-11-25 发布；首页标题在智能线路切换时不再来回跳，窄窗口页面底部不再被底部导航栏挡住，标题栏和宽窗口侧边栏顶边与背景连成一片；升级测试 66、共存测试 94、harsh 309 全部通过，背景粗糙度 2.8；等服务端核对 SHA256 和 `.sig` 并同步 clientsync） |
+| 最新正式版（Latest） | **v1.0.34**，commit `33f3dfbd84d3a0d8c7ceb43d64016fb3f56ac122`（2026-11-28 转正；节点页、对话框、检测页、设置页的细节和文案统一；gate、coexist、harsh 全绿，测试服务器已同步，见第 0 节） |
 | 上一版 | v1.0.32，commit `3439ae243eb79de536a9bacabc6f9ca29bc8d083`（修 1.0.31 背景雪花噪点）。v1.0.31 因背景雪花已撤回为预发布 |
 | `vps2vpn` 分支头 | 不在这里记，以 `git log private/vps2vpn` 为准。下一版 1.0.34 正在合分支（第 0 节） |
 | 安卓 | 还没有正式 APK，服务端 `files.android` 仍未配置。模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试结果见第 5 节"Firebase Test Lab"。预发布 `test-android-1.0.26` 只当预发布，不转正 |
