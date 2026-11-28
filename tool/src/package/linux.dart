@@ -397,7 +397,6 @@ TargetPlan planAppImage(PackageContext context) {
     steps: [
       Task('recreate $stage', () => recreateDirectory(stage)),
       Command('cp', ['-r', linuxBundlePath(context), appDir]),
-      normalizePermissions(appDir),
       Task('write the desktop entry, AppRun and icons into $appDir', () async {
         File(
           p.join(appDir, '$binary.desktop'),
@@ -437,6 +436,7 @@ TargetPlan planAppImage(PackageContext context) {
           }
         }
       }),
+      normalizePermissions(appDir),
       Command(
         'appimagetool',
         ['--no-appstream', appDir, context.outputPath(name)],
