@@ -143,17 +143,16 @@ class Bootstrap {
     return container;
   }
 
-  Future<void> attach() async {
-    if (globalState.isAttach == true) {
-      return;
+  Future<bool> attach() async {
+    if (globalState.isAttach) {
+      return true;
     }
-    await _initApp();
-    globalState.isAttach = true;
+    return globalState.isAttach = await _initApp();
   }
 
   ProviderContainer get _container => globalState.container;
 
-  Future<void> _initApp() async {
+  Future<bool> _initApp() async {
     unawaited(_container.read(systemActionProvider.notifier).updateTray());
     unawaited(vpsRestoreUpdate(_container));
     unawaited(_container.read(commonActionProvider.notifier).autoCheckUpdate());
@@ -165,9 +164,8 @@ class Bootstrap {
     } else {
       unawaited(window?.hide());
     }
-    await _handleFailedPreference();
-    if (!await _handlerDisclaimer()) {
-      return;
+    if (!await _handleFailedPreference() || !await _handlerDisclaimer()) {
+      return false;
     }
     await _showCrashRecoveryTip();
     if (_resetMixedPort case final value?) {
@@ -188,6 +186,7 @@ class Bootstrap {
     unawaited(_container.read(mitmModulesActionProvider.notifier).autoUpdate());
     await bootGuard.markRunning();
     unawaited(_container.read(locationPermissionsProvider.notifier).refresh());
+    return true;
   }
 
   Future<void> _showCrashRecoveryTip() async {
@@ -220,8 +219,8 @@ class Bootstrap {
     return profile?.label.takeFirstValid(['$profileId']) ?? '$profileId';
   }
 
-  Future<void> _handleFailedPreference() async {
-    if (await preferences.isInit) return;
+  Future<bool> _handleFailedPreference() async {
+    if (await preferences.isInit) return true;
     final res = await dialogs.showMessage(
       title: currentAppLocalizations.tip,
       message: TextSpan(text: currentAppLocalizations.cacheCorrupt),
@@ -232,6 +231,7 @@ class Bootstrap {
     }
     // Saving here would rewrite the preferences file the user just chose to delete.
     await _container.read(systemActionProvider.notifier).handleExit(false);
+    return false;
   }
 
   /// Unattended desktop installs, such as a container nobody watches, accept
