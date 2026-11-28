@@ -335,7 +335,7 @@ class MitmModulesAction extends _$MitmModulesAction {
             return name;
           } catch (e) {
             commonPrint.log(
-              'MITM resource $url: ${compactError(e)}',
+              'MITM resource download failed: ${compactError(e)}',
               logLevel: LogLevel.warning,
             );
             final name = previous[url];
