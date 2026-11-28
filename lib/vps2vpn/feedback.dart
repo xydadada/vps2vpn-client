@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/models/models.dart' show Profile;
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/diagnose.dart';
@@ -405,12 +406,24 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
   var _off = false;
   String? _error;
   Future<List<VpsFeedbackItem>?>? _replies;
+  late final Profile? _profile;
+  late final List<VpsFeedbackStep> _steps;
+  late final String _log;
 
-  Uri? get _base => vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
+  Uri? get _base => vpsApiBase(_profile?.url ?? '');
+
+  bool get _isCurrent {
+    if (!mounted) return false;
+    final current = ref.read(currentProfileProvider);
+    return current?.id == _profile?.id && current?.url == _profile?.url;
+  }
 
   @override
   void initState() {
     super.initState();
+    _profile = ref.read(currentProfileProvider);
+    _steps = vpsFeedbackSteps(ref);
+    _log = vpsFeedbackLog(ref);
     _off = !vpsFeedbackOpen(ref);
     final base = _base;
     if (!_off && base != null) {
@@ -418,7 +431,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
         final items = await ref
             .read(vpsFeedbackOutboxProvider.notifier)
             .replies(base);
-        if (mounted && items != null) ref.invalidate(vpsMemberProvider);
+        if (_isCurrent && items != null) ref.invalidate(vpsMemberProvider);
         return items;
       }();
     }
@@ -433,18 +446,16 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
   Map<String, Object?> _body() => vpsFeedbackBody(
     text: _text.text,
     client: vpsFeedbackClient(),
-    steps: _withSteps ? vpsFeedbackSteps(ref) : const [],
-    log: _withLog ? vpsFeedbackLog(ref) : '',
+    steps: _withSteps ? _steps : const [],
+    log: _withLog ? _log : '',
   );
 
   bool get _empty =>
-      _text.text.trim().isEmpty &&
-      !_withSteps &&
-      (!_withLog || ref.read(logsProvider).list.isEmpty);
+      _text.text.trim().isEmpty && !_withSteps && (!_withLog || _log.isEmpty);
 
   Future<void> _send() async {
     final base = _base;
-    if (base == null || _sending) return;
+    if (base == null || _sending || !_isCurrent || _off) return;
     setState(() {
       _sending = true;
       _error = null;
@@ -454,6 +465,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
         .send(base, _body());
     if (!mounted) return;
     setState(() => _sending = false);
+    if (!_isCurrent) return;
     switch (answer.outcome) {
       case VpsFeedbackOutcome.sent:
         Navigator.of(context).pop();
@@ -550,6 +562,8 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currentProfileProvider.select((p) => (p?.id, p?.url)));
+    final current = _isCurrent;
     final p = VpsPalette.of(context);
     return AlertDialog(
       title: tr(context, '反馈问题', 'Feedback'),
@@ -558,7 +572,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(tr(context, '关闭', 'Close')),
         ),
-        if (_off) ...[
+        if (_off || !current) ...[
           TextButton(
             onPressed: () => unawaited(
               launchUrl(vpsIssuesPage, mode: LaunchMode.externalApplication),
@@ -587,7 +601,15 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                _off
+                !current
+                    ? tr(
+                        context,
+                        '订阅已变更，发送已暂停。文字和打开时的诊断信息仍保留，可复制后关闭。',
+                        'The subscription changed; sending is paused. Your '
+                            'note and the details captured when this dialog '
+                            'opened are kept. Copy them before closing.',
+                      )
+                    : _off
                     ? tr(
                         context,
                         '这个订阅的服务器不收反馈。复制诊断信息（已打码）发给你的服务提供者；只有客户端本身的 bug 才到 GitHub 提。',
@@ -660,7 +682,7 @@ class _FeedbackDialogState extends ConsumerState<_FeedbackDialog> {
                     ),
                   ),
                 ),
-              if (_replies != null)
+              if (current && _replies != null)
                 FutureBuilder<List<VpsFeedbackItem>?>(
                   future: _replies,
                   builder: (context, snap) {

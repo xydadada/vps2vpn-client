@@ -800,19 +800,32 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   late var _confirming = widget.confirmKick;
   String? _error;
   VpsKickResult? _kicked;
+  late final Profile? _profile;
+
+  bool get _isCurrent {
+    if (!mounted) return false;
+    if (widget.sample != null) return true;
+    final current = ref.read(currentProfileProvider);
+    return _profile != null &&
+        current?.id == _profile.id &&
+        current?.url == (_kicked?.link ?? _profile.url);
+  }
 
   VpsDeviceCall? _call() {
-    final base = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
+    if (!_isCurrent) return null;
+    final base = vpsApiBase(_kicked?.link ?? _profile?.url ?? '');
     return base == null ? null : ref.read(vpsDeviceCallsProvider)(base);
   }
 
   @override
   void initState() {
     super.initState();
+    _profile = ref.read(currentProfileProvider);
     _reload();
   }
 
   void _reload() {
+    if (!_isCurrent) return;
     if (widget.sample case final sample?) {
       _list = Future.value(sample);
       _listed = true;
@@ -832,18 +845,21 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   }
 
   Future<void> _run(Future<String?> Function() action) async {
-    if (_busy) return;
+    if (_busy || !_isCurrent) return;
     setState(() {
       _busy = true;
       _error = null;
     });
-    final error = await action();
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _error = error;
-      _reload();
-    });
+    try {
+      final error = await action();
+      if (!_isCurrent) return;
+      setState(() {
+        _error = error;
+        _reload();
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _setRemoved(VpsDevice device, bool removed) => _run(() async {
@@ -861,7 +877,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
   Future<void> _kick() async {
     setState(() => _confirming = false);
     await _run(() async {
-      final profile = ref.read(currentProfileProvider);
+      final profile = _profile;
       final base = vpsApiBase(profile?.url ?? '');
       if (profile == null || base == null) return null;
       final result = await vpsRunKick(
@@ -871,6 +887,11 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
         update: ref.read(profilesActionProvider.notifier).updateProfile,
       );
       if (!mounted || result == null) return null;
+      final current = ref.read(currentProfileProvider);
+      if (current?.id != profile.id ||
+          (current?.url != profile.url && current?.url != result.link)) {
+        return null;
+      }
       if (result.link != null) {
         setState(() => _kicked = result);
         return null;
@@ -1067,9 +1088,11 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currentProfileProvider.select((p) => (p?.id, p?.url)));
     final p = VpsPalette.of(context);
+    final current = _isCurrent;
     final kicked = _kicked;
-    if (_confirming && kicked == null) {
+    if (_confirming && kicked == null && current) {
       return AlertDialog(
         title: tr(context, '让其他设备下线？', 'Sign out other devices?'),
         destructive: true,
@@ -1101,7 +1124,7 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(tr(context, '关闭', 'Close')),
         ),
-        if (kicked == null)
+        if (kicked == null && current)
           TextButton(
             onPressed: _busy || !_listed
                 ? null
@@ -1120,7 +1143,16 @@ class _DevicesDialogState extends ConsumerState<_DevicesDialog> {
                 Text(_error!, style: vpsText(p, size: 13, color: p.bad)),
                 const SizedBox(height: 8),
               ],
-              if (kicked != null)
+              if (!current)
+                Text(
+                  tr(
+                    context,
+                    '订阅已变更，请关闭后重新打开设备管理。',
+                    'The subscription changed. Close and reopen Devices.',
+                  ),
+                  style: vpsText(p, size: 13, color: p.soft),
+                )
+              else if (kicked != null)
                 _kickedView(p, kicked)
               else
                 FutureBuilder<VpsDeviceList>(
