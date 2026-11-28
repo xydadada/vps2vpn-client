@@ -59,6 +59,8 @@ public class ConnectTest {
         secrets.add(hex);
         secrets.add(sub);
         secrets.add(Uri.encode(sub));
+        // The window dump is XML, so the link's & shows there as &amp;.
+        secrets.add(sub.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;"));
         String host = Uri.parse(sub).getHost();
         if (host != null && !host.isEmpty()) {
             secrets.add(host);

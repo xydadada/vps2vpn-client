@@ -2,6 +2,7 @@
 every address blanked. Usage: summary.py <device results dir>; the link comes
 from the SUB environment variable."""
 
+import html
 import os
 import pathlib
 import re
@@ -15,8 +16,10 @@ secrets = [s for s in (sub, sub.encode().hex(), urllib.parse.quote(sub, safe='')
 
 
 def scrub(text):
+    # Test reports are XML, so the link may arrive as &amp; or &#38;.
+    text = html.unescape(text)
     for secret in secrets:
-        text = text.replace(secret, '<hidden>')
+        text = text.replace(secret, '<hidden>').replace(html.unescape(secret), '<hidden>')
     text = re.sub(r'\b\d{1,3}(\.\d{1,3}){3}\b', 'x.x.x.x', text)
     return re.sub(r'(?i)\b[0-9a-f]{1,4}(:[0-9a-f]{0,4}){3,7}\b', 'x:x::x', text)
 

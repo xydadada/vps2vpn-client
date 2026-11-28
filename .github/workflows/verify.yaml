@@ -77,6 +77,8 @@ jobs:
           flutter analyze --no-fatal-infos
       - name: Root tests and coverage
         run: dart run tool/test.dart -- --reporter expanded --coverage
+      - name: Test Lab summaries hide the subscription
+        run: python3 -m unittest discover -s .github/testlab -p '*_test.py' -v
       - name: Bundled plugin checks
         run: bash tool/check_plugins.sh
       - name: Pure Dart build hook tests
