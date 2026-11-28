@@ -6,6 +6,11 @@ import 'package:fl_clash/state.dart';
 import 'package:flutter/widgets.dart';
 
 String compactError(Object error) {
+  // Its toString quotes the text that failed to parse, which may hold a
+  // password or a subscription link.
+  if (error is FormatException) {
+    return 'FormatException(${error.message})';
+  }
   if (error is DioException) {
     final statusCode = error.response?.statusCode;
     return statusCode != null

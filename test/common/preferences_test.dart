@@ -4,6 +4,7 @@ import 'package:fl_clash/common/boot_record.dart';
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/preferences.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,6 +27,27 @@ void main() {
   setUp(() async {
     await mockPreferences();
     store = await SharedPreferences.getInstance();
+  });
+
+  test('a damaged preference is logged without its contents', () async {
+    final logs = <String>[];
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+    addTearDown(() => debugPrint = original);
+    const damaged = '{"password":"test-secret" trailing}';
+    final readers = <String, Future<Object?> Function()>{
+      configKey: preferences.getConfigMap,
+      clashConfigKey: preferences.getClashConfigMap,
+      systemDnsRecordKey: preferences.getSystemDnsRecord,
+      bootRecordKey: preferences.getBootRecord,
+    };
+    for (final entry in readers.entries) {
+      await store.setString(entry.key, damaged);
+      expect(await entry.value(), isNull, reason: entry.key);
+    }
+    expect(logs, hasLength(readers.length));
+    expect(logs, everyElement(contains('FormatException')));
+    expect(logs.join(), isNot(contains('test-secret')));
   });
 
   group('applied config md5', () {
