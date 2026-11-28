@@ -33,7 +33,6 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
   late final TextEditingController _ageSecretKeyController;
   late final TextEditingController _autoUpdateDurationController;
   late bool _autoUpdate;
-  Uint8List? _editedData;
   bool _attempted = false;
   final _fileInfoNotifier = ValueNotifier<FileInfo?>(null);
   late SetupAction _setupAction;
@@ -216,11 +215,11 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
     final title = widget.profile.label.takeFirstValid([
       widget.profile.id.toString(),
     ]);
-    final editedData = _editedData;
+    final fileData = _fileData;
     final editorPage = EditorPage(
       title: title,
-      load: () async => editedData != null
-          ? CodeForgeDocument.fromUtf8(editedData)
+      load: () async => fileData != null
+          ? CodeForgeDocument.fromUtf8(fileData)
           : openEditorFile(
               await appPath.getProfilePath(widget.profile.id.toString()),
             ),
@@ -249,7 +248,6 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
     if (data == null || !mounted) {
       return;
     }
-    _editedData = data;
     setState(() {
       _fileData = data;
     });
