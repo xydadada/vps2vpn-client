@@ -45,7 +45,7 @@
   "runtimeConfig": "运行时配置",
   "allowLan": "局域网代理",
   "tun": "虚拟网卡",
-  "tunDesc": "虚拟网卡仅在管理员模式生效。",
+  "tunDesc": "虚拟网卡需要管理网络流量的权限。出现系统授权提示时，请按提示操作。",
   "minimizeOnExit": "退出时最小化",
   "autoLaunch": "自启动",
   "silentLaunch": "静默启动",

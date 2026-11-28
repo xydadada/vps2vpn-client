@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'l10n.dart';
 
 // ignore_for_file: type=lint
@@ -147,7 +148,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tun => '虚拟网卡';
 
   @override
-  String get tunDesc => '虚拟网卡仅在管理员模式生效。';
+  String get tunDesc => '虚拟网卡需要管理网络流量的权限。出现系统授权提示时，请按提示操作。';
 
   @override
   String get minimizeOnExit => '退出时最小化';

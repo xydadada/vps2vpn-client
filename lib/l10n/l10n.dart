@@ -377,7 +377,7 @@ abstract class AppLocalizations {
   /// No description provided for @tunDesc.
   ///
   /// In en, this message translates to:
-  /// **'TUN works only in administrator mode.'**
+  /// **'TUN needs permission to manage network traffic. Follow the system authorization prompt when asked.'**
   String get tunDesc;
 
   /// No description provided for @minimizeOnExit.

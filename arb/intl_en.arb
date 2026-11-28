@@ -45,7 +45,7 @@
   "runtimeConfig": "Runtime config",
   "allowLan": "Allow LAN",
   "tun": "TUN",
-  "tunDesc": "TUN works only in administrator mode.",
+  "tunDesc": "TUN needs permission to manage network traffic. Follow the system authorization prompt when asked.",
   "minimizeOnExit": "Minimize on exit",
   "autoLaunch": "Auto launch",
   "silentLaunch": "Silent launch",
