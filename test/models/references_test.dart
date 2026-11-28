@@ -182,6 +182,50 @@ void main() {
         isNull,
       );
     });
+
+    test('renames proxy references after decoding fragment separators', () {
+      expect(
+        renamedDnsServer('tls://198.51.100.1#Old&h3=true', {'Old': 'New'}),
+        'tls://198.51.100.1#New&h3=true',
+      );
+      for (final fragment in [
+        'Old%26ecs=198.51.100.1%2F24',
+        'h3%3Dtrue%26Old',
+        'h3=true%26Old%26ecs%3D198.51.100.1%2F24',
+      ]) {
+        final server = 'https://example.com/dns-query#$fragment';
+        expect(dnsServerProxies(server), ['Old']);
+        final renamed = renamedDnsServer(server, {'Old': 'New'});
+        expect(dnsServerProxies(renamed), ['New']);
+        expect(
+          Uri.decodeComponent(renamed.split('#').last),
+          Uri.decodeComponent(fragment).replaceAll('Old', 'New'),
+        );
+      }
+    });
+
+    test('decodes percent escapes once and preserves option values', () {
+      const server =
+          'https://example.com/dns-query#Old%2526Name%26flag%3D100%25';
+      final renamed = renamedDnsServer(server, {'Old%26Name': 'New%3D Name'});
+      expect(dnsServerProxies(renamed), ['New%3D Name']);
+      expect(
+        Uri.decodeComponent(renamed.split('#').last),
+        'New%3D Name&flag=100%',
+      );
+    });
+
+    test('an encoded option is not a proxy reference', () {
+      const server = 'https://example.com/dns-query#Old&ecs%3D198.51.100.1';
+      expect(renamedDnsServer(server, {'ecs=198.51.100.1': 'New'}), server);
+      expect(dnsServerProxies(server), ['Old']);
+    });
+
+    test('an unmatched fragment retains its original encoding', () {
+      const server =
+          'https://example.com/dns-query#Other%26ecs%3D198.51.100.1%2f24';
+      expect(renamedDnsServer(server, {'Old': 'New'}), server);
+    });
   });
 
   group('rule sets', () {
