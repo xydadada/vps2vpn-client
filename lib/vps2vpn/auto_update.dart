@@ -5,8 +5,11 @@
 // the app on Windows, the system package installer on Android.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/release_asset.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -122,6 +125,49 @@ final _autoTried = <String>{};
 @visibleForTesting
 void resetVpsAutoUpdate() => _autoTried.clear();
 
+/// Reads the installer at [path] and its `.sig` again, hashing the same bytes
+/// it counts. A link, a folder or a file changed since the download fails.
+Future<bool> vpsInstallerVerified(
+  String path, {
+  String publicKeyHex = vpsUpdatePublicKeyHex,
+}) async {
+  final sigPath = '$path.sig';
+  for (final entry in [path, sigPath]) {
+    final type = await FileSystemEntity.type(entry, followLinks: false);
+    if (type != FileSystemEntityType.file) return false;
+  }
+  try {
+    final signature = await File(
+      sigPath,
+    ).openRead(0, 1024).transform(utf8.decoder).join();
+    final (sha256Hex, size) = await Isolate.run(() => _hashFile(path));
+    return vpsVerifyUpdate(
+      fileName: File(path).uri.pathSegments.last,
+      sha256Hex: sha256Hex,
+      size: size,
+      signatureText: signature,
+      publicKeyHex: publicKeyHex,
+    );
+  } on FileSystemException {
+    return false;
+  } on FormatException {
+    return false;
+  }
+}
+
+Future<(String, int)> _hashFile(String path) async {
+  var size = 0;
+  final digest = await sha256
+      .bind(
+        File(path).openRead().map((chunk) {
+          size += chunk.length;
+          return chunk;
+        }),
+      )
+      .first;
+  return (digest.toString(), size);
+}
+
 Future<(String, File)?> vpsReadyInstaller(
   Directory dir,
   String current, {
@@ -133,21 +179,13 @@ Future<(String, File)?> vpsReadyInstaller(
     if (entry is! File) continue;
     final name = entry.uri.pathSegments.last;
     final version = vpsUpdateFileVersion(name);
-    final sig = File('${entry.path}.sig');
     if (!name.endsWith('-setup.exe') ||
         version == null ||
         !vpsVersionNewer(version, current) ||
-        (best != null && !vpsVersionNewer(version, best.$1)) ||
-        !await sig.exists()) {
+        (best != null && !vpsVersionNewer(version, best.$1))) {
       continue;
     }
-    if (vpsVerifyUpdate(
-      fileName: name,
-      sha256Hex: await fileSha256(entry.path),
-      size: await entry.length(),
-      signatureText: await sig.readAsString(),
-      publicKeyHex: publicKeyHex,
-    )) {
+    if (await vpsInstallerVerified(entry.path, publicKeyHex: publicKeyHex)) {
       best = (version, entry);
     }
   }

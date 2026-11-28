@@ -285,6 +285,18 @@ class CommonAction extends _$CommonAction {
   Future<void> installUpdate() async {
     final download = ref.read(updateDownloadStateProvider);
     if (download is! UpdateReady) return;
+    if (!await vpsInstallerVerified(download.path)) {
+      ref.read(updateDownloadStateProvider.notifier).value = null;
+      await clearUpdateDownloads();
+      final zh = currentAppLocalizations.localeName.startsWith('zh');
+      await _showUpdateFailure(
+        zh
+            ? '安装包在安装前的复查中没有通过，已删除，没有安装。请重新检查更新。'
+            : 'The installer failed its check before installing. It was '
+                  'deleted and not installed. Check for updates again.',
+      );
+      return;
+    }
     if (system.isAndroid) {
       ref.read(updateDownloadStateProvider.notifier).value = null;
       final status = await app?.installPackage(download.path);

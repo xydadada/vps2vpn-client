@@ -11,6 +11,7 @@ import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/vps2vpn/auto_update.dart' show vpsInstallerVerified;
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/panel.dart' show vpsReleaseRepository;
 import 'package:fl_clash/vps2vpn/profile_health.dart';

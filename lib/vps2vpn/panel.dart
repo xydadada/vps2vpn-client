@@ -1620,7 +1620,9 @@ Future<File> _downloadReleaseVia(
       try {
         final kept = await part.rename(out.path);
         try {
-          await File('${out.path}.sig').writeAsString(signature);
+          final sig = File('${out.path}.sig.part');
+          await sig.writeAsString(signature, flush: true);
+          await sig.rename('${out.path}.sig');
         } on FileSystemException {
           commonPrint.log('Keeping the update signature failed');
         }

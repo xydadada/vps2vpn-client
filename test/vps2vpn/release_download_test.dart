@@ -265,6 +265,62 @@ void main() {
     );
   });
 
+  group('the installer is checked again before it runs', () {
+    const name = 'vps2vpn-1.0.9-windows-amd64-setup.exe';
+    late Directory dir;
+    late File installer;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('v2v-release-recheck-');
+      installer = File('${dir.path}${Platform.pathSeparator}$name');
+      await installer.writeAsString('release payload');
+      await File('${installer.path}.sig').writeAsString(_signatures[name]!);
+    });
+    tearDown(() => dir.delete(recursive: true));
+
+    Future<bool> verified([String? path]) =>
+        vpsInstallerVerified(path ?? installer.path, publicKeyHex: _testKey);
+
+    test('the signed bytes pass', () async {
+      expect(await verified(), isTrue);
+    });
+
+    test('bytes changed after the download fail', () async {
+      await installer.writeAsString('release payloaD');
+      expect(await verified(), isFalse);
+    });
+
+    test('a missing, empty or unreadable signature fails', () async {
+      final sig = File('${installer.path}.sig');
+      await sig.writeAsBytes([0xff, 0xfe, 0x00]);
+      expect(await verified(), isFalse);
+      await sig.writeAsString('');
+      expect(await verified(), isFalse);
+      await sig.delete();
+      expect(await verified(), isFalse);
+    });
+
+    test('a folder in place of the installer or signature fails', () async {
+      await File('${installer.path}.sig').delete();
+      await Directory('${installer.path}.sig').create();
+      expect(await verified(), isFalse);
+      expect(await verified(dir.path), isFalse);
+    });
+
+    test('a link to the signed installer fails', () async {
+      final other = await Directory('${dir.path}/other').create();
+      final link = '${other.path}${Platform.pathSeparator}$name';
+      try {
+        await Link(link).create(installer.path);
+        await Link('$link.sig').create('${installer.path}.sig');
+      } on FileSystemException {
+        markTestSkipped('this system does not allow links');
+        return;
+      }
+      expect(await verified(link), isFalse);
+    });
+  });
+
   test('verified download replaces an existing complete installer', () async {
     final dir = await Directory.systemTemp.createTemp('v2v-release-replace-');
     addTearDown(() => dir.delete(recursive: true));
