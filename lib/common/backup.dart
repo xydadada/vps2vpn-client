@@ -12,7 +12,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 
-enum BackupFailure { invalid, newerVersion }
+enum BackupFailure { invalid, newerVersion, tooLarge }
 
 final class BackupException implements Exception {
   final BackupFailure failure;
@@ -124,17 +124,26 @@ Future<void> writeBackupArchive({
   required String homeDirPath,
   required Iterable<String> entries,
 }) async {
+  final config = utf8.encode(json.encode(configMap));
+  final files = <String, File>{};
+  var totalBytes = config.length + await File(databaseSnapshotPath).length();
+  for (final entry in entries) {
+    final file = File(BackupEntries.resolve(homeDirPath, entry));
+    if (await file.exists()) {
+      files[entry] = file;
+      totalBytes += await file.length();
+    }
+  }
+  if (files.length + 2 > _maxBackupEntries ||
+      totalBytes > _maxBackupUncompressedBytes) {
+    throw const BackupException(BackupFailure.tooLarge);
+  }
   final encoder = ZipFileEncoder()..create(archivePath);
   try {
-    encoder.addArchiveFile(
-      ArchiveFile.string(configJsonName, json.encode(configMap)),
-    );
+    encoder.addArchiveFile(ArchiveFile.bytes(configJsonName, config));
     await encoder.addFile(File(databaseSnapshotPath), backupDatabaseName);
-    for (final entry in entries) {
-      final file = File(BackupEntries.resolve(homeDirPath, entry));
-      if (await file.exists()) {
-        await encoder.addFile(file, entry);
-      }
+    for (final MapEntry(key: entry, value: file) in files.entries) {
+      await encoder.addFile(file, entry);
     }
   } finally {
     await encoder.close();

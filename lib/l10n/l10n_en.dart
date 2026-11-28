@@ -1808,6 +1808,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This backup comes from a newer version of the app. Update the app before restoring it';
 
   @override
+  String get backupTooLarge =>
+      'The backup would hold more than 2,000 files or 256 MB, more than a restore takes. Remove some subscriptions or scripts and try again';
+
+  @override
   String get networkTimeoutError =>
       'The request timed out. Check your network or proxy, then try again';
 

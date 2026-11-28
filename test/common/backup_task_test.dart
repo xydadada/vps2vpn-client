@@ -609,6 +609,45 @@ void main() {
       });
     });
 
+    test('a backup holds as many files as a restore takes', () async {
+      await seedDatabase();
+      final entries = [for (var i = 0; i < 1998; i++) 'scripts/$i.js'];
+      for (final entry in entries) {
+        writeFile(BackupEntries.resolve(home.path, entry), '');
+      }
+
+      await restore(await backup(entries: entries));
+
+      expect(
+        Directory(join(staging.path, 'scripts')).listSync(),
+        hasLength(1998),
+      );
+    });
+
+    test('a backup a restore would refuse is not written', () async {
+      await seedDatabase();
+      final entries = [for (var i = 0; i < 1999; i++) 'scripts/$i.js'];
+      for (final entry in entries) {
+        writeFile(BackupEntries.resolve(home.path, entry), '');
+      }
+
+      await expectLater(
+        backup(entries: entries),
+        failsWith(BackupFailure.tooLarge),
+      );
+    });
+
+    test('a backup past the restore size limit is not written', () async {
+      await seedDatabase();
+      final file = File(join(home.path, 'profiles', '1.yaml'))
+        ..createSync(recursive: true);
+      final handle = await file.open(mode: FileMode.write);
+      await handle.truncate(256 * 1024 * 1024);
+      await handle.close();
+
+      await expectLater(backup(), failsWith(BackupFailure.tooLarge));
+    });
+
     test('restoring returns the rows and stages the files', () async {
       await seedDatabase();
       writeFile(join(home.path, 'profiles', '1.yaml'), 'proxies: []');
