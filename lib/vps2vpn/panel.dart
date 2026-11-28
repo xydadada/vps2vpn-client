@@ -350,10 +350,21 @@ class VpsMember {
 
   int get used => usedUp + usedDown;
 
+  static const _maxExactInteger = 9007199254740991;
+
+  /// Null when the quota cannot be represented by a portable byte counter.
+  int? get quotaBytes {
+    if (!quotaGb.isFinite) return null;
+    if (quotaGb <= 0) return 0;
+    final bytes = quotaGb * 1024 * 1024 * 1024;
+    if (!bytes.isFinite || bytes > _maxExactInteger) return null;
+    return bytes.round();
+  }
+
   // Network JSON is untrusted: malformed/non-finite counters are ignored.
   // Keep converted integers in the portable exact-integer range.
   static int _int(Object? v) =>
-      v is num && v.isFinite && v >= 0 && v <= 9007199254740991 ? v.toInt() : 0;
+      v is num && v.isFinite && v >= 0 && v <= _maxExactInteger ? v.toInt() : 0;
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
     final expire = _panelTimestamp(json['expire_at']);

@@ -2,7 +2,6 @@
 // advanced mode.
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -843,9 +842,9 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
     );
     final failing = busy ? null : vpsFailingText(context, health);
     final sub = profile.subscriptionInfo;
-    final used = sub == null ? 0 : sub.upload + sub.download;
+    final used = sub?.used ?? 0.0;
     final total = sub?.total ?? 0;
-    final ratio = total > 0 ? math.min(1.0, used / total) : 0.0;
+    final ratio = sub?.usage ?? 0.0;
     String? expire;
     final d = sub?.expireDate;
     if (d != null) {

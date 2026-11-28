@@ -324,12 +324,18 @@ class VpsAccountCard extends ConsumerWidget {
     }
     final m = result.member;
     if (m == null) return const SizedBox.shrink();
-    final quota = m.quotaGb > 0 ? (m.quotaGb * 1024 * 1024 * 1024).round() : 0;
+    final quota = m.quotaBytes;
     final usage = m.unlimited
         ? tr(
             context,
             '已用 ${m.used.traffic.spaced} · 不限量',
             'Used ${m.used.traffic.spaced} · unlimited',
+          )
+        : quota == null
+        ? tr(
+            context,
+            '已用 ${m.used.traffic.spaced} · 配额未知',
+            'Used ${m.used.traffic.spaced} · quota unknown',
           )
         : tr(
             context,
@@ -365,7 +371,7 @@ class VpsAccountCard extends ConsumerWidget {
         if (block != null) vpsAccountBlockHint(context, block),
         if (slowed) _slowedHint(context, m.limitMbps),
       ],
-      progress: m.unlimited
+      progress: m.unlimited || quota == null
           ? null
           : (quota > 0 ? (m.used / quota).clamp(0.0, 1.0) : 1.0),
       action: Wrap(

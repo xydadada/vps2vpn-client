@@ -345,7 +345,7 @@ class _TrafficMeter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final used = info.upload + info.download;
+    final used = info.used;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 6,
