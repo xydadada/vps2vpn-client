@@ -45,6 +45,47 @@ void main() {
       }
       expect(text, contains('FAIL dns'));
     });
+
+    test('quoted secrets, URL credentials and auth headers are masked', () {
+      final body = vpsFeedbackBody(
+        text: 'https://alice:short-pass@panel.example.com/subscription',
+        client: {'version': '1.0.33'},
+        steps: const [
+          (
+            id: 'proxy',
+            ok: false,
+            detail: 'socks5://bob:p%40ss@192.0.2.10:1080',
+          ),
+        ],
+        log:
+            'password: "two words"\n'
+            "pass='single quoted'\n"
+            'password="escaped \\"quote\\" secret"\n'
+            'Authorization: Bearer short-token\n'
+            'Proxy-Authorization: Basic YWJjOmRlZg==\n'
+            '{"Authorization":"Bearer json-token"}\n'
+            'connected to https://status.example/path',
+      );
+      final text = vpsFeedbackText(body);
+      for (final secret in [
+        'alice',
+        'short-pass',
+        'bob',
+        'p%40ss',
+        'two words',
+        'single quoted',
+        'escaped',
+        'quote',
+        'short-token',
+        'YWJjOmRlZg==',
+        'json-token',
+      ]) {
+        expect(text, isNot(contains(secret)), reason: secret);
+      }
+      expect(text, contains('https://***@panel.example.com/subscription'));
+      expect(text, contains('socks5://***@192.0.x.x:1080'));
+      expect(text, contains('connected to https://status.example/path'));
+    });
   });
 
   test('the body keeps to what the panel takes', () {
