@@ -57,6 +57,18 @@ Uri? vpsReleaseInstaller(VpsClientRelease release) =>
 Uri? vpsReleasePage(VpsClientRelease release) =>
     release.pageFor(Platform.operatingSystem);
 
+/// Installer versions are covered by the signature; feed metadata is not.
+String vpsReleaseVersion(VpsClientRelease release) {
+  final installer = vpsReleaseInstaller(release);
+  return installer == null
+      ? release.version
+      : vpsUpdateFileVersion(_fileName(installer).toLowerCase()) ??
+            release.version;
+}
+
+String? vpsReadyUpdateVersion(UpdateReady update) =>
+    vpsUpdateFileVersion(_fileName(File(update.path).uri));
+
 /// Whether this build fetches and installs [release] by itself.
 bool vpsReleaseSelfInstalls(VpsClientRelease release) {
   final url = vpsReleaseInstaller(release);
@@ -231,10 +243,16 @@ Future<_Got> _downloadUpdate(
   }
   final install = vpsSelfInstallable(_fileName(url));
   final download = container.read(updateDownloadStateProvider.notifier);
-  final tag = 'v${release.version}';
+  final version = vpsReleaseVersion(release);
+  final tag = 'v$version';
   // One download at a time; a ready older version gives way to this one.
   final pending = download.value;
-  if (install && pending is UpdateReady && pending.tag == tag) {
+  final readyVersion = pending is UpdateReady
+      ? vpsReadyUpdateVersion(pending)
+      : null;
+  if (install &&
+      readyVersion != null &&
+      !vpsVersionNewer(version, readyVersion)) {
     return _Got.done;
   }
   if (install && pending is UpdateDownloading) {
@@ -258,7 +276,12 @@ Future<_Got> _downloadUpdate(
       container,
       url,
       install: install,
-      current: current,
+      current:
+          install &&
+              readyVersion != null &&
+              vpsVersionNewer(readyVersion, current)
+          ? readyVersion
+          : current,
       onProgress: install
           ? (received, total) {
               // One rebuild per percent, not one per chunk.
@@ -273,18 +296,21 @@ Future<_Got> _downloadUpdate(
             }
           : null,
     );
-    vpsUiTrace('update downloaded ${release.version}');
+    vpsUiTrace('update downloaded $version');
     if (install) {
       download.value = UpdateReady(tag, file.path);
       _banner(
         (c) => [
           tr(
             c,
-            '新版本 ${release.version} 已下载并校验签名，点这里安装（会自动重启 vps2vpn）',
-            'Version ${release.version} is downloaded and its signature '
+            '新版本 $version 已下载并校验签名，点这里安装（会自动重启 vps2vpn）',
+            'Version $version is downloaded and its signature '
                 'checked. ${vpsClick(start: true)} to install it (vps2vpn restarts)',
           ),
-          ?vpsReleaseSummary(release.notes, zh: vpsZh(c)),
+          ?vpsReleaseSummary(
+            release.version == version ? release.notes : null,
+            zh: vpsZh(c),
+          ),
         ].join('\n'),
         BannerLevel.success,
         onTap: () => unawaited(
@@ -309,7 +335,7 @@ Future<_Got> _downloadUpdate(
     }
     return _Got.done;
   } on VpsUpdateRejected catch (e) {
-    vpsUiTrace('update refused ${release.version} ${e.reason}');
+    vpsUiTrace('update refused $version ${e.reason}');
     if (install) download.value = before;
     if (!last) return _Got.refused;
     _banner(
@@ -335,7 +361,7 @@ Future<_Got> _downloadUpdate(
     );
     return _Got.refused;
   } catch (error) {
-    vpsUiTrace('update failed ${release.version}');
+    vpsUiTrace('update failed $version');
     if (install) download.value = before;
     commonPrint.log(
       'Client update download failed: ${compactError(error)}',
@@ -404,10 +430,18 @@ class VpsUpdateCheck {
 }
 
 class VpsUpdateCheckNotifier extends Notifier<VpsUpdateCheck> {
+  Future<VpsUpdateCheck>? _inFlight;
+
   @override
   VpsUpdateCheck build() => const VpsUpdateCheck();
 
   void set(VpsUpdateCheck value) => state = value;
+
+  Future<VpsUpdateCheck> check(ProviderContainer container, String current) =>
+      _inFlight ??= _check(
+        container,
+        current,
+      ).whenComplete(() => _inFlight = null);
 }
 
 final vpsUpdateCheckProvider =
@@ -471,13 +505,14 @@ Future<VpsUpdateCheck> _check(
   }
   final usable = [
     for (final (i, r) in found.indexed)
-      if (r.newerThan(current) &&
+      if (vpsVersionNewer(vpsReleaseVersion(r), current) &&
           (vpsReleaseInstaller(r) != null || vpsReleasePage(r) != null))
         (i, r),
   ];
   usable.sort((a, b) {
-    if (vpsVersionNewer(a.$2.version, b.$2.version)) return -1;
-    if (vpsVersionNewer(b.$2.version, a.$2.version)) return 1;
+    final av = vpsReleaseVersion(a.$2), bv = vpsReleaseVersion(b.$2);
+    if (vpsVersionNewer(av, bv)) return -1;
+    if (vpsVersionNewer(bv, av)) return 1;
     return a.$1 - b.$1;
   });
   final known = answered || panelAnswered;
@@ -503,7 +538,9 @@ Future<VpsUpdateCheck> vpsCheckForUpdateNow(
   final container = ProviderScope.containerOf(ref.context, listen: false);
   final current = currentVersion ?? vpsAppVersion();
   if (current == null) return container.read(vpsUpdateCheckProvider);
-  return _check(container, current);
+  return container
+      .read(vpsUpdateCheckProvider.notifier)
+      .check(container, current);
 }
 
 /// An installed build fetches a newer client and offers to install it; a
@@ -517,14 +554,17 @@ Future<void> vpsAutoUpdateCheck(
   if (current == null) return;
   final container = ProviderScope.containerOf(ref.context, listen: false);
   try {
-    final check = await _check(container, current);
+    final check = await container
+        .read(vpsUpdateCheckProvider.notifier)
+        .check(container, current);
     vpsUiTrace(
       'update ${check.status.name} '
-      '${check.releases.map((r) => r.version).join(',')}',
+      '${check.releases.map(vpsReleaseVersion).join(',')}',
     );
     if (check.status != VpsUpdateStatus.available) return;
     final newest = check.releases.first;
-    if (!_autoTried.add(newest.version)) return;
+    final version = vpsReleaseVersion(newest);
+    if (!_autoTried.add(version)) return;
     final installable = [
       for (final r in check.releases)
         if (vpsReleaseSelfInstalls(r)) r,
@@ -533,8 +573,8 @@ Future<void> vpsAutoUpdateCheck(
       _banner(
         (c) => tr(
           c,
-          '有新版本 ${newest.version}，点这里下载（会先校验签名）',
-          'Version ${newest.version} is out. ${vpsClick(start: true)} to download it '
+          '有新版本 $version，点这里下载（会先校验签名）',
+          'Version $version is out. ${vpsClick(start: true)} to download it '
               '(its signature is checked first)',
         ),
         BannerLevel.info,
@@ -550,7 +590,7 @@ Future<void> vpsAutoUpdateCheck(
       current: current,
       auto: true,
     );
-    if (!settled) _autoTried.remove(newest.version);
+    if (!settled) _autoTried.remove(version);
   } catch (error) {
     commonPrint.log(
       'Client update check failed: ${compactError(error)}',

@@ -476,7 +476,8 @@ class VpsUpdateNotice extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final download = ref.watch(updateDownloadStateProvider);
     if (download is! UpdateReady) return const SizedBox.shrink();
-    final version = download.tag.replaceFirst(RegExp('^v'), '');
+    final version = vpsReadyUpdateVersion(download);
+    if (version == null) return const SizedBox.shrink();
     final notes = ref
         .watch(vpsUpdateCheckProvider)
         .releases
@@ -564,41 +565,54 @@ class VpsUpdateCard extends ConsumerWidget {
       ...check.releases,
       if (mirror != null &&
           current != null &&
-          mirror.newerThan(current) &&
+          vpsVersionNewer(vpsReleaseVersion(mirror), current) &&
           (vpsReleaseInstaller(mirror) != null ||
               vpsReleasePage(mirror) != null) &&
-          !check.releases.any((r) => r.version == mirror.version))
+          !check.releases.any(
+            (r) => vpsReleaseVersion(r) == vpsReleaseVersion(mirror),
+          ))
         mirror,
     ];
     final release = offers.fold<VpsClientRelease?>(
       null,
       (best, r) =>
-          best == null || vpsVersionNewer(r.version, best.version) ? r : best,
+          best == null ||
+              vpsVersionNewer(vpsReleaseVersion(r), vpsReleaseVersion(best))
+          ? r
+          : best,
     );
+    final offeredVersion = release == null ? null : vpsReleaseVersion(release);
+    final cachedVersion = download is UpdateReady
+        ? vpsReadyUpdateVersion(download)
+        : null;
+    final ready =
+        cachedVersion != null &&
+        (offeredVersion == null ||
+            !vpsVersionNewer(offeredVersion, cachedVersion));
+    final availableVersion = ready ? cachedVersion : offeredVersion;
     final p = VpsPalette.of(context);
     final version = current ?? tr(context, '未知', 'unknown');
     final at = check.at == null ? null : vpsDateTimeText(context, check.at!);
     final Widget action;
     final String title;
     final String detail;
-    if (release != null) {
+    if (availableVersion != null) {
       final ordered = [
-        release,
+        ?release,
         for (final r in offers)
           if (!identical(r, release)) r,
       ];
-      final installer = vpsReleaseInstaller(release);
-      final installs = vpsReleaseSelfInstalls(release);
-      final tag = 'v${release.version}';
-      final ready = download is UpdateReady && download.tag == tag;
+      final installer = release == null ? null : vpsReleaseInstaller(release);
+      final installs =
+          ready || release != null && vpsReleaseSelfInstalls(release);
       final busy = download is UpdateDownloading;
       final percent = download is UpdateDownloading && download.total > 0
           ? ' ${(download.received * 100 ~/ download.total).clamp(0, 100)}%'
           : '';
       title = tr(
         context,
-        '有新版本 ${release.version}',
-        'Version ${release.version} is available',
+        '有新版本 $availableVersion',
+        'Version $availableVersion is available',
       );
       detail = installs
           ? tr(
@@ -681,17 +695,20 @@ class VpsUpdateCard extends ConsumerWidget {
                   unawaited(vpsCheckForUpdateNow(ref, currentVersion: current)),
       );
     }
-    final summary = vpsReleaseSummary(release?.notes, zh: vpsZh(context));
+    final details = release?.version == availableVersion ? release : null;
+    final summary = vpsReleaseSummary(details?.notes, zh: vpsZh(context));
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: VpsCard(
-        highlight: release != null,
+        highlight: availableVersion != null,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             VpsRow(
-              icon: release != null ? VpsIcon.sparkle : VpsIcon.refresh,
+              icon: availableVersion != null
+                  ? VpsIcon.sparkle
+                  : VpsIcon.refresh,
               title: title,
               subtitle: detail,
               trailing: action,
@@ -703,10 +720,10 @@ class VpsUpdateCard extends ConsumerWidget {
                   dialogs.showAlert(
                     title: tr(
                       context,
-                      '${release!.version} 更新内容',
-                      "What's new in ${release.version}",
+                      '${details!.version} 更新内容',
+                      "What's new in ${details.version}",
                     ),
-                    message: TextSpan(text: release.notes),
+                    message: TextSpan(text: details.notes),
                     confirmText: tr(context, '知道了', 'Got it'),
                   ),
                 ),
