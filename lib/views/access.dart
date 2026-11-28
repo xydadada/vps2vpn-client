@@ -209,7 +209,7 @@ class _AccessViewState extends ConsumerState<AccessView>
       final currentList = ref.read(
         accessControlStateProvider.select((state) => state.currentList),
       );
-      Clipboard.setData(ClipboardData(text: currentList.join('\n')));
+      return Clipboard.setData(ClipboardData(text: currentList.join('\n')));
     });
   }
 
