@@ -315,7 +315,7 @@ class _VpsClaudePageState extends ConsumerState<VpsClaudePage> {
         context,
         exit: exit,
         quality: quality,
-        facts: facts.value,
+        facts: facts.value ?? (facts.isLoading ? null : const VpsExitFacts()),
         offset: DateTime.now().timeZoneOffset,
         localeName: Platform.localeName,
       ),

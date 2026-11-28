@@ -33,7 +33,9 @@ IpInfo? parseIpv6Answer(OutboundIpResult result) {
   if (result.error != null || parse == null) return null;
   try {
     final info = parse(jsonDecode(result.body) as Map<String, dynamic>);
-    return info.ip.contains(':') ? info : null;
+    return InternetAddress.tryParse(info.ip)?.type == InternetAddressType.IPv6
+        ? info
+        : null;
   } catch (_) {
     return null;
   }
@@ -48,7 +50,12 @@ IpInfo? parseIpv6Answer(OutboundIpResult result) {
     if (dns is! Map) return null;
     final ip = dns['ip'];
     final geo = dns['geo'];
-    if (ip is! String || geo is! String) return null;
+    if (ip is! String ||
+        InternetAddress.tryParse(ip) == null ||
+        geo is! String ||
+        geo.trim().isEmpty) {
+      return null;
+    }
     return (ip: ip, geo: geo);
   } catch (_) {
     return null;
@@ -234,11 +241,18 @@ String vpsMaskLast(String ip) {
 enum VpsFindingLevel { good, warn, bad, none }
 
 class VpsFinding {
-  const VpsFinding(this.title, this.value, this.level, {this.problem});
+  const VpsFinding(
+    this.title,
+    this.value,
+    this.level, {
+    this.problem,
+    this.incomplete = false,
+  });
 
   final String title;
   final String value;
   final VpsFindingLevel level;
+  final bool incomplete;
 
   /// What the verdict line says when this is wrong.
   final String? problem;
@@ -289,6 +303,7 @@ List<VpsFinding> vpsExitFindings(
   if (facts != null) {
     final v6 = facts.ipv6Exit;
     final local = facts.ipv6Local;
+    final incomplete = v6 == null || local == null;
     final leaks = v6 != null && local != null && vpsSameIp(v6.ip, local.ip);
     final elsewhere =
         !leaks &&
@@ -306,18 +321,15 @@ List<VpsFinding> vpsExitFindings(
               )
             : v6 != null
             ? countryName(context, v6.countryCode)
-            : local != null
-            ? tr(
-                context,
-                '节点不支持 IPv6，本机 IPv6 未外泄',
-                'The node has no IPv6; yours is not exposed',
-              )
-            : tr(context, '本机没有 IPv6', 'No IPv6 here'),
+            : tr(context, '未能确认', 'Could not confirm'),
         leaks
             ? VpsFindingLevel.bad
             : elsewhere
             ? VpsFindingLevel.warn
+            : incomplete
+            ? VpsFindingLevel.none
             : VpsFindingLevel.good,
+        incomplete: incomplete,
         problem: leaks
             ? tr(context, 'IPv6 直连', 'IPv6 goes out directly')
             : elsewhere
@@ -340,6 +352,15 @@ List<VpsFinding> vpsExitFindings(
           problem: home
               ? tr(context, 'DNS 由国内服务器解析', 'DNS answered from China')
               : null,
+        ),
+      );
+    } else {
+      rows.add(
+        VpsFinding(
+          'DNS',
+          tr(context, '未能确认', 'Could not confirm'),
+          VpsFindingLevel.none,
+          incomplete: true,
         ),
       );
     }
@@ -391,27 +412,50 @@ List<String> _problems(List<VpsFinding> rows) => [
     if (r.problem != null) r.problem!,
 ];
 
-/// The card's heading: "一切正常" or "2 项有问题".
+int _incomplete(List<VpsFinding> rows) =>
+    rows.where((row) => row.incomplete).length;
+
+String _incompleteText(BuildContext context, int count) => tr(
+  context,
+  '$count 项未完成，请重新检测',
+  '$count ${count == 1 ? 'check' : 'checks'} incomplete; check again',
+);
+
 String vpsExitHeading(BuildContext context, List<VpsFinding> rows) {
   final count = _problems(rows).length;
-  if (count == 0) return tr(context, '一切正常', 'All good');
-  return tr(
+  final incomplete = _incomplete(rows);
+  if (count == 0) {
+    return incomplete > 0
+        ? tr(context, '检测未完成', 'Checks incomplete')
+        : tr(context, '一切正常', 'All good');
+  }
+  final issues = tr(
     context,
     '$count 项有问题',
     '$count ${count == 1 ? 'issue' : 'issues'}',
   );
+  return incomplete == 0
+      ? issues
+      : '$issues · ${tr(context, '$incomplete 项未完成', '$incomplete incomplete')}';
 }
 
-/// The verdict line: "一切正常" or "2 项有问题：…".
 String vpsExitVerdict(BuildContext context, List<VpsFinding> rows) {
   final problems = _problems(rows);
-  if (problems.isEmpty) return tr(context, '一切正常', 'All good');
-  return tr(
+  final incomplete = _incomplete(rows);
+  if (problems.isEmpty) {
+    return incomplete > 0
+        ? _incompleteText(context, incomplete)
+        : tr(context, '一切正常', 'All good');
+  }
+  final verdict = tr(
     context,
     '${problems.length} 项有问题：${problems.join('；')}',
     '${problems.length} ${problems.length == 1 ? 'issue' : 'issues'}: '
         '${problems.join('; ')}',
   );
+  return incomplete == 0
+      ? verdict
+      : '$verdict\n${_incompleteText(context, incomplete)}';
 }
 
 /// The report as text, every address with its last part hidden.
@@ -443,7 +487,7 @@ class VpsExitReport extends ConsumerWidget {
       context,
       exit: exit,
       quality: quality,
-      facts: facts.value,
+      facts: facts.value ?? (facts.isLoading ? null : const VpsExitFacts()),
       offset: DateTime.now().timeZoneOffset,
       localeName: Platform.localeName,
     );
@@ -478,6 +522,7 @@ class VpsFindingCard extends StatelessWidget {
     final p = VpsPalette.of(context);
     final bad = rows.any((r) => r.level == VpsFindingLevel.bad);
     final warn = rows.any((r) => r.level == VpsFindingLevel.warn);
+    final incomplete = _incomplete(rows);
     return VpsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -501,6 +546,8 @@ class VpsFindingCard extends StatelessWidget {
                           ? p.bad
                           : warn
                           ? p.warn
+                          : incomplete > 0
+                          ? p.soft
                           : p.good,
                     ),
                   ),
@@ -533,6 +580,14 @@ class VpsFindingCard extends StatelessWidget {
                   style: vpsText(p, size: 13.5, color: p.soft, height: 1.45),
                 ),
               ),
+          if (settled && incomplete > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                _incompleteText(context, incomplete),
+                style: vpsText(p, size: 13.5, color: p.soft, height: 1.45),
+              ),
+            ),
           const SizedBox(height: 8),
           for (final (i, r) in rows.indexed) ...[
             if (i > 0) Container(height: 1, color: p.line),
