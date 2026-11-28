@@ -2,9 +2,10 @@
 
 `make` is the entry point on macOS and Linux: `make help` lists every target with its variables, generated from the
 `##` comments in the `Makefile`, and `test/tool/makefile_test.dart` keeps the two in step. Each target only calls the
-command this file documents, so the logic stays in `tool/`; `make doctor` names a missing toolchain, `make check` is
-CI's `dart` job, `make core-check` and `make core-test` the Go wrapper checks CI runs, and `make run` starts the safe mode
-build, the only kind a shared host may run.
+command this file documents, so the logic stays in `tool/`; `make doctor` names a missing toolchain, `make check`
+runs the local root checks, and `make core-check` and `make core-test` check the Go wrapper. The current fork's CI
+commands are listed under Verify below; the inherited Make targets are not an exact copy of those jobs.
+`make run` starts the safe mode build required by the shared-host development rules.
 
 ## Building
 
@@ -24,8 +25,9 @@ dart tool/package.dart android             # every ABI; --arch arm64 for one
 dart tool/package.dart linux --dry-run --arch arm64   # names and steps only, any platform
 ```
 
-Artifacts land in `dist/` as `FlClash-<line>-<version>-<os>-<arch>[-<form>].<ext>`, with `manifest.json` and
-`FlClash-<line>-<version>-SHA256SUMS`; see Packaging in `architecture.md`.
+Artifacts land in `dist/`, alongside `manifest.json` and a checksum file. Use the dry-run output and the manifest
+for the current environment's exact names; the fork's Windows workflow also prepares the installer names expected
+by the vps2vpn panel. See Packaging in `architecture.md`.
 
 The desktop Go core and the Rust helper build automatically: Flutter runs
 `plugins/setup/hook/build.dart` on every `flutter build` and `flutter test`,
@@ -69,11 +71,9 @@ hooks:
       build_assets: true   # false does the same for the Rust library
 ```
 
-CI flips `setup` to `false` with `yq` in its throwaway checkout before
-`dart run tool/changelog.dart` and `dart run tool/test.dart`; no test loads the Go core. `rust_api`
-stays on there because the editor tests in `test/plugins/code_forge/` and the socket
-test in `test/core/desktop/ipc_native_test.dart` load the Rust library the hook
-builds; the release-notes job, which runs no tests, flips both.
+The current `verify.yaml` keeps both hooks enabled and installs Go and Rust for the root test job. The editor tests
+in `test/plugins/code_forge/` and the socket test in `test/core/desktop/ipc_native_test.dart` load the Rust library
+the hook builds. There is no separate release-notes job in this fork's checked-in workflows.
 Never commit `false`: a build with it set stages whatever `libclash/` already
 holds and bundles no Rust library, which is why `tool/package.dart` refuses to package
 while it is set. Locally, `false` is worth setting for a Dart-only test loop,
@@ -88,7 +88,7 @@ Use the default Flutter SDK directly:
 
 ```bash
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=env.json --dart-define=SAFE_MODE=true
 flutter test
 ```
 
@@ -96,11 +96,13 @@ Use `flutter test`, not `dart test`, because models pull in Flutter types.
 
 A development build takes over the host exactly like a release: it creates the TUN device, sets the system proxy, on
 macOS registers the TUN as the system resolver, registers itself as the login item, and on Windows and Linux starts its
-Core through the shared privileged Helper, which stops the Core an installed FlClash is running. Only the data directory
-is kept apart, and only for some builds: a macOS debug build is `com.follow.clash.debug` and an Android debug build `com.follow.clash.dev`,
-while profile and release builds, and every build on Windows and Linux, share the directory and preferences of the
-installed app. Safe mode keeps all of the host changes off and never opens the Core's listeners or external
-controller, so it does not compete with the installed app for the mixed, DNS, RESTful API and other loopback ports:
+Core through the privileged Helper shared by installed copies of this app, which can stop an existing Core. Data isolation
+also depends on the target: macOS debug uses `com.follow.clash.debug`; Android uses `com.vps2vpn.client.dev` for debug
+and for release builds without the configured release signing key. Windows and Linux builds share the installed app's
+data directory and preferences. Safe mode suppresses host changes in the Dart/Core paths that honor the flag and
+leaves the Core's listeners and external controller unopened. Windows native startup can still clear stale system-proxy
+settings before the Dart guard runs; [#101](https://github.com/xydadada/vps2vpn-client/issues/101) tracks that boundary,
+so `SAFE_MODE` does not yet guarantee complete host isolation:
 
 ```bash
 flutter run --dart-define-from-file=env.json --dart-define=SAFE_MODE=true
@@ -200,9 +202,9 @@ its own, lets that run decide, and names the files that only failed together. Se
 also what CI runs; `tool/check_plugins.sh` does not descend into it. It must stay out of `flutter test`, because a test
 run of `plugins/setup` would execute the build hook itself.
 
-Native plugin code under `plugins/*/{linux,macos,windows}` is compiled by the CI `desktop` job, which runs
-`flutter build <platform> --debug` on every branch push, and by the release matrix on a tag; `tool/check_plugins.sh`
-only analyzes and tests the Dart side.
+`tool/check_plugins.sh` only analyzes and tests the Dart side. The fork's automatic verification does not include
+a desktop Flutter build matrix. The manual Windows and Android workflows compile their respective applications;
+macOS and Linux native plugin changes still need a build on the corresponding platform.
 
 Root `flutter test` only discovers the root package's `test/` directory by default. Include bundled plugin Dart tests by passing paths explicitly, or run `flutter test` from that plugin package directory, or run `bash tool/check_plugins.sh` to analyze and test every plugin package the way CI does. Native plugin tests under platform folders are not run by `flutter test`.
 
@@ -232,8 +234,8 @@ What those suites own:
 
 ## Native Component Verification
 
-The CI Go-wrapper checks can be reproduced without CGO. They cover the Android files too, except the cgo one in
-`timezone/`, which only the gomobile build compiles:
+These focused local Go-wrapper checks run without CGO. The Android vet command covers its platform files except
+the cgo one in `timezone/`, which only the gomobile build compiles. The full CI commands are listed under Verify:
 
 ```bash
 cd core
@@ -266,147 +268,86 @@ export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
 Always-on VPN entry, system VPN revoke, actual permission UI, and rapid device start/stop still require Android device or
 emulator validation; Kotlin compilation cannot prove those system callbacks.
 
-## Changelog And Release
+## Fork Builds And Publishing
 
-The changelog is derived from Conventional Commits by `tool/changelog.dart` and written to two committed files:
-`CHANGELOG.md` for readers and `changelog.json` for the renderers. See `.agents/rules.md` for the `Changelog:` trailers
-that decide the wording.
+`HANDOFF.md` records the fork's current release status and verification evidence. The checked-in build workflows
+are manual (`workflow_dispatch`), with publishing disabled by default:
 
-The app ships no changelog of its own. `render release` appends the released version as JSON inside an HTML comment
-(`<!-- flclash:changelog:json … -->`), so the release body GitHub already returns to `checkForUpdate` carries the
-notes shown in the update dialog. `parseReleaseChangelog` reads that block and falls back to the English
-bullets when a release predates it.
+| Workflow | Purpose | Explicit publishing option |
+| --- | --- | --- |
+| `.github/workflows/vps2vpn.yaml` | Build the Windows installer and run takeover checks on a disposable runner | `publish=true` signs update payloads and uploads a `test-<version>` prerelease |
+| `.github/workflows/android.yaml` | Build the signed Android APK and run emulator checks | `publish=true` adds the update signature and uploads a `test-android-<version>` prerelease; experiment builds cannot publish |
+| `e2e.yaml`, `coexist.yaml`, `harsh.yaml`, `screenshots.yaml`, `android-probe.yaml`, `android-testlab.yaml` | Explicitly requested installer, coexistence, UI, or Android investigations | Read each workflow's inputs and host effects before dispatching it |
+
+A prerelease is promoted separately by the maintainer after review. A normal source change needs a branch and PR;
+it does not require a tag, workflow dispatch, or Release. Do not infer publishing authorization from a request to
+review or test code.
+
+### Retained Upstream Changelog Tools
+
+`tool/changelog.dart` and `tool/release.sh` came from upstream FlClash and retain upstream repository links and
+release assumptions. The fork's publishing workflows are listed above. In particular, `tool/release.sh --push`
+creates commits/tags and pushes them; its comments about automatic upstream publication do not describe the
+workflows present here.
+
+The retained changelog tool derives `CHANGELOG.md` and `changelog.json` from Conventional Commits and supports
+`Changelog:` trailers described in `.agents/rules.md`. Its local verification/rendering commands remain useful
+when maintaining that upstream history:
 
 ```bash
-dart run tool/changelog.dart verify                  # what CI checks
-dart run tool/changelog.dart release --version 0.8.96
-dart run tool/changelog.dart build --unreleased      # changelog.json only, includes untagged work
-dart run tool/changelog.dart markdown                # CHANGELOG.md from changelog.json after a hand edit
+dart run tool/changelog.dart verify
+dart run tool/changelog.dart markdown
 dart run tool/changelog.dart render release --out release.md
 dart run tool/changelog.dart render telegram --out telegram.md
 ```
 
-Releasing a stable version, in order:
-
-```bash
-tool/bump_version.sh major
-dart run tool/changelog.dart release --version 0.8.96
-# edit changelog.json, then:
-dart run tool/changelog.dart markdown
-dart run tool/changelog.dart verify
-git commit -am "chore(release): v0.8.96"
-git tag v0.8.96
-git push origin main && git push origin v0.8.96
-```
-
-The tag decides the version, not a commit. A release tag is `vX.Y.Z`, `vX.Y.Z-pre.N`, or `vX.Y.Z-pre.N+M`, where `+M`
-rebuilds prerelease N after a fix; the `version` job rejects any other `v*` tag. It writes `X.Y.Z` from the tag into
-`pubspec.yaml` for the build and upload jobs, with a build number of the tag run's UTC `YYYYMMDDHH`, raised above the
-committed one when that is not already larger, because Android refuses an update with a lower versionCode. The app's
-version name stays `X.Y.Z` for a prerelease too: `compareVersions` reads only numbers. The build number in
-`pubspec.yaml` stays fixed; a local build that must install over a CI one passes its own
-`--build-number`.
-
-Push the tag by name. Every release tag here is lightweight, and `--follow-tags` carries annotated tags only: it skips a
-lightweight one silently, so the branch lands, the tag does not, and the release workflow never fires.
-
-`tool/release.sh` drives both paths so the ordering below cannot be got wrong by hand. It resolves the version (bumping
-the patch when pubspec still names an already tagged one), prints the notes the tag would ship, and only pushes with
-`--push`:
-
-```bash
-tool/release.sh pre --dry-run            # plan and notes, changes nothing
-tool/release.sh pre --push               # tag vX.Y.Z-pre.N on HEAD, push; no commit
-tool/release.sh pre --rebuild --push     # tag vX.Y.Z-pre.N+M on HEAD after a fix
-tool/release.sh stable --push            # changelog, pause for edits, chore(release) commit, tag, push
-```
-
-`--push` goes to `origin`; `--remote NAME` pushes to another remote instead, such as the public repository in a
-checkout whose `origin` is a private mirror.
-
-The release commit comes before the tag on purpose: the generated wording is reviewable in the diff before it ships, and
-the tag is what `render release` reads. CI never writes back to the repository; it only runs `verify`.
-
-The generated notes are a draft. `release.sh stable` stops after `release` so the new version in `changelog.json` can be
-edited, then rewrites `CHANGELOG.md` with `markdown` and runs `verify` before it commits; a failed `verify` stops
-again for another edit. `--yes` skips the stop and commits the generated notes. In the version being released:
-
-- Reword an entry's `text` or `scope`, or write an entry for a commit git would not collect, such as a `refactor`
-  users notice; its `id` is any commit in the range.
-- `"merges": ["<id>", …]` on an entry folds those commits into it, so they need no entry of their own.
-- `"omit": ["<id>", …]` on the version leaves commits out of its notes: internal fixes, or work behind a flag the
-  release ships off, such as MITM under `rsFeature`.
-
-`verify` holds every commit git derives to an entry in its group, a merge or an omission, and every id, merge and
-omission to the version's range. It also checks the newest version before its tag exists, so the release commit is
-checked before it is tagged. `release` and `build` keep every stable version `changelog.json` already records as
-written and derive only the new one, so an edit outlives later releases.
-
-Entries at or below `v0.8.96` are frozen: they predate the pipeline, live under the `<!-- changelog:frozen -->` marker
-in `CHANGELOG.md`, and are never regenerated.
-
-`verify` compares a version only when its tag is reachable from `HEAD`, because that is the same scope the builder walks
-(`git tag --merged`). A branch cut before the newest release cannot derive that version at all, so `verify` names it as
-skipped and moves on instead of reporting drift that does not exist.
-
-Prerelease tags (`v0.8.96-pre.N[+M]`) skip the release commit, and CI renders their notes with `build --unreleased` for
-the Telegram post. They publish no GitHub release, so the update dialog never sees them. `build --unreleased` reads the
-version from `pubspec.yaml`, which the upload job has already set from the tag, and refuses to collect anything while
-`v<that version>` is tagged, so a prerelease tag must name the next, untagged `X.Y.Z`. The changelog builder walks
-stable tags only and ignores a `+M` tag.
-
+`markdown` and `render` write local files. `verify` checks only versions whose tags are reachable from `HEAD`,
+so skipped versions do not mean their history was validated. The fork's source-verification workflow does not
+run this changelog tool or publish its output. Keep inherited release notes separate from claims about a new
+vps2vpn release.
 
 ## Verify
 
-In the public repository every branch push runs the `dart` job; in the private
-`origin` every check job runs only when started by hand (`workflow_dispatch`).
-The `dart` job performs these root-package checks in order:
+`.github/workflows/verify.yaml` runs on pushes, pull requests, and manual dispatch, with read-only repository
+contents permission. It verifies source; it does not publish installers or Releases. Its jobs are:
+
+- `go`: validate and apply the hash-pinned Core patches, run the wrapper tests (including the race detector) and
+  vet with `with_gvisor`, and cross-build the Windows Core.
+- `dart`: install the pinned Flutter/Go/Rust toolchains and Linux native build dependencies, enforce the root
+  lockfile, analyze, run the root test bundle with coverage, check bundled plugins, and analyze/test `setup_hooks`.
+- `rust`: test the Rust API and Helper on Linux and Windows, enabling the Helper's `windows-service` feature on Windows.
+
+The root-package part of the Dart job is:
 
 ```bash
-bash tool/hooks/test.sh
-flutter pub get
-dart format --output=none --set-exit-if-changed lib test tool plugins
+flutter pub get --enforce-lockfile
 flutter analyze --no-fatal-infos
-dart run tool/changelog.dart verify   # main and tags only
 dart run tool/test.dart -- --reporter expanded --coverage
-dart run tool/check_coverage.dart coverage/lcov.info 75
+bash tool/check_plugins.sh
 ```
 
-`tool/hooks/` holds the scripts the git hooks run, and `tool/hooks/test.sh` runs every `*_test.sh` beside them, so a
-new hook script needs only its test file next to it, not a workflow step.
+The pure Dart build-hook checks run from `plugins/setup/setup_hooks`:
 
-Run `flutter analyze --no-fatal-infos` before committing; CI runs the same command and fails on a warning or error.
+```bash
+dart pub get --enforce-lockfile
+dart analyze
+dart test --reporter expanded
+```
 
-Release builds run only for `v*` tag pushes; pull requests trigger nothing.
-Root analysis excludes `plugins/**`, and root tests do not discover nested
-plugin packages, so parallel jobs validate the rest from their own package
-directories: `plugins` (local Flutter packages and the setup build tool), `go`
-(the Core wrapper, plus a vet of the Android files), `android` (JVM unit tests
-for `:common`, `:service` and `:app`, with the Flutter compile tasks excluded
-and the gomobile AAR built for one ABI), `rust` (both crates), and a
-Windows runner for the helper's `windows-service` feature. On branch pushes a
-`desktop` job also compiles a debug build per desktop platform; a tag skips it,
-since its release matrix compiles the same native code. Release builds run only
-in the public repository and start alongside the checks; `upload` publishes
-only once every build and every check job passes.
+The workflow uploads `coverage/lcov.info` and `.dart_tool/test_bundles/report.json` even when a test step fails.
+It does not currently enforce the 75-percent coverage floor, Dart formatting, or hook-script checks. Those are
+additional local checks in `make check`; `make coverage` explicitly applies the local coverage floor.
 
-`bash tool/check_plugins.sh` is that plugin gate, and CI runs the same script.
-It discovers every `plugins/*/pubspec.yaml`, analyzes each package, and runs
-`flutter test` wherever `test/*_test.dart` exists. Adding a plugin package needs
-no workflow edit.
+`tool/hooks/` holds the git-hook scripts. Run `bash tool/hooks/test.sh` after changing one; it discovers each
+`*_test.sh` beside them. `tool/check_plugins.sh` discovers the top-level local plugin packages, while
+`setup_hooks` needs the separate commands above. Root analysis and tests alone do not cover those packages.
 
-### CI Caches
+### Toolchains And Caches
 
-A run restores only cache entries saved on its own branch or tag, or on the default branch (`main`), and the
-repository holds 10 GB before evicting the least recently used entries. Every release is a new tag that no later run
-reads from, so `BRANCH_CACHE` turns caching off in tag runs, whose entries would evict what `dev` saved. Release
-builds therefore start cold; branch runs, chiefly `dev`, keep the caches.
-
-- setup-go keys its entry on the `cache-dependency-path` files alone and saves only on a miss, so jobs listing the
-  same files share one entry holding the build cache of whichever finished first. `desktop` and `android` each add
-  the file that drives their Core build to get an entry of their own.
-- setup-gradle writes only on the default branch unless told otherwise, so `android` lets `dev` write as well. Its
-  entries are keyed by job, which is one more reason the release build gains nothing from caching.
+The current verification pins live in `verify.yaml`: Flutter and Go in its `env`, Rust in the install steps.
+Keep the corresponding manual Windows/Android build pins aligned when upgrading. Verification uses the Flutter,
+Go, and Rust action caches; inspect the workflow's actual keys and workspaces when diagnosing a stale cache.
+The removed upstream `BRANCH_CACHE`, `desktop`, `upload`, and tag-release jobs do not describe this fork's CI.
 
 ## Worktree Tooling
 
