@@ -8,7 +8,7 @@ on:
       tag:
         description: Release tag that carries the setup .exe
         required: true
-        default: v1.0.33
+        default: v1.0.34
       scenarios:
         description: Scenarios, as a JSON list
         default: '["proxy-restore", "dirty", "chaos", "users", "soak", "protocols"]'

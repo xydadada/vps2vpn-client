@@ -9,7 +9,7 @@ on:
       tag:
         description: Release tag that carries the setup .exe
         required: true
-        default: v1.0.33
+        default: v1.0.34
       from:
         description: Older releases to update from in the app's way, comma separated; latest = the current latest release (empty = skip)
         required: false
