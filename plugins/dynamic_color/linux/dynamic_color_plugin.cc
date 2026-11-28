@@ -15,12 +15,16 @@ struct _DynamicColorPlugin {
 
 G_DEFINE_TYPE(DynamicColorPlugin, dynamic_color_plugin, g_object_get_type())
 
-static int get_accent_color(GtkWidget* widget) {
-  GdkRGBA color;
+static gboolean get_accent_color(GtkWidget* widget, int* out_argb) {
+  GdkRGBA color{};
   GtkStyleContext* context = gtk_widget_get_style_context(widget);
-  gtk_style_context_lookup_color(context, "theme_selected_bg_color", &color);
-  return lround(color.alpha * 255) << 24 | lround(color.red * 255) << 16 |
-         lround(color.green * 255) << 8 | lround(color.blue * 255);
+  if (!gtk_style_context_lookup_color(context, "theme_selected_bg_color",
+                                      &color)) {
+    return FALSE;
+  }
+  *out_argb = lround(color.alpha * 255) << 24 | lround(color.red * 255) << 16 |
+              lround(color.green * 255) << 8 | lround(color.blue * 255);
+  return TRUE;
 }
 
 static gboolean get_xdg_portal_accent_color(int* out_argb) {
@@ -67,11 +71,13 @@ static void dynamic_color_plugin_handle_method_call(DynamicColorPlugin* self,
   const gchar* method = fl_method_call_get_name(method_call);
   if (strcmp(method, "getAccentColor") == 0) {
     int argb;
-    if (!get_xdg_portal_accent_color(&argb)) {
+    gboolean has_color = get_xdg_portal_accent_color(&argb);
+    if (!has_color) {
       FlView* view = fl_plugin_registrar_get_view(self->registrar);
-      argb = get_accent_color(GTK_WIDGET(view));
+      has_color = get_accent_color(GTK_WIDGET(view), &argb);
     }
-    g_autoptr(FlValue) result = fl_value_new_int(argb);
+    g_autoptr(FlValue) result =
+        has_color ? fl_value_new_int(argb) : fl_value_new_null();
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   } else {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
