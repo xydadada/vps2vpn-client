@@ -540,6 +540,7 @@
   "customResources": "自定义",
   "unknownNetworkError": "未知网络错误",
   "backupFromNewerVersion": "该备份来自更高版本的应用，请先更新应用再恢复",
+  "backupTooLarge": "备份会超过 2000 个文件或 256 MB，超出恢复的上限。请删掉一些订阅或脚本后重试",
   "networkTimeoutError": "请求超时，请检查网络或代理后重试",
   "networkHostLookupError": "无法解析服务器地址，请确认链接正确且 DNS 可用",
   "monochromeIcon": "单色图标",

@@ -13,9 +13,22 @@ class BackupAction extends _$BackupAction {
 
   Future<bool> backup(BackupDelivery deliver) {
     return _withWorkDir((workDir) async {
-      return deliver(await _createArchive(workDir));
+      final String archivePath;
+      try {
+        archivePath = await _createArchive(workDir);
+      } on BackupException catch (e) {
+        throw MessageException(_message(e.failure));
+      }
+      return deliver(archivePath);
     });
   }
+
+  String _message(BackupFailure failure) => switch (failure) {
+    BackupFailure.invalid => currentAppLocalizations.invalidBackupFile,
+    BackupFailure.newerVersion =>
+      currentAppLocalizations.backupFromNewerVersion,
+    BackupFailure.tooLarge => currentAppLocalizations.backupTooLarge,
+  };
 
   Future<bool> restore(RestoreOption option, BackupFetch fetch) {
     return _withWorkDir((workDir) async {
@@ -31,11 +44,7 @@ class BackupAction extends _$BackupAction {
           stagingDirPath: stagingDirPath,
         ));
       } on BackupException catch (e) {
-        throw MessageException(switch (e.failure) {
-          BackupFailure.invalid => currentAppLocalizations.invalidBackupFile,
-          BackupFailure.newerVersion =>
-            currentAppLocalizations.backupFromNewerVersion,
-        });
+        throw MessageException(_message(e.failure));
       }
       await applyRestore(data, option, stagingDirPath: stagingDirPath);
       return true;
