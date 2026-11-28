@@ -4,6 +4,7 @@ part of '../action.dart';
 class CommonAction extends _$CommonAction {
   CoreController get _core => ref.read(coreHandlerProvider);
   bool _isUpdatingTraffic = false;
+  bool _isInstallingUpdate = false;
   CancelToken? _updateCancelToken;
 
   @override
@@ -283,34 +284,63 @@ class CommonAction extends _$CommonAction {
   }
 
   Future<void> installUpdate() async {
+    if (_isInstallingUpdate) return;
     final download = ref.read(updateDownloadStateProvider);
     if (download is! UpdateReady) return;
-    if (system.isAndroid) {
-      ref.read(updateDownloadStateProvider.notifier).value = null;
-      final status = await app?.installPackage(download.path);
-      await clearUpdateDownloads();
-      if (status != null && packageInstallFailed(status)) {
+    final installer = ref.read(updateInstallerProvider);
+    bool isCurrent() =>
+        ref.mounted &&
+        identical(ref.read(updateDownloadStateProvider), download);
+    _isInstallingUpdate = true;
+    try {
+      final valid =
+          !vps2vpnUpdatesDisabled || await installer.verify(download.path);
+      if (!isCurrent()) return;
+      if (!valid) {
+        ref.read(updateDownloadStateProvider.notifier).value = null;
+        final zh = currentAppLocalizations.localeName.startsWith('zh');
+        await _showUpdateFailure(
+          zh
+              ? '安装包未通过完整性验证，请重新下载后再试。'
+              : 'The installer did not pass its integrity check. '
+                    'Download it again before installing.',
+        );
+        return;
+      }
+      if (installer.isAndroid) {
+        final status = await installer.installPackage(download.path);
+        if (!isCurrent()) return;
+        ref.read(updateDownloadStateProvider.notifier).value = null;
+        // Startup removes old APKs; a late install must not erase a new download.
+        if (status != null && packageInstallFailed(status)) {
+          await _showUpdateFailure(currentAppLocalizations.updateInstallFailed);
+        }
+        return;
+      }
+      final started = installer.runWindows(download.path);
+      if (started == true) {
+        await ref.read(systemActionProvider.notifier).handleExit();
+      } else if (started == false) {
+        final zh = currentAppLocalizations.localeName.startsWith('zh');
+        await _showUpdateFailure(
+          !vps2vpnUpdatesDisabled
+              ? currentAppLocalizations.updateInstallFailed
+              : zh
+              ? '没能开始安装：安装需要管理员同意。请再安装一次，在弹出的窗口里点击「是」；'
+                    '如果它要管理员密码而你没有，就到下载页下载安装包，交给这台电脑的管理员安装。'
+              : 'The install did not start: it needs an administrator to allow '
+                    'it. Try the install again and click "Yes" in the window '
+                    'that opens; if it asks for an administrator password you '
+                    'do not have, download the installer from the download '
+                    "page and ask this computer's administrator to run it.",
+        );
+      }
+    } on Exception {
+      if (isCurrent()) {
         await _showUpdateFailure(currentAppLocalizations.updateInstallFailed);
       }
-      return;
-    }
-    final started = windows?.runas(download.path, windowsUpdateArguments(pid));
-    if (started == true) {
-      await ref.read(systemActionProvider.notifier).handleExit();
-    } else if (started == false) {
-      final zh = currentAppLocalizations.localeName.startsWith('zh');
-      await _showUpdateFailure(
-        !vps2vpnUpdatesDisabled
-            ? currentAppLocalizations.updateInstallFailed
-            : zh
-            ? '没能开始安装：安装需要管理员同意。请再安装一次，在弹出的窗口里点击「是」；'
-                  '如果它要管理员密码而你没有，就到下载页下载安装包，交给这台电脑的管理员安装。'
-            : 'The install did not start: it needs an administrator to allow '
-                  'it. Try the install again and click "Yes" in the window '
-                  'that opens; if it asks for an administrator password you '
-                  'do not have, download the installer from the download '
-                  "page and ask this computer's administrator to run it.",
-      );
+    } finally {
+      _isInstallingUpdate = false;
     }
   }
 

@@ -9,6 +9,28 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _SocketOverrides extends HttpOverrides {}
 
+class _RenameFailure extends Fake implements File {
+  _RenameFailure(this.delegate);
+
+  final File delegate;
+
+  @override
+  Future<RandomAccessFile> open({FileMode mode = FileMode.read}) =>
+      delegate.open(mode: mode);
+
+  @override
+  Future<File> rename(String newPath) async =>
+      throw const FileSystemException('Fixture package rename denied');
+}
+
+final class _RenameOverrides extends IOOverrides {
+  @override
+  File createFile(String path) {
+    final file = super.createFile(path);
+    return path.endsWith('client.exe.part') ? _RenameFailure(file) : file;
+  }
+}
+
 // A throwaway Ed25519 key (not the release key) and its openssl signatures of
 // "release payload" under each file name the server below serves.
 const _testKey =
@@ -71,6 +93,96 @@ void main() {
   });
 
   tearDown(() => server.close(force: true));
+
+  test('a signature symlink cannot overwrite an unrelated file', () async {
+    if (Platform.isWindows) return;
+    final dir = await Directory.systemTemp.createTemp('v2v-release-sig-link-');
+    addTearDown(() => dir.delete(recursive: true));
+    final victim = File('${dir.path}/victim.txt');
+    await victim.writeAsString('untouched');
+    final link = Link('${dir.path}/client.exe.sig');
+    await link.create(victim.path);
+
+    final downloaded = await _localSocket(
+      () => vpsDownloadRelease(
+        Uri.parse('https://127.0.0.1:${server.port}/client.exe'),
+        dir,
+        pinnedSha256: {fingerprint},
+        publicKeyHex: _testKey,
+      ),
+    );
+
+    expect(await downloaded.readAsString(), 'release payload');
+    expect(await victim.readAsString(), 'untouched');
+    expect(
+      await FileSystemEntity.type(link.path, followLinks: false),
+      FileSystemEntityType.file,
+    );
+    expect(
+      await File(link.path).readAsString(),
+      '${_signatures['client.exe']}\n',
+    );
+    expect(dir.listSync().whereType<Directory>(), isEmpty);
+  });
+
+  test(
+    'a signature write failure refuses ready and keeps the old installer',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'v2v-release-sig-fail-',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final original = File('${dir.path}/client.exe');
+      await original.writeAsString('previous installer');
+      await Directory('${original.path}.sig').create();
+
+      await expectLater(
+        _localSocket(
+          () => vpsDownloadRelease(
+            Uri.parse('https://127.0.0.1:${server.port}/client.exe'),
+            dir,
+            pinnedSha256: {fingerprint},
+            publicKeyHex: _testKey,
+          ),
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await original.readAsString(), 'previous installer');
+      expect(dir.listSync().whereType<Directory>().length, 1);
+    },
+  );
+
+  test(
+    'an installer rename failure restores the old installer and signature',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'v2v-release-file-fail-',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final target = File('${dir.path}/client.exe');
+      await target.writeAsString('previous installer fixture');
+      final sidecar = File('${target.path}.sig');
+      await sidecar.writeAsString('previous signature fixture');
+
+      await expectLater(
+        IOOverrides.runWithIOOverrides(
+          () => _localSocket(
+            () => vpsDownloadRelease(
+              Uri.parse('https://127.0.0.1:${server.port}/client.exe'),
+              dir,
+              pinnedSha256: {fingerprint},
+              publicKeyHex: _testKey,
+            ),
+          ),
+          _RenameOverrides(),
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await target.readAsString(), 'previous installer fixture');
+      expect(await sidecar.readAsString(), 'previous signature fixture');
+      expect(dir.listSync().whereType<Directory>(), isEmpty);
+    },
+  );
 
   test(
     'a predictable part symlink cannot overwrite an unrelated file',

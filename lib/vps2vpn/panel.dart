@@ -15,7 +15,6 @@ import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/http.dart';
 import 'package:fl_clash/common/path.dart';
-import 'package:fl_clash/common/print.dart';
 import 'package:fl_clash/common/yaml.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -23,6 +22,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/line_watch.dart';
 import 'package:fl_clash/vps2vpn/node_status.dart';
+import 'package:fl_clash/vps2vpn/update_integrity.dart';
 import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1319,7 +1319,6 @@ final _reservedReleaseName = RegExp(
   r'^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)',
   caseSensitive: false,
 );
-const _maxReleaseBytes = 512 * 1024 * 1024;
 const _releaseTransferTimeout = Duration(minutes: 8);
 final _activeReleaseDownloads = <String>{};
 
@@ -1579,7 +1578,7 @@ Future<File> _downloadReleaseVia(
     try {
       await for (final chunk in res.timeout(const Duration(seconds: 60))) {
         size += chunk.length;
-        if (size > _maxReleaseBytes) {
+        if (size > vpsInstallerMaxBytes) {
           throw const HttpException('Release file too large');
         }
         if (elapsed.elapsed > _releaseTransferTimeout) {
@@ -1613,27 +1612,56 @@ Future<File> _downloadReleaseVia(
     )) {
       throw const VpsUpdateRejected('badSignature');
     }
-    // Never delete a previously verified release before this rename. On
-    // Windows an antivirus scan of the installer it replaces can hold that
-    // file for a moment.
-    for (var attempt = 1; ; attempt++) {
-      try {
-        final kept = await part.rename(out.path);
-        try {
-          await File('${out.path}.sig').writeAsString(signature);
-        } on FileSystemException {
-          commonPrint.log('Keeping the update signature failed');
-        }
-        return kept;
-      } on FileSystemException {
-        if (!Platform.isWindows || attempt >= 5) rethrow;
-        await Future<void>.delayed(Duration(milliseconds: 200 * attempt));
+    final stagedSignature = File(
+      '${staging.path}${Platform.pathSeparator}signature.part',
+    );
+    await stagedSignature.writeAsString(signature, flush: true);
+    final signaturePath = '${out.path}.sig';
+    final backupPath = '${staging.path}${Platform.pathSeparator}signature.old';
+    final oldType = await FileSystemEntity.type(
+      signaturePath,
+      followLinks: false,
+    );
+    final backup = switch (oldType) {
+      FileSystemEntityType.file => await _renameRelease(
+        () => File(signaturePath).rename(backupPath),
+      ),
+      FileSystemEntityType.link => await _renameRelease(
+        () => Link(signaturePath).rename(backupPath),
+      ),
+      FileSystemEntityType.notFound => null,
+      _ => throw const FileSystemException('Signature is not a regular file'),
+    };
+    var signatureKept = false;
+    try {
+      await _renameRelease(() => stagedSignature.rename(signaturePath));
+      signatureKept = true;
+      return await _renameRelease(() => part.rename(out.path));
+    } catch (_) {
+      if (backup is File) {
+        await _renameRelease(() => backup.rename(signaturePath));
+      } else if (backup is Link) {
+        await _renameRelease(() => backup.rename(signaturePath));
+      } else if (signatureKept) {
+        await File(signaturePath).delete();
       }
+      rethrow;
     }
   } finally {
     client?.close(force: true);
     if (staging != null) {
       await staging.delete(recursive: true);
+    }
+  }
+}
+
+Future<T> _renameRelease<T>(Future<T> Function() rename) async {
+  for (var attempt = 1; ; attempt++) {
+    try {
+      return await rename();
+    } on FileSystemException {
+      if (!Platform.isWindows || attempt >= 5) rethrow;
+      await Future<void>.delayed(Duration(milliseconds: 200 * attempt));
     }
   }
 }
@@ -1672,6 +1700,6 @@ Future<String?> _fetchSignature(HttpClient client, Uri url, String name) async {
   }
   return _readBoundedUtf8(
     res,
-    maxBytes: 4096,
+    maxBytes: vpsSignatureMaxBytes,
   ).timeout(const Duration(seconds: 15));
 }
