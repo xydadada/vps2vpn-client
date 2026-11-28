@@ -167,7 +167,9 @@ final _toldDown = <String>{};
 /// rebuilt around a server going into or out of maintenance.
 final vpsNodeStatusSyncProvider = Provider.autoDispose<void>((ref) {
   if (Platform.environment.containsKey('FLUTTER_TEST')) return;
-  final member = ref.watch(vpsMemberProvider).value?.member;
+  final result = ref.watch(vpsMemberProvider);
+  if (result.isLoading) return;
+  final member = result.value?.member;
   if (member == null) return;
   final nodes = member.nodes ?? const <VpsNodeStatus>[];
   scheduleMicrotask(() {

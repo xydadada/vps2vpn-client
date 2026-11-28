@@ -1,4 +1,5 @@
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/node_status.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,7 +88,9 @@ void main() {
   });
 
   test('down lines go to the Core last, crowded ones next to last', () {
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [currentProfileProvider.overrideWithValue(null)],
+    );
     addTearDown(container.dispose);
     final notifier = container.read(vpsNodeStatusProvider.notifier);
     expect(
@@ -129,5 +132,42 @@ void main() {
     );
     expect(loud.toJson()['vps2vpn-down-lines'], ['Osaka Reality']);
     expect(loud.toJson()['vps2vpn-busy-lines'], ['Tokyo Reality']);
+  });
+
+  test('maintenance state belongs to one profile and subscription URL', () {
+    var profile = const Profile(
+      id: 1,
+      url: 'https://panel.example.com/s/TestToken0123456789',
+      autoUpdateDuration: Duration(hours: 1),
+    );
+    final container = ProviderContainer(
+      overrides: [currentProfileProvider.overrideWith((ref) => profile)],
+    );
+    addTearDown(container.dispose);
+    final held = container.listen(vpsNodeStatusProvider, (_, _) {});
+    addTearDown(held.close);
+    final notifier = container.read(vpsNodeStatusProvider.notifier);
+    final down = VpsNodeStatus.fromJson(_osaka)!;
+
+    notifier.set([down]);
+    profile = profile.copyWith(
+      label: 'Renamed',
+      lastUpdateDate: DateTime(2026),
+    );
+    container.invalidate(currentProfileProvider);
+    expect(container.read(vpsNodeStatusProvider), [down]);
+
+    profile = profile.copyWith(id: 2);
+    container.invalidate(currentProfileProvider);
+    expect(container.read(vpsNodeStatusProvider), isEmpty);
+    expect(
+      vpsLinesToAvoid(container.read(vpsNodeStatusProvider)).down,
+      isEmpty,
+    );
+
+    notifier.set([down]);
+    profile = profile.copyWith(url: 'https://provider.example/subscription');
+    container.invalidate(currentProfileProvider);
+    expect(container.read(vpsNodeStatusProvider), isEmpty);
   });
 }
