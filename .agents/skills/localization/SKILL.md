@@ -21,14 +21,10 @@ Do not use this for README translation sync or manual edits to generated localiz
    ```
 
 2. Inspect the smallest relevant call sites and nearby ARB keys.
-3. Add or update every source ARB:
+3. Add or update both source ARB files. This fork intentionally supports only English and Chinese; do not recreate
+   the removed Japanese, Russian, French, Spanish, or Korean files as part of a text edit (see `HANDOFF.md`):
    - `arb/intl_en.arb`
    - `arb/intl_zh.arb`
-   - `arb/intl_ja.arb`
-   - `arb/intl_ru.arb`
-   - `arb/intl_fr.arb`
-   - `arb/intl_es.arb`
-   - `arb/intl_ko.arb`
 4. Replace inline strings with existing project accessors:
    - Widgets with `BuildContext`: `context.appLocalizations.key` from `lib/common/context.dart`.
    - Controllers/providers/non-widget code: `currentAppLocalizations.key` from `lib/common/app_localizations.dart`.

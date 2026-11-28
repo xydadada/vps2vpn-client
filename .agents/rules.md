@@ -209,19 +209,15 @@ leaving a repo-wide policy as a comment reaches only the reader of that one file
 - The desktop delivery path in `core/server.go` must not report failures through `logError`. A log event is published to
   the log subscriber, batched, and handed back to `send`, so a send failure reported that way feeds itself; use
   `logDeliveryError`, which writes to stderr and latches until a frame gets through or the next connection is installed.
-  A write that fails without putting a byte on the wire — host backpressure hitting `ipcWriteTimeout`, or a payload above
-  `maxIPCFrameSize` — drops that one frame and keeps the connection: the stream is still framed correctly, and tearing it
-  down here ends the read loop, and with it the Core process. A half-written frame whose write merely timed out is
-  resumed for as long as the stall lasts: Windows Modern Standby suspends the app while the Helper's Core keeps running,
-  so the host can stop draining for hours and still come back, and go-winio reports the expiry as its own `ErrTimeout`
-  rather than `os.ErrDeadlineExceeded`, which is why `send` checks `Timeout()`. The wait has no cap on purpose, and
-  `send` holds `writeMu` throughout, so every other frame — method responses and the single batcher goroutine behind
-  the event queues — waits behind the stalled one. Memory is bounded by the queues; what gives is delivery: the state
-  queue fills and `enqueueState` starts dropping, which is the case the `UpdatingAction` sweep above exists for. Nothing
-  on the Dart side restarts the Core over a stall: `CoreRpcClient` times each pending request out on its own and hands
-  the caller `null` (a `no_response` exception for message methods), and the sweep clears core-scope updating state
-  minutes later. Only a half-written frame that fails outright desynchronizes the stream, and that is the one case
-  `send` closes on.
+  An event frame that fails before writing any bytes is dropped without closing the connection. Method replies use
+  `sendReply` and close on the same failure, so an undelivered answer cannot leave the caller waiting indefinitely.
+  A partially written frame resumes after timeouts within `maxIPCWriteStall` (60 seconds from the first stalled
+  timeout); each successful write resets that stall budget. Windows Modern Standby can suspend the app while the
+  Helper's Core keeps running, but the connection no longer waits without a bound. go-winio reports its own
+  `ErrTimeout`, so timeout detection uses `Timeout()` rather than only `os.ErrDeadlineExceeded`.
+  `sendFrame` holds `writeMu` while resuming. Other frames wait and bounded event queues may drop state updates,
+  which the `UpdatingAction` sweep reconciles. A hard partial-write error or an exhausted stall budget closes the
+  connection and enters the existing disconnect/recovery path; RPC deadlines remain a separate safeguard.
 - Core method handlers are plain functions that return their answer, registered in the `methodHandlers` table in
   `core/method.go` through the adapter matching their shape. `dispatchMethodCall` already runs every call on its own
   goroutine and `handleMethodCall` turns a panic into an `internal_error` answer, so a handler blocks for as long as its
@@ -745,7 +741,8 @@ The project has no design library: `material_ui`, `cupertino_ui` and the SDK's
 neither package. Widgets come from `package:flutter/widgets.dart` and components, the
 `ThemeData` and the `ColorScheme` from `prism_ui`.
 
-Strings live in `arb/intl_{en,zh,ja,ru,fr,es,ko}.arb` — flat JSON. Add a key to all seven, then regenerate with
+Strings live in `arb/intl_{en,zh}.arb` — flat JSON. This fork supports English and Chinese only (see `HANDOFF.md`).
+Add a key to both current ARB files, then regenerate with
 `flutter gen-l10n`. A key missing from a locale is generated with its English text and reported as untranslated, so add
 the translation rather than leaving it out. The only metadata is in `intl_en.arb`: a message with more than one
 placeholder declares them in the order the text first uses them, under `@key.placeholders`, since `gen-l10n` otherwise
