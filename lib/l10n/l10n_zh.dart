@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'l10n.dart';
 
 // ignore_for_file: type=lint
@@ -3206,7 +3207,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mitmAndroidRootDesc =>
-      '未 root 时只能解密信任用户证书的应用，多为浏览器；root 后可解密所有应用。';
+      '未 root 时，只能解密信任用户证书的应用。root 可将 CA 加入系统证书库，但固定证书或使用独立证书库的应用仍可能拒绝它。';
 
   @override
   String get mitmCertificateLinuxTip => 'Flatpak 版浏览器需要手动导入导出的证书。';
@@ -3252,7 +3253,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mitmInstallSystemCaTip =>
-      '检测到 root，证书将以 Magisk、KernelSU 或 APatch 模块“FlClash MITM CA”加入系统信任的根证书。之后本机所有应用都会信任它，持有其私钥的人可以解密本机的 HTTPS 流量。如需撤销，可重新生成证书，或在 root 管理器中移除该模块并重启。若拒绝 root 授权，将改为安装用户证书。';
+      '检测到 root，证书将以 Magisk、KernelSU 或 APatch 模块“FlClash MITM CA”加入系统信任的根证书。使用系统证书库的应用可以信任它，但固定证书或使用独立证书库的应用仍可能拒绝它。持有其私钥的人可以解密信任该 CA 的 HTTPS 流量。如需撤销，可重新生成证书，或在 root 管理器中移除该模块并重启。若拒绝 root 授权，将改为安装用户证书。';
 
   @override
   String get mitmInstallUserCaTip =>
