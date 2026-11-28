@@ -198,6 +198,16 @@ void main() {
     );
   });
 
+  test('says an oversized script or icon set is too large', () {
+    expect(
+      userFacingErrorMessage(
+        const DownloadTooLargeException(32 << 20),
+        appLocalizations,
+      ),
+      appLocalizations.downloadTooLarge,
+    );
+  });
+
   group('a lost Core session', () {
     test('says the connection is gone when it has no cause', () {
       expect(

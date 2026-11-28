@@ -6986,6 +6986,12 @@ abstract class AppLocalizations {
   /// **'The subscription is too large to load'**
   String get subscriptionTooLarge;
 
+  /// No description provided for @downloadTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is too large to load'**
+  String get downloadTooLarge;
+
   /// No description provided for @subscriptionAnnounce.
   ///
   /// In en, this message translates to:

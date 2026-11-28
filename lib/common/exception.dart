@@ -38,3 +38,13 @@ final class SubscriptionTooLargeException implements Exception {
   @override
   String toString() => 'SubscriptionTooLargeException: over $limit bytes';
 }
+
+/// A script, icon set or module past its download limit.
+final class DownloadTooLargeException implements Exception {
+  final int limit;
+
+  const DownloadTooLargeException(this.limit);
+
+  @override
+  String toString() => 'DownloadTooLargeException: over $limit bytes';
+}

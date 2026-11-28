@@ -227,20 +227,27 @@ void main() {
       );
     });
 
+    test(
+      'a failed retry does not destroy an already verified installer',
+      () async {
+        final existing = File(join(directory.path, name));
+        await existing.writeAsBytes(package);
+        final corrupt = requestServing(
+          '$digest  ./$name\n',
+          utf8.encode('corrupt'),
+        );
 
-    test('a failed retry does not destroy an already verified installer', () async {
-      final existing = File(join(directory.path, name));
-      await existing.writeAsBytes(package);
-      final corrupt = requestServing('$digest  ./$name\n', utf8.encode('corrupt'));
+        await expectLater(
+          download(corrupt),
+          throwsA(isA<ReleaseNotVerifiedException>()),
+        );
 
-      await expectLater(
-        download(corrupt),
-        throwsA(isA<ReleaseNotVerifiedException>()),
-      );
-
-      expect(await existing.readAsBytes(), package);
-      expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
-    });
+        expect(await existing.readAsBytes(), package);
+        expect(directory.listSync().map((f) => f.path).toList(), [
+          existing.path,
+        ]);
+      },
+    );
 
     test('a network failure leaves a previous installer intact', () async {
       final existing = File(join(directory.path, name));
@@ -258,15 +265,20 @@ void main() {
       expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
     });
 
-    test('a verified replacement publishes only after checksum passes', () async {
-      final existing = File(join(directory.path, name));
-      await existing.writeAsString('old');
-      final downloader = requestServing('$digest  ./$name\n', package);
+    test(
+      'a verified replacement publishes only after checksum passes',
+      () async {
+        final existing = File(join(directory.path, name));
+        await existing.writeAsString('old');
+        final downloader = requestServing('$digest  ./$name\n', package);
 
-      expect(await download(downloader), existing.path);
-      expect(await existing.readAsBytes(), package);
-      expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
-    });
+        expect(await download(downloader), existing.path);
+        expect(await existing.readAsBytes(), package);
+        expect(directory.listSync().map((f) => f.path).toList(), [
+          existing.path,
+        ]);
+      },
+    );
 
     test('refuses an asset the listing does not name', () async {
       final request = requestServing('$digest  ./other.apk\n', package);
@@ -464,6 +476,31 @@ void main() {
       );
       final small = await request.getFileResponseForUrl(url, maxBytes: 6);
       expect(small.data, [1, 2, 3, 4, 5, 6]);
+      expect(direct.calls, 0);
+    });
+
+    test('getTextResponseForUrl is bounded and decodes the text', () async {
+      final (:request, :proxied, :direct) = routes(
+        proxied: (_) => ResponseBody(
+          Stream.fromIterable([
+            Uint8List.fromList(utf8.encode('a: ')),
+            Uint8List.fromList(utf8.encode('中文')),
+          ]),
+          200,
+          headers: {
+            HttpHeaders.contentLengthHeader: ['1'],
+          },
+        ),
+        direct: _status(200, 'must not be asked'),
+      );
+
+      await expectLater(
+        request.getTextResponseForUrl(url, maxBytes: 4),
+        throwsA(isA<DownloadTooLargeException>()),
+      );
+      final text = await request.getTextResponseForUrl(url, maxBytes: 9);
+      expect(text.data, 'a: 中文');
+      expect(text.statusCode, 200);
       expect(direct.calls, 0);
     });
 
