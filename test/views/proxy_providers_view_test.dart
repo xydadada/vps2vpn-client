@@ -7,6 +7,7 @@ import 'package:fl_clash/core/interface.dart';
 import 'package:fl_clash/core/method.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/pages/editor.dart';
+import 'package:fl_clash/providers/action.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/state.dart';
@@ -26,6 +27,17 @@ import '../plugins/code_forge/support.dart' show initEditorNative;
 import '../helpers/host_scaffold.dart';
 
 class _MockCoreHandlerInterface extends Mock implements CoreHandlerInterface {}
+
+class _GatedClashProvidersAction extends ClashProvidersAction {
+  final probes = <Completer<ClashProvider?>>[];
+
+  @override
+  Future<ClashProvider?> remoteProviderOf(ExternalProvider external) {
+    final probe = Completer<ClashProvider?>();
+    probes.add(probe);
+    return probe.future;
+  }
+}
 
 class _ProvidersSection extends ConsumerWidget {
   const _ProvidersSection();
@@ -86,8 +98,9 @@ void main() {
 
   ProviderContainer containerFor(
     WidgetTester tester,
-    List<ExternalProvider> providers,
-  ) {
+    List<ExternalProvider> providers, {
+    ClashProvidersAction? probeAction,
+  }) {
     const size = Size(1400, 1000);
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -97,6 +110,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+        if (probeAction != null)
+          clashProvidersActionProvider.overrideWith(() => probeAction),
       ],
     );
     addTearDown(container.dispose);
@@ -557,6 +572,59 @@ void main() {
     expect(find.textContaining('503 Service Unavailable'), findsNothing);
     expect(find.byType(AlertDialog), findsNothing);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('an older file probe cannot change the new provider menu', (
+    tester,
+  ) async {
+    final oldFile = providerFile('old-probe', 'payload:\n');
+    final nextFile = File(join(home.path, 'next-probe.bin'))
+      ..writeAsBytesSync([0, 1, 2]);
+    final action = _GatedClashProvidersAction();
+    final provider = _provider(
+      'changing',
+      type: 'Rule',
+      vehicleType: 'File',
+      path: oldFile.path,
+    );
+    final container = containerFor(tester, [provider], probeAction: action);
+    Future<void> waitForProbes(int count) async {
+      for (var i = 0; i < 100 && action.probes.length < count; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(action.probes, hasLength(count));
+    }
+
+    await pump(tester, container);
+    await waitForProbes(1);
+    container.read(providersProvider.notifier).value = [
+      provider.copyWith(path: nextFile.path),
+    ];
+    await tester.pump();
+    await waitForProbes(2);
+    action.probes[1].complete(null);
+    await tester.pumpAndSettle();
+    final l10n = currentAppLocalizations;
+    await openMenu(tester, 'changing');
+    expect(find.text(l10n.edit), findsNothing);
+    expect(find.text(l10n.sync), findsNothing);
+    await closeMenu(tester);
+
+    action.probes[0].complete(
+      const ClashProvider(
+        id: 1,
+        label: 'old remote',
+        url: 'https://example.test/rules.yaml',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openMenu(tester, 'changing');
+    expect(find.text(l10n.edit), findsNothing);
+    expect(find.text(l10n.sync), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
