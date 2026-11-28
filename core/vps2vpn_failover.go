@@ -305,15 +305,35 @@ func checkLineMoves(w *lineWatch) {
 		w.observe(nil)
 		return
 	}
-	moves := w.observe(currentLineGroups())
+	groups := currentLineGroups()
+	moves := w.observe(groups)
 	if len(moves) == 0 {
 		return
 	}
-	closed := closeOnMovedLines(trackedConns(), moves)
+	// Snapshot first so a reload after the identity check cannot add new connections to this batch.
+	conns := trackedConns()
+	moves = filterCurrentLineMoves(groups, moves)
+	closed := closeOnMovedLines(conns, moves)
 	for _, move := range moves {
 		log.Infoln("[vps2vpn] %s moved from %s to %s", move.group, move.from, move.to)
 	}
 	if closed > 0 {
 		log.Infoln("[vps2vpn] closed %d connections left on a line that went down", closed)
 	}
+}
+
+func filterCurrentLineMoves(groups []lineGroup, moves []lineMove) []lineMove {
+	proxies := tunnel.AllProxies()
+	unchanged := make(map[string]bool, len(groups))
+	for _, group := range groups {
+		current, ok := asWatchedGroup(proxies[group.name])
+		unchanged[group.name] = ok && current == group.id
+	}
+	kept := moves[:0]
+	for _, move := range moves {
+		if unchanged[move.group] {
+			kept = append(kept, move)
+		}
+	}
+	return kept
 }

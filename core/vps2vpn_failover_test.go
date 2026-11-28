@@ -9,6 +9,7 @@ import (
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/tunnel"
+	"github.com/metacubex/mihomo/tunnel/statistic"
 )
 
 type fakeLineConn struct {
@@ -345,5 +346,105 @@ func TestCloseOnMovedLinesClosesAConnectionOnce(t *testing.T) {
 	}
 	if closed := closeOnMovedLines([]lineConn{conn}, moves); closed != 1 || conn.closed != 1 {
 		t.Fatalf("closed = %d, conn closed %d times", closed, conn.closed)
+	}
+}
+
+type graphLineTracker struct {
+	statistic.Tracker
+	id      string
+	info    statistic.TrackerInfo
+	closed  bool
+	onClose func()
+}
+
+func (c *graphLineTracker) ID() string                   { return c.id }
+func (c *graphLineTracker) Info() *statistic.TrackerInfo { return &c.info }
+func (c *graphLineTracker) Close() error {
+	c.closed = true
+	statistic.DefaultManager.Leave(c)
+	if c.onClose != nil {
+		c.onClose()
+	}
+	return nil
+}
+
+func TestLineWatchDiscardsMovesFromReplacedGraph(t *testing.T) {
+	for _, restoreOriginalNames := range []bool{false, true} {
+		t.Run(map[bool]string{false: "replacement", true: "switch-back"}[restoreOriginalNames], func(t *testing.T) {
+			keepTunnel(t)
+			vpsOn(t)
+			running := isRunning.Swap(true)
+			t.Cleanup(func() { isRunning.Store(running) })
+			const groupName = "server"
+			const probeURL = "http://example.invalid/generate_204"
+			members := []constant.Proxy{namedProxy("hy2"), namedProxy("reality")}
+			oldGroup := newLocalFallback(t, groupName, probeURL, outboundgroup.FallbackOption{}, members)
+			tunnel.UpdateProxies(map[string]constant.Proxy{groupName: adapter.NewProxy(oldGroup)}, nil)
+			watch, _ := newTestLineWatch()
+			watch.observe(currentLineGroups())
+			dead, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, _ = members[0].URLTest(dead, probeURL, nil)
+
+			tracker := &graphLineTracker{
+				id:   "new-profile-stream",
+				info: statistic.TrackerInfo{Chain: constant.Chain{"hy2", groupName}},
+			}
+			t.Cleanup(func() { statistic.DefaultManager.Leave(tracker) })
+			watch.clock = func() time.Time {
+				if restoreOriginalNames {
+					tunnel.UpdateProxies(map[string]constant.Proxy{"other-profile": namedProxy("other-profile")}, nil)
+				}
+				replacement := newLocalFallback(t, groupName, probeURL, outboundgroup.FallbackOption{},
+					[]constant.Proxy{namedProxy("hy2"), namedProxy("reality")})
+				tunnel.UpdateProxies(map[string]constant.Proxy{groupName: adapter.NewProxy(replacement)}, nil)
+				statistic.DefaultManager.Join(tracker)
+				return time.Unix(1_700_000_001, 0)
+			}
+			checkLineMoves(watch)
+			if tracker.closed {
+				t.Fatal("a stale failover closed the replacement profile's healthy same-name stream")
+			}
+		})
+	}
+}
+
+func TestLineWatchClosesCurrentGraphBeforeNewConnectionsJoin(t *testing.T) {
+	keepTunnel(t)
+	vpsOn(t)
+	running := isRunning.Swap(true)
+	t.Cleanup(func() { isRunning.Store(running) })
+	const groupName = "server"
+	const probeURL = "http://example.invalid/generate_204"
+	members := []constant.Proxy{namedProxy("hy2"), namedProxy("reality")}
+	group := newLocalFallback(t, groupName, probeURL, outboundgroup.FallbackOption{}, members)
+	tunnel.UpdateProxies(map[string]constant.Proxy{groupName: adapter.NewProxy(group)}, nil)
+	watch, _ := newTestLineWatch()
+	watch.observe(currentLineGroups())
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _ = members[0].URLTest(dead, probeURL, nil)
+	fresh := &graphLineTracker{id: "late-profile-stream", info: statistic.TrackerInfo{Chain: constant.Chain{"hy2", groupName}}}
+	old := &graphLineTracker{id: "failed-profile-stream", info: statistic.TrackerInfo{Chain: constant.Chain{"hy2", groupName}}}
+	t.Cleanup(func() {
+		statistic.DefaultManager.Leave(old)
+		statistic.DefaultManager.Leave(fresh)
+	})
+	old.onClose = func() {
+		if !configMu.TryLock() {
+			t.Error("connection close retained the config lock")
+			return
+		}
+		defer configMu.Unlock()
+		replacement := newLocalFallback(t, groupName, probeURL, outboundgroup.FallbackOption{},
+			[]constant.Proxy{namedProxy("hy2"), namedProxy("reality")})
+		tunnel.UpdateProxies(map[string]constant.Proxy{groupName: adapter.NewProxy(replacement)}, nil)
+		_ = currentLineGroups()
+		statistic.DefaultManager.Join(fresh)
+	}
+	statistic.DefaultManager.Join(old)
+	checkLineMoves(watch)
+	if !old.closed || fresh.closed {
+		t.Fatalf("old closed = %v, new closed = %v; want only the failed stream closed", old.closed, fresh.closed)
 	}
 }
