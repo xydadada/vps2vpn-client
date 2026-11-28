@@ -161,13 +161,14 @@ jobs:
           ls -l release
 
       - name: Check the APK signature
+        env:
+          RELEASE_CERTIFICATE_SHA256: b3836548bd44b5b20c84461b95bd71c6030af3709cdad107df1cd753c7e64505
         run: |
           set -euo pipefail
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           out=$("$apksigner" verify --verbose --print-certs "release/vps2vpn-$VERSION-android-universal.apk")
           printf '%s\n' "$out" | grep -E 'Verified using|certificate (DN|SHA-256)' || true
-          grep -q 'CN=vps2vpn' <<< "$out" \
-            || { echo 'the APK is not signed with the vps2vpn release key' >&2; printf '%s\n' "$out" | head -20 >&2; exit 1; }
+          python3 -I tool/check_apk_signer.py "$RELEASE_CERTIFICATE_SHA256" <<< "$out"
 
       - name: Remove the signing key
         if: always()
