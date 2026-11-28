@@ -95,9 +95,15 @@ func TestMentionsIpRejectsSpecialUseAddresses(t *testing.T) {
 		"192.0.0.10", "192.0.2.7", "192.88.99.1", "198.18.0.7",
 		"198.51.100.7", "203.0.113.7", "240.0.0.1",
 		"2001:db8::7", "2001:2::7", "::ffff:203.0.113.7",
+		"3fff::1", "3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff",
+		"100::1", "100::ffff:ffff:ffff:ffff",
+		"100:0:0:1::1", "100:0:0:1:ffff:ffff:ffff:ffff",
+		"5f00::1", "5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
 	} {
-		if mentionsIp("ip=" + ip + "\nloc=US") {
-			t.Errorf("reserved address %s was accepted as a routable exit IP", ip)
+		for _, body := range []string{"ip=" + ip + "\nloc=US", `{"ip":"` + ip + `","country":"US"}`} {
+			if mentionsIp(body) {
+				t.Errorf("reserved address %s was accepted as a routable exit IP", ip)
+			}
 		}
 	}
 	for _, ip := range []string{"1.1.1.1", "8.8.4.4", "2606:4700:4700::1111"} {
@@ -110,7 +116,7 @@ func TestMentionsIpRejectsSpecialUseAddresses(t *testing.T) {
 func TestOutboundIpSkipsDocumentationAddressAndUsesLaterPublicAnswer(t *testing.T) {
 	withProbeProxies(t, "node-a")
 	reserved := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.7\nloc=US"))
+		_, _ = w.Write([]byte("ip=3fff::7\nloc=US"))
 	})
 	public := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ip=8.8.8.8\nloc=US"))
