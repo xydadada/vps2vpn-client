@@ -55,11 +55,9 @@ List<String> dnsServerProxies(String server) {
 
 /// The app splits a policy's servers on these and mihomo decodes them back.
 /// It splits on `&` and `=` only after decoding, so no escape keeps those.
-String _fragmentName(String name) => name
-    .replaceAll('%', '%25')
-    .replaceAll(' ', '%20')
-    .replaceAll(',', '%2C')
-    .replaceAll(';', '%3B');
+String _fragmentPart(String part) => Uri.encodeFull(
+  part,
+).replaceAll(',', '%2C').replaceAll(';', '%3B').replaceAll('#', '%23');
 
 String renamedDnsServer(String server, Map<String, String> names) {
   final hash = server.indexOf('#');
@@ -72,16 +70,15 @@ String renamedDnsServer(String server, Map<String, String> names) {
   if (hash < 0) {
     return head;
   }
-  final parts = [
-    for (final part in server.substring(hash + 1).split('&'))
-      part.contains('=')
-          ? part
-          : switch (names[_decodedOrSelf(part)]) {
-              final String name => _fragmentName(name),
-              null => part,
-            },
+  final fragment = server.substring(hash + 1);
+  final parts = _decodedOrSelf(fragment).split('&');
+  final renamed = [
+    for (final part in parts) part.contains('=') ? part : names[part] ?? part,
   ];
-  return '$head#${parts.join('&')}';
+  final next = const ListEquality<String>().equals(parts, renamed)
+      ? fragment
+      : renamed.map(_fragmentPart).join('&');
+  return '$head#$next';
 }
 
 List<String> _policyServers(String value) =>
