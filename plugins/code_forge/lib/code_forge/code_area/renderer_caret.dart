@@ -142,15 +142,6 @@ extension _RendererCaret on _CodeFieldRenderer {
 
     final editableSize = size;
 
-    if (caretRect == _lastImeCaretRect &&
-        composingRect == _lastImeComposingRect &&
-        editableSize == _lastImeEditableSize) {
-      return;
-    }
-    _lastImeCaretRect = caretRect;
-    _lastImeComposingRect = composingRect;
-    _lastImeEditableSize = editableSize;
-
     conn.setEditableSizeAndTransform(editableSize, getTransformTo(null));
     conn.setCaretRect(caretRect);
     conn.setComposingRect(composingRect);

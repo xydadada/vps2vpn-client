@@ -64,9 +64,6 @@ class _CodeFieldRenderer extends RenderBox implements MouseTrackerAnnotation {
   GutterStyle _gutterStyle;
   CodeSelectionStyle _selectionStyle;
   int _cachedCaretOffset = -1, _cachedCaretLine = 0, _cachedCaretLineStart = 0;
-  Rect? _lastImeCaretRect;
-  Rect? _lastImeComposingRect;
-  Size? _lastImeEditableSize;
   double _imeComposingCaretDx = 0.0, _imeComposingWidth = 0.0;
   _Press? _press;
   _DraggedHandle? _draggedHandle;
