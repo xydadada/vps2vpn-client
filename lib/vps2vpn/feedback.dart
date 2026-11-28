@@ -25,7 +25,15 @@ final vpsIssuesPage = Uri.parse(
 
 final _subPath = RegExp(r'/s/[A-Za-z0-9_-]{8,}');
 final _secretPair = RegExp(
-  r'''(["']?(?:password|passwd|pass|token|secret|uuid|auth|psk|private[-_]key|public[-_]key|short[-_]id)["']?\s*[:=]\s*)(["']?)[^\s"',}&]+''',
+  r'''(["']?(?:password|passwd|pass|token|secret|uuid|auth|psk|private[-_]key|public[-_]key|short[-_]id)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"',}&]+)''',
+  caseSensitive: false,
+);
+final _userInfo = RegExp(
+  r'([a-z][a-z0-9+.-]*://)[^/\s@]+@',
+  caseSensitive: false,
+);
+final _authHeader = RegExp(
+  r'''(["']?(?:proxy-)?authorization["']?\s*:\s*["']?)(?:basic|bearer|digest)\s+[^\s,;"'}]+''',
   caseSensitive: false,
 );
 final _uuid = RegExp(
@@ -37,11 +45,13 @@ final _longToken = RegExp(
   r'(?<![\w+/=-])(?=[\w+/=-]*\d)(?=[\w+/=-]*[A-Za-z])[\w+/=-]{24,}',
 );
 
-/// Subscription tokens, passwords and keys, UUIDs, and the last half of
-/// every IP address; the panel masks again, but nothing leaves unmasked.
+/// Subscription tokens, passwords and keys (quoted or not), credentials in a
+/// link or an auth header, UUIDs, and the last half of every IP address; the panel masks again, but nothing leaves unmasked.
 String vpsMaskSecrets(String text) {
   var s = text.replaceAll(_subPath, '/s/***');
-  s = s.replaceAllMapped(_secretPair, (m) => '${m[1]}${m[2]}***');
+  s = s.replaceAllMapped(_userInfo, (m) => '${m[1]}***@');
+  s = s.replaceAllMapped(_authHeader, (m) => '${m[1]}***');
+  s = s.replaceAllMapped(_secretPair, (m) => '${m[1]}***');
   s = s.replaceAll(_uuid, '<uuid>');
   s = s.replaceAllMapped(_ipv4, (m) => '${m[1]}.${m[2]}.x.x');
   s = s.replaceAllMapped(_ipv6, (m) {

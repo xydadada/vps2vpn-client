@@ -32,6 +32,38 @@ void main() {
       expect(masked, contains('21:30:05 ConstrainedInternetAccess v1.0.30'));
     });
 
+    test('quoted secrets, link credentials and auth headers are masked', () {
+      final masked = vpsMaskSecrets(
+        'password: "two words"\n'
+        "pass='single quoted'\n"
+        'password="escaped \\"quote\\" secret"\n'
+        'Authorization: Bearer short-token\n'
+        'Proxy-Authorization: Basic YWJjOmRlZg==\n'
+        '{"Authorization":"Bearer json-token"}\n'
+        'https://alice:short-pass@panel.example.com/sub\n'
+        'socks5://bob:p%40ss@192.0.2.10:1080\n'
+        'connected to https://status.example/path',
+      );
+      for (final secret in [
+        'two words',
+        'single quoted',
+        'escaped',
+        'quote',
+        'short-token',
+        'YWJjOmRlZg==',
+        'json-token',
+        'alice',
+        'short-pass',
+        'bob',
+        'p%40ss',
+      ]) {
+        expect(masked, isNot(contains(secret)), reason: secret);
+      }
+      expect(masked, contains('https://***@panel.example.com/sub'));
+      expect(masked, contains('socks5://***@192.0.x.x:1080'));
+      expect(masked, contains('connected to https://status.example/path'));
+    });
+
     test('what is copied for another provider is masked too', () {
       final body = vpsFeedbackBody(
         text: 'no line from 198.51.100.7',
