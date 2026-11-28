@@ -115,7 +115,10 @@ class Preferences {
 
   Future<void> setVpsDevice(String key, String value) async {
     final preferences = await _store.value;
-    await preferences?.setString('vpsDevice$key', value);
+    if (preferences == null ||
+        !await preferences.setString('vpsDevice$key', value)) {
+      throw StateError('Device settings could not be saved');
+    }
   }
 
   Future<String?> getVpsConfigVersion(int profileId) async {

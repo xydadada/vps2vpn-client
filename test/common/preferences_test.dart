@@ -6,6 +6,7 @@ import 'package:fl_clash/common/preferences.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import '../helpers/preferences.dart';
 
@@ -18,6 +19,28 @@ const _sharedState = SharedState(
   onlyStatisticsProxy: true,
 );
 
+class _RejectedStore extends SharedPreferencesStorePlatform {
+  _RejectedStore({this.readFails = false});
+
+  final bool readFails;
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    if (readFails) throw StateError('synthetic unavailable store');
+    return {};
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      false;
+
+  @override
+  Future<bool> remove(String key) async => false;
+
+  @override
+  Future<bool> clear() async => false;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -27,6 +50,21 @@ void main() {
     await mockPreferences();
     store = await SharedPreferences.getInstance();
   });
+
+  for (final readFails in [false, true]) {
+    test('device writes reject an unavailable store: $readFails', () async {
+      addTearDown(mockPreferences);
+      SharedPreferences.resetStatic();
+      SharedPreferencesStorePlatform.instance = _RejectedStore(
+        readFails: readFails,
+      );
+      await preferences.rebind();
+      await expectLater(
+        preferences.setVpsDevice('Kick', 'synthetic recovery record'),
+        throwsStateError,
+      );
+    });
+  }
 
   group('applied config md5', () {
     test('round-trips a written md5 and forgets a cleared one', () async {
