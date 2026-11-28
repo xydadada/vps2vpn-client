@@ -315,20 +315,31 @@ class WindowCaptionController extends ValueNotifier<WindowCaptionState>
   }
 
   bool _disposed = false;
+  bool _pinChanged = false;
+  bool _maximizeChanged = false;
+  bool _fullScreenChanged = false;
 
   Future<void> _syncFromWindow() async {
-    final states = await Future.wait<bool>([
-      desktopWindow.isAlwaysOnTop(),
-      desktopWindow.isMaximized(),
-      desktopWindow.isFullScreen(),
-    ]);
-    _set(
-      WindowCaptionState(
-        isPinned: states[0],
-        isMaximized: states[1],
-        isFullScreen: states[2],
-      ),
-    );
+    try {
+      final states = await Future.wait<bool>([
+        desktopWindow.isAlwaysOnTop(),
+        desktopWindow.isMaximized(),
+        desktopWindow.isFullScreen(),
+      ]);
+      // Events received while the initial reads wait are newer than the snapshot.
+      _set(
+        value.copyWith(
+          isPinned: _pinChanged ? null : states[0],
+          isMaximized: _maximizeChanged ? null : states[1],
+          isFullScreen: _fullScreenChanged ? null : states[2],
+        ),
+      );
+    } catch (error) {
+      commonPrint.log(
+        'Window caption state failed: ${compactError(error)}',
+        logLevel: LogLevel.warning,
+      );
+    }
   }
 
   void _set(WindowCaptionState state) {
@@ -339,24 +350,28 @@ class WindowCaptionController extends ValueNotifier<WindowCaptionState>
   @override
   void onWindowMaximize() {
     super.onWindowMaximize();
+    _maximizeChanged = true;
     _set(value.copyWith(isMaximized: true));
   }
 
   @override
   void onWindowUnmaximize() {
     super.onWindowUnmaximize();
+    _maximizeChanged = true;
     _set(value.copyWith(isMaximized: false));
   }
 
   @override
   void onWindowEnterFullScreen() {
     super.onWindowEnterFullScreen();
+    _fullScreenChanged = true;
     _set(value.copyWith(isFullScreen: true));
   }
 
   @override
   void onWindowLeaveFullScreen() {
     super.onWindowLeaveFullScreen();
+    _fullScreenChanged = true;
     _set(value.copyWith(isFullScreen: false));
   }
 
@@ -373,6 +388,7 @@ class WindowCaptionController extends ValueNotifier<WindowCaptionState>
   Future<void> togglePin() async {
     final isPinned = await desktopWindow.isAlwaysOnTop();
     await desktopWindow.setAlwaysOnTop(!isPinned);
+    _pinChanged = true;
     _set(value.copyWith(isPinned: await desktopWindow.isAlwaysOnTop()));
   }
 
