@@ -885,10 +885,10 @@ class _TextScaleFactorItemState extends ConsumerState<_TextScaleFactorItem> {
     final textScale = ref.watch(
       themeSettingProvider.select((state) => state.textScale),
     );
-    final systemScale = systemTextScaleOf(
-      context,
-    ).clamp(minTextScale, maxTextScale).toDouble();
-    final scale = _draft ?? (textScale.enable ? textScale.scale : systemScale);
+    final systemScale = systemTextScaleOf(context);
+    final scale = (_draft ?? (textScale.enable ? textScale.scale : systemScale))
+        .clamp(minTextScale, maxTextScale)
+        .toDouble();
     final percent = '${(scale * 100).round()}%';
     final level = context.raisedSurfaceLevel;
     final divisions =
