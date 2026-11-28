@@ -4,7 +4,7 @@
 
 到 2026-11-27 为止，有三个 Agent 分工：客户端会话维护本仓库，服务端会话维护 `xydadada/vps2vpn`，主会话负责协调。主会话的工作是审截图、核对发布后的 `.sig`、同步测试服务器。文中的「主会话」「管理员会话」都指它。换成一个 Agent 接手以后，这些事都由它自己做：审图标准见 `.agents/vps2vpn.md`，`.sig` 的核对方法见第 2 节第 4 步，测试服务器的同步见服务端仓库 HANDOFF 里的 clientsync。远端在本机的 checkout 里叫 `private`，新克隆的仓库里叫 `origin`。本机的会话笔记外部 Agent 看不到，只供参考；有用的结论都已写进本文件。
 
-## 0. 当前进度（2026-11-28，换人接手时的准确状态）
+## 0. 当前进度（2026-11-28，换人接手时的准确状态；当前状态和全部待办只在这里）
 
 只读这一节就能接着做。
 
@@ -39,11 +39,11 @@
 1. 等 `p1-1035` 的 verify 变绿（挂了先修）。`2dcd54bd` 只在失败时弹一个对话框，不改界面，不用截图。
 2. 合进 `vps2vpn`（快进），等 verify 绿；单独提交 `chore: version 1.0.35`；按第 2 节发：`vps2vpn.yaml` → `e2e.yaml`（gate 含 legend）→ `coexist.yaml` → `harsh.yaml` → 自己验 SHA256、`.sig`、加载标志 → 转 Latest → 改工作流默认 tag → 测试服务器先 backup 再 `clientsync.sync`（命令：`sudo PYTHONPATH=/usr/local/lib/vps2vpn/app /usr/bin/python3 -c "from vps2vpn import clientsync, db; print(clientsync.sync(db.settings()))"`）。
 3. 关 PR 和 issue：#172 #157 #105 #108 #135 #90 #133 #109 #167 写明替代它的提交后关闭；#101 #137 修好后关；#168 留着（原生交接边界）。没处理的不要关。
-4. 剩下的待办按优先级见 [.agents/triage-1.0.35.md](.agents/triage-1.0.35.md)（P1 → P2 → P3）。P1 里还没做的：#92 + C10-01（崩溃后恢复系统代理快照，同时仍清掉指向本机死端口的残留代理）；B/C 包的心跳 `ok:true`、导入出错释放忙碌状态；#159 发布前源码校验和 `--enforce-lockfile`；#110（见上面的 wip 分支）；#158 分享链接；#91 #164/#174（安卓签名指纹）。2026-11-28 之后新增的 #173（只做调研）和 #175（failover 旧动作）还没看。
+4. 剩下的待办按优先级见下面的「分拣全文」（P1 → P2 → P3）。P1 里还没做的：#92 + C10-01（崩溃后恢复系统代理快照，同时仍清掉指向本机死端口的残留代理）；B/C 包的心跳 `ok:true`、导入出错释放忙碌状态；#159 发布前源码校验和 `--enforce-lockfile`；#110（见上面的 wip 分支）；#158 分享链接；#91 #164/#174（安卓签名指纹）。2026-11-28 之后新增的 #173（只做调研）和 #175（failover 旧动作）还没看。
 5. 服务端审计带来的两项客户端工作，**等服务端那边做完再做**：R-13 的客户端部分（防抖、延迟切回、换服务器时提示），以及「显示的延迟不是 ping」的文案。
 6. #150（私下报告漏洞）是仓库设置，由用户决定。#74、#75 来自外部贡献者，先核实再回复。
 
-### 分拣全文（与 `.agents/triage-1.0.35.md` 相同）
+### 分拣全文（2026-11-27 外部审查，PR #89–#157、issue 和两个离线补丁包）
 
 #### P1：1.0.35 必做（安全、隐私、发布可信）
 
@@ -81,18 +81,26 @@
 - 发布前缀 `rs-` 和 `dev-`：先确认这些前缀真的存在再处理，不按包里的说法直接改。
 - #150（私下报告漏洞的渠道）：交给用户决定。
 
+### 其他待办（原第 7 节，已并到这里）
+
+- **安卓正式 APK（暂停，2026-11-23 用户定）**：模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试走 Firebase Test Lab，配额恢复后还欠一次真机运行。testlab 测试账号要在服务端开启，并更新 secret `TESTLAB_SUB_URL`（这个值不能出现在日志里）。真机全部通过之前，APK 不转正，服务端也先不配 `files.android`。
+- **`users` 场景**：还剩「第二个账户有自己的端口」，看 `users.ps1` 的端口归属诊断结果再判断。
+- **C-12**：macOS 网络监听和唤醒监听是桩实现。不发 macOS 版，暂缓。
+- **功能计划**见 `ROADMAP.md`；界面打磨见 `DESIGN.md`，以它顶部的说明为准：外观以 1.0.27 为准，只抠细节。
+- **清理**：删掉第 3 节里标了可以删的分支；清掉不用的 arb 文案（`disclaimerAcknowledgeTitle`、`disclaimerAcknowledgeTip`）。
+
 ### 合并的规矩
 
 - 一次合一个：分支上 `git fetch private && git rebase private/vps2vpn`，推分支（`--force-with-lease`），等分支 verify 绿，`git push private <分支>:vps2vpn` 快进，等 `vps2vpn` verify 绿再合下一个。
 - 动到界面的改动要用 `screenshots.yaml` 拍改前改后（中英、深浅、宽、默认、最窄、legend 形状），外观以 1.0.27 为准（`.agents/vps2vpn.md`）。
 
-## 1. 当前版本
+## 1. 版本记录（当前状态只看第 0 节）
 
 | 项目 | 值 |
 |---|---|
 | 最新正式版（Latest） | **v1.0.34**，commit `33f3dfbd84d3a0d8c7ceb43d64016fb3f56ac122`（2026-11-28 转正；节点页、对话框、检测页、设置页的细节和文案统一；gate、coexist、harsh 全绿，测试服务器已同步，见第 0 节） |
 | 上一版 | v1.0.32，commit `3439ae243eb79de536a9bacabc6f9ca29bc8d083`（修 1.0.31 背景雪花噪点）。v1.0.31 因背景雪花已撤回为预发布 |
-| `vps2vpn` 分支头 | 不在这里记，以 `git log private/vps2vpn` 为准。下一版 1.0.34 正在合分支（第 0 节） |
+| `vps2vpn` 分支头 | 不在这里记，以 `git log private/vps2vpn` 为准。下一版 1.0.35 的修复在分支 `p1-1035`（第 0 节） |
 | 安卓 | 还没有正式 APK，服务端 `files.android` 仍未配置。模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试结果见第 5 节"Firebase Test Lab"。预发布 `test-android-1.0.26` 只当预发布，不转正 |
 
 **English summary.** Latest client is v1.0.34; section 0 has its runs and where 1.0.35 stopped (branch p1-1035). Before that, v1.0.33 (the Home title holds the exit country while the smart line settles, narrow pages end above the floating tab bar, the title bar and the wide sidebar's top edge blend into the backdrop; upgrade test from v1.0.32 66 PASS, coexist 94 PASS, harsh 309 PASS with no FAIL, background roughness 2.8; the server still has to re-check SHA256 and `.sig`). v1.0.32 fixed the background static of 1.0.31. v1.0.31 was pulled back to a prerelease because the page background was covered in static (grain pixels not premultiplied); 1.0.32 fixes that and `screenshots.yaml` now fails when the background outside the cards is rough. 1.0.29 and 1.0.30 were never released on their own: harsh dirty caught a takeover regression in 1.0.30 (a bare core on the system proxy port could be spared when the takeover read the system proxy after ours was on), and the fix shipped in 1.0.31 with the smart line by billing rate, node status, config_version refetch, expiry days, local-network checks, feedback and device management. Android has no release: the emulator freezes about a second after connecting; real phones are tested through Firebase Test Lab (`android-testlab.yaml`, secret `TESTLAB_SUB_URL`); see section 5. `files.android` on the server is still unset. The test server's details are only in the local file `C:\Users\<user>\.claude\CLAUDE.md` on the user's PC (test-server section), never in this repo.
@@ -234,38 +242,11 @@
   4. `users` 用 `Start-Process -Credential` 启动的程序继承了 runneradmin 的环境变量，所以第二个账户的数据跑到了管理员目录下。现在子进程先从自己加载的用户配置里取 APPDATA、LOCALAPPDATA、USERPROFILE、TEMP。
 - 两个 TUN 同时开（`dirty` 里 sing-box 的 TUN 加我们的 TUN）：不带代理的 curl 有时拿不到 204。原因是我们在 Windows 上默认开 strict-route（防 DNS 泄露），它会挡住别的网卡上的 DNS，包括 sing-box 自己的查询。真正要求的几条都过：请求经过了我们的 Core，不死循环，Core 不空转，界面不卡，我们停了以后对方的 TUN 恢复正常。所以这一条只记 NOTE，不算失败。
 - `dirty` 的"另一个软件的系统代理还回来了"现在和我们连接前那一刻的状态比较，并打印前后的值（别的软件启动时自己也会改系统代理）。
-- 结果：`dirty` 运行 45150648196 在 2022 和 2025 上全过，`chaos`、`proxy-restore`、`soak`、`protocols` 之前也都过了。`users` 的最后结果见第 7 节第 3 条。
+- 结果：`dirty` 运行 45150648196 在 2022 和 2025 上全过，`chaos`、`proxy-restore`、`soak`、`protocols` 之前也都过了。`users` 的最后结果见第 0 节「其他待办」。
 
-## 7. 待办（按优先级）
+## 7. 待办
 
-1. **1.0.34**：合完第 3 节的分支，按第 2 节发布。发布后告诉服务端 tag 和运行号，服务端再核对 `.sig` 并同步测试服务器。
-2. **1.0.35：外部审查（2026-11-27 分拣）**。来源是客户端 PR #89–#157、14 个 issue，以及两个离线补丁包。做法：在当前代码上逐条重写并补测试，PR 不直接合并，做完后关闭 PR，并写明对应的提交。
-   - **必做（安全、隐私、发布可信）**：
-     - #92：Windows 崩溃后丢失连接前的 WinINet 快照。把快照存到磁盘，重启后按快照恢复。没有快照时，仍要清掉指向本机死端口的代理（C10-01）。补丁包里「没有快照就什么都不做」的写法和这一点冲突，不照搬。
-     - #101：SAFE_MODE 下，runner 在 Flutter 初始化之前就清理系统代理（`windows/runner/main.cpp` 的 `ClearStaleProxyInBackground`）。安全模式下跳过这一步。
-     - 安装前再验一次：在 isolate 里流式计算 SHA256 并验 Ed25519，拒绝符号链接和非普通文件。`.sig` 先写临时文件再改名。公钥和签名语句不动。
-     - 心跳回复必须带 `ok: true` 和布尔值 `revoked`，否则不算正常回复。
-     - 导入或剪贴板出错后释放忙碌状态并保留输入，界面上不显示含 token 的原始异常。
-     - Windows 和 Android 发布前先过源码检查；`flutter pub get --enforce-lockfile`。
-     - #157：Test Lab 诊断里对 XML 转义过的订阅链接也做脱敏。
-     - 隐私：#105、#108、#135。
-     - 输入边界：#90、#91、#109、#110、#133、#137。
-   - **尽量做（简洁模式的正确性）**：
-     - 设备和订阅：#98、#104、#113–#117。
-     - 诊断和反馈：#96、#97、#99、#118。
-     - 生命周期：#102、#106、#131。
-     - 迟到的写入覆盖新数据：#130、#144、#149。
-     - macOS/Linux 断开时恢复原设置：#93，在 #92 之后做。
-     - 减少动态效果、大字号布局：照现在的外观改，补截图。
-     - #123（Android 生命周期）需要真机，等 Test Lab 再做。
-   - **不阻塞 1.0.35**：上游高级模式、编辑器、备份和文档类的 PR（#89、#94、#95、#100、#107、#111、#112、#119–#121、#124–#128、#132、#134、#136、#138–#143、#145–#148、#151–#156），以及 issue #122、#129。#152 放宽了 Test Lab 驱动的权限，合并前先确认范围。
-   - **不采纳**：补丁包里的字体恢复工具（字体已经在仓库里）和单独的审查记录文件。发布前缀 `rs-`、`dev-` 先确认确实存在再处理。
-   - **用户决定**：#150（开启私密漏洞报告，属于仓库设置）。
-3. **安卓正式 APK（暂停，2026-11-23 用户定）**：模拟器上连上 VPN 约 1 秒后整机冻住（第 5 节）。真机测试走 Firebase Test Lab，Test Lab 的配额恢复后还欠一次真机运行。testlab 测试账号要请管理员会话开启，并更新 secret `TESTLAB_SUB_URL`（这个值不能出现在日志里）。真机全部通过之前，APK 不转正，服务端也先不配 `files.android`。
-4. **`users` 场景**：还剩「第二个账户有自己的端口」，看 `users.ps1` 的端口归属诊断结果再判断。
-5. **C-12**：macOS 网络监听和唤醒监听是桩实现。不发 macOS 版，暂缓。
-6. **功能计划**：见 `ROADMAP.md`。界面打磨见 `DESIGN.md`，以它顶部的说明为准：外观以 1.0.27 为准，只抠细节。
-7. **清理**：删掉第 3 节里标了可以删的分支；清掉不用的 arb 文案（`disclaimerAcknowledgeTitle`、`disclaimerAcknowledgeTip`）。
+待办只有一份，在第 0 节。原来这里的内容已经并进去，做完的已删掉。
 
 ## 8. 不能做的事
 
