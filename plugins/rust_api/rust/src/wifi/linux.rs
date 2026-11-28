@@ -176,14 +176,14 @@ fn nmcli() -> Option<String> {
 
 pub async fn ssid() -> Result<Option<String>, String> {
     if let Ok(Ok(connection)) = timeout(CALL_TIMEOUT, Connection::system()).await {
-        for ssid in [
-            network_manager(&connection).await,
-            iwd(&connection).await,
-            connman(&connection).await,
-        ] {
-            if let Some(ssid) = super::non_empty(ssid) {
-                return Ok(Some(ssid));
-            }
+        if let Some(ssid) = super::non_empty(network_manager(&connection).await) {
+            return Ok(Some(ssid));
+        }
+        if let Some(ssid) = super::non_empty(iwd(&connection).await) {
+            return Ok(Some(ssid));
+        }
+        if let Some(ssid) = super::non_empty(connman(&connection).await) {
+            return Ok(Some(ssid));
         }
     }
     let ssid = tokio::task::spawn_blocking(nmcli)
