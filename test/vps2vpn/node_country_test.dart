@@ -54,6 +54,19 @@ void main() {
     expect(vpsNodeName('🇯🇵'), (name: '🇯🇵', rate: null));
   });
 
+  test('an overflowing rate suffix remains a plain node name', () {
+    final digits = List.filled(400, '9').join();
+    final name = 'Example ×$digits Hysteria2';
+    expect(vpsNodeName(name), (name: name, rate: null));
+  });
+
+  test('large finite billing rates are not narrowed to int64', () {
+    expect(vpsRateText(1e100), '1e+100×');
+    expect(vpsRateText(0), '0×');
+    expect(vpsRateText(2), '2×');
+    expect(vpsRateText(0.5), '0.5×');
+  });
+
   test('a node reads without its country code, its rate as ×', () {
     expect(vpsNodeShown('us 洛杉矶 · 5.0x'), (name: '洛杉矶', code: 'US', rate: 5.0));
     expect(vpsNodeShown('US-LA'), (name: 'LA', code: 'US', rate: null));

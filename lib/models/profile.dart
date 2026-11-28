@@ -77,12 +77,13 @@ extension SubscriptionInfoExt on SubscriptionInfo {
   /// Subscription headers are untrusted. Convert the counters separately to
   /// double before addition, so two large nonnegative int64 counters cannot
   /// overflow the native integer sum or make the displayed usage negative.
-  double? get usage {
-    if (total <= 0) return null;
+  double get used {
     final up = upload > 0 ? upload.toDouble() : 0.0;
     final down = download > 0 ? download.toDouble() : 0.0;
-    return ((up + down) / total).clamp(0.0, 1.0);
+    return up + down;
   }
+
+  double? get usage => total > 0 ? (used / total).clamp(0.0, 1.0) : null;
 
   /// Only four-digit UTC calendar years are shown in the UI. The guard must
   /// come before multiplication to milliseconds or DateTime construction.

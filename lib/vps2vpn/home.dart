@@ -176,8 +176,11 @@ final _protocolTail = RegExp(
   final head = tail == null ? name : name.substring(0, tail.start);
   final m = _rateTail.firstMatch(head);
   if (m != null && m.start > 0) {
-    rate = double.tryParse(m[1] ?? m[2] ?? m[3]!);
-    name = head.substring(0, m.start) + (tail?[0] ?? '');
+    final parsed = double.tryParse(m[1] ?? m[2] ?? m[3]!);
+    if (parsed != null && parsed.isFinite) {
+      rate = parsed;
+      name = head.substring(0, m.start) + (tail?[0] ?? '');
+    }
   }
   name = name.replaceAll(_flagPair, '').trim();
   return (name: name.isEmpty ? raw : name, rate: rate);
@@ -305,7 +308,7 @@ bool vpsBuiltinOutbound(String name) =>
     _builtinOutbounds.contains(name.trim().toUpperCase());
 
 String _rateText(double rate) =>
-    rate == rate.roundToDouble() ? '${rate.round()}' : '$rate';
+    rate == rate.roundToDouble() ? rate.toStringAsFixed(0) : '$rate';
 
 String vpsRateText(double rate) => '${_rateText(rate)}×';
 
@@ -1406,22 +1409,22 @@ class _Stats extends ConsumerWidget {
     DateTime? expireDate;
     if (member != null) {
       if (!member.unlimited) {
-        plan = (math.max(0, member.quotaGb) * 1024 * 1024 * 1024).round();
-        left = math.max(0, plan - member.used).traffic;
+        plan = member.quotaBytes;
+        if (plan != null) left = math.max(0, plan - member.used).traffic;
       }
       expire = vpsMemberExpiryText(context, member);
       expireDate = vpsMemberExpiryDate(member);
     } else {
       if (sub != null && sub.total > 0) {
         plan = sub.total;
-        final remain = math.max(0, sub.total - sub.upload - sub.download);
-        left = remain.traffic;
+        left = ((1 - sub.usage!) * sub.total).round().traffic;
       }
       expireDate = sub?.expireDate;
       if (expireDate != null) {
         expire = vpsExpiryText(context, expireDate);
       }
     }
+    final unknownQuota = member != null && !member.unlimited && plan == null;
     // A ring against a terabyte plan stays full and says nothing.
     final hugePlan = plan != null && plan >= 1024 * 1024 * 1024 * 1024;
     final p = VpsPalette.of(context);
@@ -1431,14 +1434,20 @@ class _Stats extends ConsumerWidget {
     // Share of the plan still left, for the ring (null: unlimited/unknown).
     double? leftShare;
     if (plan != null && !hugePlan) {
-      final used = member != null ? member.used : sub!.upload + sub.download;
-      leftShare = plan > 0 ? (1 - used / plan).clamp(0.0, 1.0) : 0.0;
+      leftShare = member == null
+          ? 1 - sub!.usage!
+          : plan > 0
+          ? (1 - member.used / plan).clamp(0.0, 1.0)
+          : 0.0;
     }
     // Separate tiles with air between them (like iOS widgets), not one
     // table with rules: each number reads as its own thing.
     return LayoutBuilder(
       builder: (context, c) {
-        final count = 2 + (left == null ? 0 : 1) + (expire == null ? 0 : 1);
+        final count =
+            2 +
+            (left != null || unknownQuota ? 1 : 0) +
+            (expire == null ? 0 : 1);
         final cols = c.maxWidth >= 680 ? count : 2;
         const gap = 12.0;
         final tiles = <Widget>[
@@ -1461,13 +1470,15 @@ class _Stats extends ConsumerWidget {
             value: on ? (total.up + total.down).traffic.value : '—',
             unit: on ? (total.up + total.down).traffic.unit : null,
           ),
-          if (left != null)
+          if (left != null || unknownQuota)
             _Stat(
               icon: VpsIcon.shield,
               label: tr(context, '剩余流量', 'Data left'),
-              value: left.value,
-              unit: left.unit,
-              foot: hugePlan
+              value: left?.value ?? '—',
+              unit: left?.unit,
+              foot: unknownQuota
+                  ? tr(context, '配额未知', 'Quota unknown')
+                  : hugePlan
                   ? tr(
                       context,
                       '共 ${plan!.traffic.value} ${plan.traffic.unit}',

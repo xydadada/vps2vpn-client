@@ -17,19 +17,15 @@ import 'card.dart';
 import 'profile_detail.dart';
 import 'package:prism_ui/prism_ui.dart';
 
-typedef _Usage = ({int used, int total, double share});
+typedef _Usage = ({double used, int total, double share});
 
 _Usage? _usageOf(Profile? profile) {
   final info = profile?.subscriptionInfo;
-  if (info == null || info.total <= 0) {
+  final share = info?.usage;
+  if (info == null || share == null) {
     return null;
   }
-  final used = info.upload + info.download;
-  return (
-    used: used,
-    total: info.total,
-    share: (used / info.total).clamp(0.0, 1.0).toDouble(),
-  );
+  return (used: info.used, total: info.total, share: share);
 }
 
 DateTime? _expiryOf(Profile? profile) => profile?.subscriptionInfo?.expireDate;
