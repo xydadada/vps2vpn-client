@@ -173,7 +173,7 @@ extension ProxyGroupExt on ProxyGroup {
   /// What [definitionYaml] leaves out, such as an option added without a
   /// value, was never there to remove, so it stays.
   ProxyGroup withDefinitionYaml(String content) {
-    final document = _plainYaml(loadYaml(content));
+    final document = plainYaml(loadYaml(content), merge: false);
     if (document is! Map<String, Object?> ||
         (document['name'] is! String && document['name'] is! num) ||
         document['type'] is! String) {
@@ -1379,15 +1379,6 @@ extension DnsOverrideExt on Dns {
   }
 }
 
-Object? _plainYaml(Object? node) => switch (node) {
-  YamlMap() => {
-    for (final entry in node.entries)
-      entry.key.toString(): _plainYaml(entry.value),
-  },
-  YamlList() => [for (final item in node) _plainYaml(item)],
-  _ => node,
-};
-
 /// A picked key is written as it is, empty included: an emptied entry clears
 /// the profile's value, and one the core refuses empty fails the config there.
 Map<String, Object?> _overrideJson<K extends OverrideKey>(
@@ -1428,7 +1419,7 @@ Set<K>? _applyOverrideYaml<K extends OverrideKey>(
   required String section,
   String Function(String field)? normalizeField,
 }) {
-  final document = _plainYaml(loadYaml(content));
+  final document = plainYaml(loadYaml(content), merge: false);
   if (document == null) {
     return null;
   }
