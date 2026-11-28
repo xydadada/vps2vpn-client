@@ -30,6 +30,22 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
+# A safe build (--dart-define=SAFE_MODE=true) leaves the system proxy alone
+# before Dart runs too. Flutter passes each define base64-encoded; this one is
+# SAFE_MODE=true.
+get_directory_property(FLCLASH_TOOL_ENVIRONMENT
+  DIRECTORY "${FLUTTER_MANAGED_DIR}" DEFINITION FLUTTER_TOOL_ENVIRONMENT)
+set(FLCLASH_SAFE_MODE 0)
+foreach(FLCLASH_ENTRY IN LISTS FLCLASH_TOOL_ENVIRONMENT)
+  if(FLCLASH_ENTRY MATCHES "^DART_DEFINES=(.*)$")
+    string(REPLACE "," ";" FLCLASH_DEFINES "${CMAKE_MATCH_1}")
+    if("U0FGRV9NT0RFPXRydWU=" IN_LIST FLCLASH_DEFINES)
+      set(FLCLASH_SAFE_MODE 1)
+    endif()
+  endif()
+endforeach()
+target_compile_definitions(${BINARY_NAME} PRIVATE "FLCLASH_SAFE_MODE=${FLCLASH_SAFE_MODE}")
+
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)

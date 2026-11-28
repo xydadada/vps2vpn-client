@@ -106,8 +106,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   // After the single-instance check: a second launch leaves the running
-  // instance's proxy alone.
-  JoinOnExit stale_proxy_clear{ClearStaleProxyInBackground()};
+  // instance's proxy alone. So does a safe build, which never writes the
+  // system proxy.
+  JoinOnExit stale_proxy_clear{
+      FLCLASH_SAFE_MODE ? std::thread{} : ClearStaleProxyInBackground()};
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
